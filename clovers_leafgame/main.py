@@ -6,8 +6,8 @@ from datetime import datetime
 from clovers_core.plugin import Result
 
 from .core.clovers import Event
-from .core.account import Manager
-from .core.data import Bank, Prop, Group,Account
+from .account import Manager
+from .core.data import Bank, Account
 from .core.utils import to_int
 
 from .config import config, BG_PATH
@@ -39,7 +39,7 @@ at = Check(at=True)
 
 def info_card(info, user_id):
     extra = manager.locate_user(user_id).extra
-    BG_type = extra.get("BG_type", "#FFFFFF99")
+    BG_type = extra.get("BG_type", "#FFFFFFCC")
     bg_path = BG_PATH / f"{user_id}.png"
     if not bg_path.exists():
         bg_path = BG_PATH / "default.png"
@@ -147,8 +147,9 @@ async def _(event: Event) -> Result:
     group_in = manager.group_search(group_name)
     if not group_in:
         return f"没有 {group_name} 的注册信息"
-    group_out = manager.locate_group(event.group_id)
     user = manager.locate_user(event.user_id)
+    group_out = manager.locate_group(event.group_id or user.connect)
+
     bank_in = user.connecting(group_in.group_id).bank
     bank_out = user.connecting(group_out.group_id).bank
 
@@ -223,7 +224,8 @@ async def _(event: Event) -> Result:
 async def _(event: Event) -> Result:
     user_id = event.user_id
     user = manager.locate_user(user_id)
-    if user.bank.get(LICENSE.id) < 1:
+    print(user.bank, LICENSE.id)
+    if user.bank.get(LICENSE.id, 0) < 1:
         return f"你的【{LICENSE.name}】已失效"
     log = []
     BG_type = event.single_arg()
@@ -363,8 +365,8 @@ async def _(event: Event) -> Result:
     N = 200 if N > 200 else 1 if N < 1 else N
     gold = N * gacha_gold
     user_id = event.user_id
-    group_id = event.group_id
     user = manager.locate_user(user_id)
+    group_id = event.group_id or user.connect
     if n := user.deal(group_id, GOLD, -gold):
         return f"{N}连抽卡需要{gold}金币，你的金币：{n}。"
     bank: Bank = {}
@@ -431,95 +433,55 @@ async def _(event: Event) -> Result:
     return f"{stock.name}发行成功，发行价格为{round((stock.stock_value/ 20000),2)}金币"
 
 
-@plugin.handle(
-    r"^(总金币|总资产|金币|资产|财富|胜率|胜场|败场|路灯挂件)(排行|榜)",
-    {"user_id", "group_id"},
-)
+@plugin.handle(r"^.+排行.*", {"user_id", "group_id"})
 async def _(event: Event):
-    group_name = (
-        event.single_arg()
-        or event.group_id
-        or manager.locate_user(event.user_id).connect
-    )
+    cmd_match = re.search(r"(.+)排行(.*)", event.raw_event.raw_command.strip())
+    group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
     if not group_name:
-        return "您的账户没有关联到群组。无法查看群排行"
+        return
     group = manager.group_search(group_name)
     if not group:
         return f"【{group_name}】不存在"
-    title = re.search(
-        r"^(总金币|总资产|金币|资产|胜率|胜场|败场|路灯挂件)(排行|榜)",
-        event.raw_event.raw_command.strip(),
-    ).group(1)
-    match title:
+    namelist = group.namelist
+
+    def gold(group_id: str, account: Account):
+        return account.bank.get(GOLD.id, 0) * manager.locate_group(group_id).level
+
+    def stock(invest: Bank):
+        i = 0.0
+        for group_id, n in invest.items():
+            stock = manager.stock_search(group_id)
+            i += stock.stock_value * n / stock.issuance
+        return i
+
+    match cmd_match.group(1):
         case "总金币":
-            def value(group_id:str, account:Account):
-
-            key = lambda user_id: sum(
-                account.bank.get(GOLD.id, 0) * manager.locate_group(group_id).level
-                for group_id, account in manager.locate_user(user_id).accounts.items()
-            )
+            key = lambda user_id: sum(gold(group_id, account) for group_id, account in manager.locate_user(user_id).accounts.items())
         case "总资产":
-
-            def key(user_id):
-                accounts = manager.locate_user(user_id).accounts
-                for group_id, account in accounts.items():
-                    account.bank.get(GOLD.id, 0) * manager.locate_group(group_id).level
-
-                pass
-
             key = lambda user_id: sum(
-                account.bank.get(GOLD.id, 0)
-                * +sum(
-                    (
-                        stock.stock_value * v / stock.issuance
-                        for k, v in account.invest.items()
-                        if (stock := manager.stock_search(k))
-                    )
-                )
-                for group_id, account in manager.locate_user(user_id).accounts.items()
+                gold(group_id, account) + stock(account.invest) for group_id, account in manager.locate_user(user_id).accounts.items()
             )
         case "金币":
-            key = (
-                lambda user_id: manager.locate_user(user_id)
-                .locate_bank(group.group_id, GOLD.domain)
-                .get(GOLD.id, 0)
-            )
+            key = lambda user_id: manager.locate_user(user_id).locate_bank(group.group_id, GOLD.domain).get(GOLD.id, 0)
         case "资产":
-            key = lambda user_id: sum(
-                stock.stock_value * v / stock.issuance
-                for k, v in manager.locate_user(user_id)
-                .connecting(group.group_id)
-                .invest
-                if (stock := manager.stock_search(k))
-            )
-        case "胜率":
-            key = (
-                lambda user_id: (extra := manager.locate_user(user_id))["win"]
-                / extra["lose"]
-            )
-    # elif title == "胜率":
-    #     for user_id in namelist:
-    #         user = user_data[user_id]
-    #         if (count := user.win + user.lose) > 2:
-    #             rank.append([user_id, user.win / count])
-    # elif title == "胜场":
-    #     for user_id in namelist:
-    #         user = user_data[user_id]
-    #         rank.append([user_id, user.win])
-    # elif title == "败场":
-    #     for user_id in namelist:
-    #         user = user_data[user_id]
-    #         rank.append([user_id, user.lose])
-    # elif title == "路灯挂件":
-    #     rank = group_data[group_id].Achieve_revolution.items()
-    # else:
-    #     return None
-
-    ranklist = manager.group_ranklist(group_name, title)
+            key = lambda user_id: stock(manager.locate_user(user_id).connecting(group.group_id).invest)
+        case "胜场":
+            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("win", 0)
+        case "连胜":
+            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("win_achieve", 0)
+        case "败场":
+            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("lose", 0)
+        case "败场":
+            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("lose_achieve", 0)
+        case "路灯挂件":
+            namelist = group.extra.setdefault("revolution_achieve", {}).keys()
+            key = lambda user_id: group.extra["revolution_achieve"][user_id]
+        case _:
+            return
+    ranklist = manager.ranklist(namelist, key)
+    print(ranklist)
     if not ranklist:
         return
-    rank_data = ranklist
-    return await draw_rank(rank_data, title)
 
 
 # 超管指令

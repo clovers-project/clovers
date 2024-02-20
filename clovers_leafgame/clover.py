@@ -3,9 +3,6 @@ from collections.abc import Callable, Coroutine
 from clovers_core.plugin import Plugin, Result
 from .core.clovers import Event
 
-plugin = Plugin()
-plugin.build_event = lambda e: Event(e)
-
 
 def build_result(result) -> Result:
     if isinstance(result, str):
@@ -15,7 +12,10 @@ def build_result(result) -> Result:
     return result
 
 
-plugin.build_result = build_result
+plugin = Plugin(
+    build_event=lambda e: Event(e),
+    build_result=build_result,
+)
 
 
 class Check:

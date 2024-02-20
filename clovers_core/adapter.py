@@ -59,24 +59,25 @@ class Adapter:
 
                 async def task():
                     kwargs_task = []
-                    for key in handle.extra_args:
-                        kwarg = method.kwarg.get(key) or self.main_method.kwarg.get(key)
+                    extra_args = handle.extra_args
+                    for key in extra_args:
+                        kwarg = method.kwarg_dict.get(key) or self.main_method.kwarg_dict.get(key)
                         if not kwarg:
                             raise AdapterError(f"未定义kwarg[{key}]方法", handle)
                         kwargs_task.append(kwarg(**extra))
                     kwargs = await asyncio.gather(*kwargs_task)
-                    event.kwargs = {k: v for k, v in zip(handle.extra_args, kwargs)}
+                    event.kwargs = {k: v for k, v in zip(extra_args, kwargs)}
                     result = await handle(event)
                     if not result:
                         return 0
                     k = result.send_method
-                    send = method.send.get(k) or self.main_method.send.get(k)
+                    send = method.send_dict.get(k) or self.main_method.send_dict.get(k)
                     if not send:
                         raise AdapterError(f"使用了未定义的 send 方法:{k}")
                     await send(result.data)
                     return 1
 
-                task_list.append(task)
+                task_list.append(task())
         if task_list:
             flag = await asyncio.gather(*task_list)
             return sum(flag)

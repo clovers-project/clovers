@@ -72,9 +72,7 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
     async def _(event: MessageEvent):
         url = [msg.data["url"] for msg in event.message if msg.type == "image"]
         if event.reply:
-            url += [
-                msg.data["url"] for msg in event.reply.message if msg.type == "image"
-            ]
+            url += [msg.data["url"] for msg in event.reply.message if msg.type == "image"]
         return url
 
     @method.kwarg("permission")

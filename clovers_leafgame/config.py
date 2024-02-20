@@ -1,4 +1,4 @@
-from clovers_core.plugin import Config as CloversConfig
+from clovers_core.config import Config as CloversConfig
 from pathlib import Path
 
 

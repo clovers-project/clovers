@@ -4,7 +4,6 @@ import importlib.util
 import importlib.machinery
 import re
 from pathlib import Path
-from typing import Any
 from collections.abc import Callable, Coroutine
 
 
@@ -46,16 +45,22 @@ class Handle:
 
 
 class Plugin:
-    build_event: Callable = lambda e: e
-    build_result: Callable = lambda r: r
+    NO_BUILD = lambda x: x
 
-    def __init__(self, name: str = "") -> None:
+    def __init__(
+        self,
+        name: str = "",
+        build_event=NO_BUILD,
+        build_result=NO_BUILD,
+    ) -> None:
         self.name: str = name
         self.handles: dict[int, Handle] = {}
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
         self.got_dict: dict = {}
         self.task_list: list[Coroutine] = []
+        self.build_event: Callable = build_event
+        self.build_result: Callable = build_result
 
     def handle(
         self,
@@ -74,7 +79,7 @@ class Plugin:
             else:
                 raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
 
-            handle = Handle(commands, list[extra_args])
+            handle = Handle(commands, list(extra_args))
 
             async def wrapper(event: Event) -> Result:
                 if result := await func(self.build_event(event)):

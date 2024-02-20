@@ -110,7 +110,7 @@ class User(BaseModel):
     name: str = None
     avatar_url: str = None
     accounts: dict[str, Account] = {}
-    connect: str = 0
+    connect: str = None
     bank: Bank = Bank()
     extra: dict = {}
 
@@ -121,7 +121,7 @@ class User(BaseModel):
 
     def locate_bank(self, group_id: str, domain: int):
         match domain:
-            case 2:
+            case 1:
                 return self.connecting(group_id).bank
             case _:
                 return self.bank

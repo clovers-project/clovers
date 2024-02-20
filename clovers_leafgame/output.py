@@ -24,14 +24,14 @@ def bank_card(data: list[tuple[Prop, int]]):
         quant = {0: "天", 1: "个"}[prop.flow]
         return linecard(
             (
-                f"[color][{prop.color}]【{prop.name}】[nowrap][passport]\n[right]{'{:,}'.format(n)}{quant}\n"
-                f"----\n{prop.intro.replace('\n','[passport]\n')}\n[right]{prop.tip}"
+                f"[font][][60][color][{prop.color}]【{prop.name}】[nowrap][passport]\n"
+                f"[right]{'{:,}'.format(n)}{quant}\n"
+                f"----\n{prop.intro.replace('\n','[passport]\n')}"
+                f"\n[right]{prop.tip.replace('\n','[passport]\n')}"
             ),
             font_manager,
             40,
-            spacing=1.5,
             width=880,
-            padding=(0, 0),
             autowrap=True,
         )
 
@@ -45,7 +45,7 @@ def prop_card(data: list[tuple[Prop, int]], endline: str = "仓库列表"):
         quant = {0: "天", 1: "个"}.get(prop.flow)
         return (
             f"[color][{prop.color}]{prop.name}[nowrap][passport]\n"
-            f"[pixel][450]{prop.rare*'☆'}[nowrap][passport]\n"
+            f"[pixel][350]{prop.rare*'☆'}[nowrap][passport]\n"
             f"[right]{'{:,}'.format(n)}{quant}"
         )
 
@@ -55,14 +55,13 @@ def prop_card(data: list[tuple[Prop, int]], endline: str = "仓库列表"):
         40,
         spacing=1.5,
         width=880,
-        padding=(0, 0),
     )
 
 
 def invest_card(data: list[tuple[Stock, int]]):
     info = []
     for stock, n in data:
-        stock_value = "{:,}".format(round(stock.float_gold / stock.issuance, 2))
+        stock_value = "{:,}".format(round(stock.floating / stock.issuance, 2))
         info.append(
             f"[pixel][20]公司 {stock.name}\n"
             f"[pixel][20]结算 [nowrap]\n[color][green]{stock_value}[nowrap]\n"
@@ -75,24 +74,12 @@ def invest_card(data: list[tuple[Stock, int]]):
 import numpy as np
 
 curve_fit = {
-    1: lambda x: 0.339438628551138 * np.log(2.7606559801569316e-13 * x)
-    + -0.0012286453324789554 * x
-    + 9.310675305999386,
-    2: lambda x: 0.2622830460672209 * np.log(1.0565997436401555e-10 * x)
-    + -0.0013800074822243364 * x
-    + 6.079586419253099,
-    3: lambda x: 0.16563555661021917 * np.log(652.209392293454 * x)
-    + -0.0009688421476907207 * x
-    + -0.5084815403474984,
-    4: lambda x: -0.11977280212351049 * np.log(3.53822027614143e-11 * x)
-    + 0.0005645672140693966 * x
-    + -0.9186502372819698,
-    5: lambda x: -0.27071466714377795 * np.log(1.2743174700041504e-11 * x)
-    + 0.0014031052967047675 * x
-    + -4.106094299018067,
-    6: lambda x: -0.5213387432196357 * np.log(16.300736342820436 * x)
-    + 0.0027842719423569447 * x
-    + 5.3464181044586425,
+    1: lambda x: 0.339438628551138 * np.log(2.7606559801569316e-13 * x) + -0.0012286453324789554 * x + 9.310675305999386,
+    2: lambda x: 0.2622830460672209 * np.log(1.0565997436401555e-10 * x) + -0.0013800074822243364 * x + 6.079586419253099,
+    3: lambda x: 0.16563555661021917 * np.log(652.209392293454 * x) + -0.0009688421476907207 * x + -0.5084815403474984,
+    4: lambda x: -0.11977280212351049 * np.log(3.53822027614143e-11 * x) + 0.0005645672140693966 * x + -0.9186502372819698,
+    5: lambda x: -0.27071466714377795 * np.log(1.2743174700041504e-11 * x) + 0.0014031052967047675 * x + -4.106094299018067,
+    6: lambda x: -0.5213387432196357 * np.log(16.300736342820436 * x) + 0.0027842719423569447 * x + 5.3464181044586425,
 }
 
 
@@ -111,25 +98,15 @@ def gacha_report_card(
     elif pt < curve_fit[1](N):
         title.append("[center][color][#003300]很多空气")
     elif pt < curve_fit[2](N):
-        title.append(
-            "[left][color][#003333]☆[nowrap][passport]\n[center]数据异常[nowrap][passport]\n[right]☆"
-        )
+        title.append("[left][color][#003333]☆[nowrap][passport]\n[center]数据异常[nowrap][passport]\n[right]☆")
     elif pt < curve_fit[3](N):
-        title.append(
-            "[left][color][#003366]☆ ☆[nowrap][passport]\n[center]一枚硬币[nowrap][passport]\n[right]☆ ☆"
-        )
+        title.append("[left][color][#003366]☆ ☆[nowrap][passport]\n[center]一枚硬币[nowrap][passport]\n[right]☆ ☆")
     elif pt < curve_fit[4](N):
-        title.append(
-            "[left][color][#003399]☆ ☆ ☆[nowrap][passport]\n[center]高斯分布[nowrap][passport]\n[right]☆ ☆ ☆"
-        )
+        title.append("[left][color][#003399]☆ ☆ ☆[nowrap][passport]\n[center]高斯分布[nowrap][passport]\n[right]☆ ☆ ☆")
     elif pt < curve_fit[5](N):
-        title.append(
-            "[left][color][#0033CC]☆ ☆ ☆ ☆[nowrap][passport]\n[center]对称破缺[nowrap][passport]\n[right]☆ ☆ ☆ ☆"
-        )
+        title.append("[left][color][#0033CC]☆ ☆ ☆ ☆[nowrap][passport]\n[center]对称破缺[nowrap][passport]\n[right]☆ ☆ ☆ ☆")
     elif pt < curve_fit[6](N):
-        title.append(
-            "[left][color][#0033FF]☆ ☆ ☆ ☆ ☆[nowrap][passport]\n[center]概率之子[nowrap][passport]\n[right]☆ ☆ ☆ ☆ ☆"
-        )
+        title.append("[left][color][#0033FF]☆ ☆ ☆ ☆ ☆[nowrap][passport]\n[center]概率之子[nowrap][passport]\n[right]☆ ☆ ☆ ☆ ☆")
     else:
         title.append("[center][color][#FF0000]☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆☆")
     title.append(

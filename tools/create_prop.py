@@ -26,9 +26,7 @@ def recode(code: str):
     return f"{rare}{domain}{flow}{number}"
 
 
-props_dict = {
-    recode(code): func(prop_data) for code, prop_data in props_library.items()
-}
+props_dict = {recode(code): func(prop_data) for code, prop_data in props_library.items()}
 
 with open(resource_file / "props_library.json", "w", encoding="utf-8") as f:
     json.dump(props_dict, f, indent=4, ensure_ascii=False)

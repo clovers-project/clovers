@@ -57,10 +57,11 @@ class User(BaseModel):
     """存入bank"""
     group_accounts: dict[str, Account] = {}
     accounts: dict[str, Account] = {}
-    connect: str = 0
+    connect: str | None | int = None
     props: Bank = Bank()
     """更名为bank"""
     bank: Bank = Bank()
+    extra: dict = {}
 
 
 class Company(BaseModel):
@@ -70,7 +71,7 @@ class Company(BaseModel):
 
     company_id: str = None
     """群号"""
-    company_name: str = None
+    company_name: str | None = None
     """公司名称"""
     level: int = 1
     """公司等级"""
@@ -94,7 +95,7 @@ class Company(BaseModel):
     """每日转账限制"""
     transfer: int = 0
     """今日转账额"""
-    intro: str = None
+    intro: str | None = None
     """群介绍"""
     orders: dict = {}
     """当前订单"""
@@ -133,16 +134,16 @@ class DataBase(BaseModel):
         """
         保存数据
         """
-        with open(file, "w") as f:
-            f.write(self.json(indent=4))
+        with open(file, "w", encoding="utf8") as f:
+            f.write(self.model_dump_json(indent=4))
 
     @classmethod
     def loads(cls, data: str):
         """
         从json字符串中加载数据
         """
-        data_dict = json.loads(data)
-        return cls.parse_obj(data_dict)
+
+        return cls.model_validate_json(data)
 
 
 data_file = resource_file / "russian_data.json"
@@ -154,7 +155,7 @@ def recode(code: str):
     rare = int(code[0])
     domain = int(code[1])
     flow = int(code[2])
-    number = int(code[3:])
+    number = code[3:]
     if number[0] == "0":
         domain -= 1
 
@@ -168,6 +169,10 @@ for user in data.user.values():
         group_account.bank = group_account.props
         group_account.bank["1111"] = group_account.gold
         user.accounts[group_id] = group_account
+        user.extra["win"] = user.win
+        user.extra["win_achieve"] = user.Achieve_win
+        user.extra["lose"] = user.lose
+        user.extra["lose_achieve"] = user.Achieve_lose
     user.name = user.nickname
     user.bank = user.props
 
@@ -179,6 +184,8 @@ for group in data.group.values():
     group.intro = company.intro
     group.stock = Stock()
     group.stock.time = company.time
+    group.extra["revolution_achieve"] = group.Achieve_revolution
+    group.extra["revolution_time"] = group.revolution_time
 data.group_dict = data.group
 data.user_dict = data.user
 

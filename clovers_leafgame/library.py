@@ -4,7 +4,7 @@ import random
 from pathlib import Path
 from collections.abc import Callable, Coroutine
 from .core.data import Prop, User
-from .core.account import RankKey
+from .account import RankKey
 
 resource_file = Path(os.path.join(os.path.dirname(__file__), "./resource"))
 
