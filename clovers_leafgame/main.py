@@ -436,13 +436,20 @@ async def _(event: Event) -> Result:
 @plugin.handle(r"^.+排行.*", {"user_id", "group_id"})
 async def _(event: Event):
     cmd_match = re.search(r"(.+)排行(.*)", event.raw_event.raw_command.strip())
-    group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
-    if not group_name:
-        return
-    group = manager.group_search(group_name)
-    if not group:
-        return f"【{group_name}】不存在"
-    namelist = group.namelist
+    title = cmd_match.group(1)
+
+    def namelist_range(is_global: bool):
+        if is_global:
+            title = title[:-1]
+            namelist = sum((group.namelist for group in manager.data.group_dict.values()), {})
+        else:
+            group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
+            if not group_name:
+                return
+            group = manager.group_search(group_name)
+            if not group:
+                return f"【{group_name}】不存在"
+            namelist = group.namelist
 
     def gold(group_id: str, account: Account):
         return account.bank.get(GOLD.id, 0) * manager.locate_group(group_id).level
@@ -454,7 +461,7 @@ async def _(event: Event):
             i += stock.stock_value * n / stock.issuance
         return i
 
-    match cmd_match.group(1):
+    match title:
         case "总金币":
             key = lambda user_id: sum(gold(group_id, account) for group_id, account in manager.locate_user(user_id).accounts.items())
         case "总资产":
@@ -464,7 +471,9 @@ async def _(event: Event):
         case "金币":
             key = lambda user_id: manager.locate_user(user_id).locate_bank(group.group_id, GOLD.domain).get(GOLD.id, 0)
         case "资产":
-            key = lambda user_id: stock(manager.locate_user(user_id).connecting(group.group_id).invest)
+            key = lambda user_id: gold(
+                group.group_id,
+            ) + stock(manager.locate_user(user_id).connecting(group.group_id).invest)
         case "胜场":
             key = lambda user_id: manager.locate_user(user_id).extra.setdefault("win", 0)
         case "连胜":
