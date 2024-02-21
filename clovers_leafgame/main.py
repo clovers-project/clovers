@@ -437,58 +437,22 @@ async def _(event: Event) -> Result:
 async def _(event: Event):
     cmd_match = re.search(r"(.+)排行(.*)", event.raw_event.raw_command.strip())
     title = cmd_match.group(1)
+    group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
+    group = manager.group_search(group_name)
 
-    def namelist_range(is_global: bool):
-        if is_global:
-            title = title[:-1]
-            namelist = sum((group.namelist for group in manager.data.group_dict.values()), {})
-        else:
-            group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
-            if not group_name:
-                return
-            group = manager.group_search(group_name)
-            if not group:
-                return f"【{group_name}】不存在"
-            namelist = group.namelist
+    if title.endswith("总"):
+        namelist = manager.namelist()
+        title = title[:-1]
 
-    def gold(group_id: str, account: Account):
-        return account.bank.get(GOLD.id, 0) * manager.locate_group(group_id).level
-
-    def stock(invest: Bank):
-        i = 0.0
-        for group_id, n in invest.items():
-            stock = manager.stock_search(group_id)
-            i += stock.stock_value * n / stock.issuance
-        return i
-
-    match title:
-        case "总金币":
-            key = lambda user_id: sum(gold(group_id, account) for group_id, account in manager.locate_user(user_id).accounts.items())
-        case "总资产":
-            key = lambda user_id: sum(
-                gold(group_id, account) + stock(account.invest) for group_id, account in manager.locate_user(user_id).accounts.items()
-            )
-        case "金币":
-            key = lambda user_id: manager.locate_user(user_id).locate_bank(group.group_id, GOLD.domain).get(GOLD.id, 0)
-        case "资产":
-            key = lambda user_id: gold(
-                group.group_id,
-            ) + stock(manager.locate_user(user_id).connecting(group.group_id).invest)
-        case "胜场":
-            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("win", 0)
-        case "连胜":
-            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("win_achieve", 0)
-        case "败场":
-            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("lose", 0)
-        case "败场":
-            key = lambda user_id: manager.locate_user(user_id).extra.setdefault("lose_achieve", 0)
-        case "路灯挂件":
-            namelist = group.extra.setdefault("revolution_achieve", {}).keys()
-            key = lambda user_id: group.extra["revolution_achieve"][user_id]
-        case _:
+    else:
+        if not group:
             return
-    ranklist = manager.ranklist(namelist, key)
-    print(ranklist)
+        namelist = manager.namelist(group_name)
+        prop = prop_search(title)
+        if not prop:
+            return
+        key = lambda user_id: manager.locate_user(user_id).connecting(group.group_id).bank.get(prop.id, 0)
+        ranklist = manager.ranklist(namelist, key)
     if not ranklist:
         return
 
