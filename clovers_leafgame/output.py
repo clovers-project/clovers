@@ -159,14 +159,14 @@ def draw_rank(data: list[tuple[str, BytesIO, int]]) -> IMG:
     draw = ImageDraw.Draw(canvas)
     y = 20
     i = 1
+    font = font_manager.font(40)
+    circle_mask = Image.new("RGBA", (60, 60), (255, 255, 255, 0))
+    ImageDraw.Draw(circle_mask).ellipse(((0, 0), (60, 60)), fill="black")
     for nickname, v, avatar in data:
-        draw.rectangle(((70, y + 30), (70 + int(v / first * 790), y + 70)), fill="#99CCFF")
-        draw.text((80, y + 30), f"{i+1}.{nickname}：{format_number(v)}", fill=(0, 0, 0), font=font_manager.font(40))
         avatar = Image.open(avatar).resize((60, 60))
-        circle_mask = Image.new("RGBA", avatar.size, (255, 255, 255, 0))
-        ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
-        canvas.paste(avatar, (5, y + 20), circle_mask)
+        canvas.paste(avatar, (5, y), circle_mask)
+        draw.rectangle(((70, y + 10), (70 + int(v / first * 790), y + 50)), fill="#99CCFFCC")
+        draw.text((80, y + 10), f"{i+1}.{nickname}：{format_number(v)}", fill=(0, 0, 0), font=font)
         y += 100
         i += 1
     return canvas
-    # info.append(await bar_chart(f"{i+1}.{nicname(user)}：{format_ranktitle(x,title)}\n", x / first)(user.avatar_url))

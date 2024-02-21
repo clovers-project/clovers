@@ -39,9 +39,9 @@ group_admin = Check(group_admin=True)
 at = Check(at=True)
 
 
-def info_card(info, user_id):
+def info_card(info, user_id, BG_type=None):
     extra = manager.locate_user(user_id).extra
-    BG_type = extra.get("BG_type", "#FFFFFFCC")
+    BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
     bg_path = BG_PATH / f"{user_id}.png"
     if not bg_path.exists():
         bg_path = BG_PATH / "default.png"
@@ -219,46 +219,6 @@ async def _(event: Event) -> Result:
     xfer_record_in["record"] += xfer_in_OK
 
     return return_info()
-
-
-@plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
-@to_me.wrapper
-async def _(event: Event) -> Result:
-    user_id = event.user_id
-    user = manager.locate_user(user_id)
-    print(user.bank, LICENSE.id)
-    if user.bank.get(LICENSE.id, 0) < 1:
-        return f"你的【{LICENSE.name}】已失效"
-    log = []
-    BG_type = event.single_arg()
-    if BG_type:
-        if BG_type in {"高斯模糊", "模糊"}:
-            user.extra["BG_type"] = "GAUSS"
-            log.append("背景蒙版类型设置为：高斯模糊")
-        elif BG_type in {"无", "透明"}:
-            log.append("背景蒙版类型设置为：透明")
-            user.extra["BG_type"] = "NONE"
-        elif BG_type.startswith("#"):
-            log.append(f"背景蒙版类型设置为：{BG_type}")
-            user.extra["BG_type"] = BG_type
-
-    if url_list := event.raw_event.kwargs["image_list"]:
-        image = await download_url(url_list[0])
-        if not image:
-            log.append("图片下载失败")
-        else:
-            with open(BG_PATH / f"{user_id}.png", "wb") as f:
-                f.write(image.getvalue())
-            log.append("图片下载成功")
-    if log:
-        return "\n".join(log)
-
-
-@plugin.handle({"删除背景"}, {"user_id", "to_me"})
-@to_me.wrapper
-async def _(event: Event) -> Result:
-    Path.unlink(BG_PATH / f"{event.user_id}.png", True)
-    return "背景图片删除成功！"
 
 
 @plugin.handle({"我的金币"}, {"user_id", "group_id"})
@@ -478,7 +438,18 @@ async def _(event: Event):
         rank_data.append(v)
         task_list.append(download_url(user.avatar_url))
     avatar_data = await asyncio.gather(*task_list)
-    return info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id)
+    return info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id, "NONE")
+
+
+@plugin.handle({"使用道具"}, {"user_id", "group_id"})
+async def _(event: Event) -> Result:
+    if not (args := event.args_parse()):
+        return
+    prop_name, count, _ = event.args_parse()
+    prop = prop_search(prop_name)
+    if not prop:
+        return f"没有{prop_name}这种道具"
+    return prop.use()
 
 
 # 超管指令

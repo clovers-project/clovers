@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 
 
 Bank = dict[str, int]
@@ -54,6 +54,7 @@ class Prop(Item):
         self.intro: str = intro
         self.tip: str = tip
         self.rare, self.domain, self.flow, self.number = self.code_info()
+        self.use: Callable = lambda *any, **other: f"{self.name}不是可用道具"
 
     def code_info(self):
         rare = int(self.id[0])
@@ -62,15 +63,12 @@ class Prop(Item):
         number = int(self.id[3:])
         return rare, domain, flow, number
 
-    def func(self):
-        return f"道具{self.name}不可使用"
-
     def set_usage(self, **kwargs):
         def decorator(func: Callable):
             def wrapper(event):
                 return func(self, event, **kwargs)
 
-            self.func = wrapper
+            self.use = wrapper
 
         return decorator
 
