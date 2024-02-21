@@ -129,33 +129,12 @@ def gacha_report_card(
     return linecard("\n".join(title), font_manager, 40, width=880)
 
 
-def bar_chart(info: str, lenth: float):
-    """
-    带头像的条形图
-    """
-    canvas = Image.new("RGBA", (880, 60))
-    draw = ImageDraw.Draw(canvas)
-    draw.rectangle(((70, 10), (860, 50)), fill="#00000033")
-    draw.rectangle(((70, 10), (80 + int(lenth * 780), 50)), fill="#99CCFF")
-    draw.text((80, 10), info, fill=(0, 0, 0), font=font_normal)
-
-    async def func(url: str):
-        avatar = Image.open(await download_url(url))
-        avatar = avatar.resize((60, 60))
-        circle_mask = Image.new("RGBA", avatar.size, (255, 255, 255, 0))
-        ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
-        canvas.paste(avatar, (5, 0), circle_mask)
-        return canvas
-
-    return func
-
-
-def draw_rank(data: list[tuple[str, BytesIO, int]]) -> IMG:
+def draw_rank(data: list[tuple[str, int, bytes]]) -> IMG:
     """
     排名信息
     """
     first = data[0][1]
-    canvas = Image.new("RGBA", (880, 100 * len(data) + 20))
+    canvas = Image.new("RGBA", (880, 80 * len(data) + 20))
     draw = ImageDraw.Draw(canvas)
     y = 20
     i = 1
@@ -163,10 +142,11 @@ def draw_rank(data: list[tuple[str, BytesIO, int]]) -> IMG:
     circle_mask = Image.new("RGBA", (60, 60), (255, 255, 255, 0))
     ImageDraw.Draw(circle_mask).ellipse(((0, 0), (60, 60)), fill="black")
     for nickname, v, avatar in data:
-        avatar = Image.open(avatar).resize((60, 60))
-        canvas.paste(avatar, (5, y), circle_mask)
+        if avatar:
+            avatar = Image.open(BytesIO(avatar)).resize((60, 60))
+            canvas.paste(avatar, (5, y), circle_mask)
         draw.rectangle(((70, y + 10), (70 + int(v / first * 790), y + 50)), fill="#99CCFFCC")
-        draw.text((80, y + 10), f"{i+1}.{nickname}：{format_number(v)}", fill=(0, 0, 0), font=font)
-        y += 100
+        draw.text((80, y + 10), f"{i+1}.{nickname} {format_number(v)}", fill=(0, 0, 0), font=font)
+        y += 80
         i += 1
     return canvas

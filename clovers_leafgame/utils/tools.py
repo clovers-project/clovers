@@ -1,16 +1,15 @@
 import httpx
 import asyncio
 import numpy as np
-from io import BytesIO
 
 
-async def download_url(url: str) -> BytesIO:
+async def download_url(url: str):
     async with httpx.AsyncClient() as client:
         for _ in range(3):
             try:
                 resp = await client.get(url, timeout=20)
                 resp.raise_for_status()
-                return BytesIO(resp.content)
+                return resp.content
             except Exception:
                 await asyncio.sleep(3)
     return None
