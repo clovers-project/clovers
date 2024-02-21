@@ -1,8 +1,4 @@
-import asyncio
-import timeit
-import re
-
-
-"金币排行机器人bug研究中心"
-title = re.search(r"(.+)排行(.*)", "金币排行")
-print(type(title.group(2)))
+set1 = {1, 2, 3}
+set2 = {4, 5, 6}
+result_set = set1  set2
+print(result_set)

@@ -1,6 +1,7 @@
 import random
 import math
 import re
+import asyncio
 from pathlib import Path
 from datetime import datetime
 from clovers_core.plugin import Result
@@ -14,13 +15,14 @@ from .config import config, BG_PATH
 from .clover import plugin, Check
 from .library import prop_search, GOLD, VIP_CARD, AIR_PACK, LICENSE, gacha
 from .utils.linecard import info_splicing
-from .utils.tools import download_url, item_name_rule, gini_coef
+from .utils.tools import download_url, format_number, item_name_rule, gini_coef
 from .output import (
     bank_to_data,
     bank_card,
     prop_card,
     invest_card,
     gacha_report_card,
+    draw_rank,
 )
 
 
@@ -439,22 +441,44 @@ async def _(event: Event):
     title = cmd_match.group(1)
     group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
     group = manager.group_search(group_name)
-
-    if title.endswith("总"):
-        namelist = manager.namelist()
-        title = title[:-1]
-
+    group_id = group.group_id if group else None
+    if title == "路灯挂件":
+        data = {}
+        for group in manager.data.group_dict.values():
+            for k, v in group.extra.setdefault("revolution_achieve"):
+                data[k] = data.get(k, 0) + v
+        ranklist = list(data.items())
+        ranklist.sort(key=lambda x: x[1], reverse=True)
     else:
-        if not group:
-            return
-        namelist = manager.namelist(group_name)
-        prop = prop_search(title)
-        if not prop:
-            return
-        key = lambda user_id: manager.locate_user(user_id).connecting(group.group_id).bank.get(prop.id, 0)
+        if title.endswith("总"):
+            namelist = manager.namelist()
+            key = manager.rankkey(title[:-1])
+        else:
+            if not group_id:
+                return
+            namelist = manager.namelist(group_name)
+            key = manager.rankkey(title)
+            prop = prop_search(title)
+            if not key:
+                prop = prop_search(title)
+                if not prop:
+                    return
+                key = lambda user_id: manager.locate_user(user_id).locate_bank(group_id, prop.domain).get(prop.id, 0)
+
         ranklist = manager.ranklist(namelist, key)
+
     if not ranklist:
-        return
+        return f"无数据，无法进行{title}排行"
+    nickname_data = []
+    rank_data = []
+    task_list = []
+    for user_id, v in ranklist[:20]:
+        user = manager.locate_user(user_id)
+        nickname_data.append(user.nickname(group_id))
+        rank_data.append(v)
+        task_list.append(download_url(user.avatar_url))
+    avatar_data = await asyncio.gather(*task_list)
+    return info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id)
 
 
 # 超管指令

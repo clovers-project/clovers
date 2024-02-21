@@ -1,5 +1,11 @@
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL.ImageFont import FreeTypeFont
+from PIL.Image import Image as IMG
+from io import BytesIO
+
 from .core.data import Bank, Item, Prop, Stock
 from .utils.linecard import FontManager, linecard
+from .utils.tools import format_number
 from .config import config
 
 font_manager = FontManager(
@@ -25,7 +31,7 @@ def bank_card(data: list[tuple[Prop, int]]):
         return linecard(
             (
                 f"[font][][60][color][{prop.color}]【{prop.name}】[nowrap][passport]\n"
-                f"[right]{'{:,}'.format(n)}{quant}\n"
+                f"[right]{format_number(n)}{quant}\n"
                 f"----\n{prop.intro.replace('\n','[passport]\n')}"
                 f"\n[right]{prop.tip.replace('\n','[passport]\n')}"
             ),
@@ -46,7 +52,7 @@ def prop_card(data: list[tuple[Prop, int]], endline: str = "仓库列表"):
         return (
             f"[color][{prop.color}]{prop.name}[nowrap][passport]\n"
             f"[pixel][350]{prop.rare*'☆'}[nowrap][passport]\n"
-            f"[right]{'{:,}'.format(n)}{quant}"
+            f"[right]{format_number(n)}{quant}"
         )
 
     return linecard(
@@ -61,7 +67,7 @@ def prop_card(data: list[tuple[Prop, int]], endline: str = "仓库列表"):
 def invest_card(data: list[tuple[Stock, int]]):
     info = []
     for stock, n in data:
-        stock_value = "{:,}".format(round(stock.floating / stock.issuance, 2))
+        stock_value = format_number(stock.floating / stock.issuance)
         info.append(
             f"[pixel][20]公司 {stock.name}\n"
             f"[pixel][20]结算 [nowrap]\n[color][green]{stock_value}[nowrap]\n"
@@ -121,3 +127,46 @@ def gacha_report_card(
     )
     title.append(end_line("抽卡报告"))
     return linecard("\n".join(title), font_manager, 40, width=880)
+
+
+def bar_chart(info: str, lenth: float):
+    """
+    带头像的条形图
+    """
+    canvas = Image.new("RGBA", (880, 60))
+    draw = ImageDraw.Draw(canvas)
+    draw.rectangle(((70, 10), (860, 50)), fill="#00000033")
+    draw.rectangle(((70, 10), (80 + int(lenth * 780), 50)), fill="#99CCFF")
+    draw.text((80, 10), info, fill=(0, 0, 0), font=font_normal)
+
+    async def func(url: str):
+        avatar = Image.open(await download_url(url))
+        avatar = avatar.resize((60, 60))
+        circle_mask = Image.new("RGBA", avatar.size, (255, 255, 255, 0))
+        ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
+        canvas.paste(avatar, (5, 0), circle_mask)
+        return canvas
+
+    return func
+
+
+def draw_rank(data: list[tuple[str, BytesIO, int]]) -> IMG:
+    """
+    排名信息
+    """
+    first = data[0][1]
+    canvas = Image.new("RGBA", (880, 100 * len(data) + 20))
+    draw = ImageDraw.Draw(canvas)
+    y = 20
+    i = 1
+    for nickname, v, avatar in data:
+        draw.rectangle(((70, y + 30), (70 + int(v / first * 790), y + 70)), fill="#99CCFF")
+        draw.text((80, y + 30), f"{i+1}.{nickname}：{format_number(v)}", fill=(0, 0, 0), font=font_manager.font(40))
+        avatar = Image.open(avatar).resize((60, 60))
+        circle_mask = Image.new("RGBA", avatar.size, (255, 255, 255, 0))
+        ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
+        canvas.paste(avatar, (5, y + 20), circle_mask)
+        y += 100
+        i += 1
+    return canvas
+    # info.append(await bar_chart(f"{i+1}.{nicname(user)}：{format_ranktitle(x,title)}\n", x / first)(user.avatar_url))

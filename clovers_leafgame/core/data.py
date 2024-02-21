@@ -129,8 +129,8 @@ class User(BaseModel):
     def deal(self, group_id: str, prop: Prop, unsettled: int):
         return prop.deal(self.locate_bank(group_id, prop.domain), unsettled)
 
-    def nickname(self, group_id: str):
-        if account := self.accounts.get(group_id):
+    def nickname(self, group_id: str = None):
+        if group_id and (account := self.accounts.get(group_id)):
             return account.nickname or self.name
         return self.name
 

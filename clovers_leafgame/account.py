@@ -136,7 +136,7 @@ class Manager:
             i += stock.stock_value * n / stock.issuance
         return int(i)
 
-    def title_to_randkey(self, title) -> RankKey:
+    def rankkey(self, title) -> RankKey:
         match title:
             case "总金币":
                 return lambda user_id: sum(
@@ -160,7 +160,7 @@ class Manager:
 
     def namelist(self, group_name: str = None):
         if group_name:
-            return sum((group.namelist for group in self.data.group_dict.values()), {})
+            return set().union(*(group.namelist for group in self.data.group_dict.values()))
         else:
             group = self.group_search(group_name)
             if group:
