@@ -2,6 +2,8 @@ import sys
 import importlib
 import importlib.util
 import importlib.machinery
+import traceback
+
 import re
 from pathlib import Path
 from collections.abc import Callable, Coroutine
@@ -134,7 +136,11 @@ class PluginLoader:
     @staticmethod
     def load(name: str) -> Plugin:
         print(f"【loading plugin】 {name} ...")
-        return importlib.import_module(name).__plugin__
+        try:
+            module = importlib.import_module(name)
+            return getattr(module, "__plugin__", None)
+        except ImportError as e:
+            traceback.print_exc()
 
     def load_plugins_from_path(self):
         plugins_raw_path = str(self.plugins_path)

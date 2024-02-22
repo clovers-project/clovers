@@ -83,4 +83,6 @@ class Adapter:
             return sum(flag)
 
     async def task(self):
-        await asyncio.gather(*(task for p in self.plugins for task in p.task_list))
+        task_list = [task for plugin in self.plugins for task in plugin.task_list]
+        self.plugins = [plugin for plugin in self.plugins if plugin.handles]
+        await asyncio.gather(*task_list)
