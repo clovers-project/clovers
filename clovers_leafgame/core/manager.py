@@ -8,8 +8,8 @@ from collections import Counter
 from sys import platform
 
 from clovers_core.plugin import Result
-from .core.clovers import Event
-from .core.data import Bank, Prop, Stock, Account, User, Group, Account, DataBase
+from .clovers import Event
+from .data import Bank, Prop, Stock, Account, User, Group, Account, DataBase
 
 UserAccount = tuple[User, Account]
 

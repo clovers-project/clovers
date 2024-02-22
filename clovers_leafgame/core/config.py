@@ -70,12 +70,3 @@ class Config(CloversConfig):
     min_player = 2
     # 事件概率 = event_rate / 1000
     event_rate = 450
-
-
-config_file = Path() / "LiteGames" / "config.toml"
-config = Config.load(config_file)
-config.save(config_file)
-
-# 背景图片路径
-BG_PATH = Path(config.main_path) / "BG_image"
-BG_PATH.mkdir(exist_ok=True, parents=True)

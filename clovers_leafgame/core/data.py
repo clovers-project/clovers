@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from collections.abc import Callable, Coroutine
-
+from typing import TypeVar, Generic
 
 Bank = dict[str, int]
 
@@ -21,56 +21,68 @@ class Item:
         bank[prop_id] = n + unsettled
 
 
-class Prop(Item):
-    rare: int
-    """稀有度"""
-    domain: int
-    """
-    作用域   
-        0:无(空气)
-        1:群内
-        2:全局
-    """
-    flow: int
-    """
-    道具时效
-        0:永久道具
-        1:时效道具
-    """
-    number: int
-    """道具编号"""
+class LibraryError(Exception):
+    def __init__(self, message: str):
+        super().__init__(message)
 
-    def __init__(
-        self,
-        id: str,
-        name: str,
-        color: str,
-        intro: str,
-        tip: str,
-    ) -> None:
-        self.id = id
-        self.name = name
-        self.color: str = color
-        self.intro: str = intro
-        self.tip: str = tip
-        self.rare, self.domain, self.flow, self.number = self.code_info()
-        self.use: Callable = lambda *any, **other: f"{self.name}不是可用道具"
 
-    def code_info(self):
-        rare = int(self.id[0])
-        domain = int(self.id[1])
-        flow = int(self.id[2])
-        number = int(self.id[3:])
-        return rare, domain, flow, number
+ItemClass = TypeVar("ItemClass", bound=Item)
 
-    def set_usage(self, **kwargs):
-        def decorator(func: Callable):
-            def wrapper(event):
-                return func(self, event, **kwargs)
 
-            self.use = wrapper
+class Library(Generic[ItemClass]):
+    _data: dict[str, ItemClass]
+    _index: dict[str, str]
 
-        return decorator
+    def __init__(self, data: list[ItemClass] = None) -> None:
+        self._index: dict[str, str] = {}
+        if data:
+            self.data = data
+        else:
+            self._data = {}
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, data: list[ItemClass]):
+        self._data = {item.id: item for item in data}
+        self.index_update()
+
+    def index_update(self):
+        self._index.clear()
+        self._index.update({v.name: k for k, v in self._data.items()})
+        self._index.update({k: k for k in self._data})
+
+    def search(self, name: str):
+        item_id = self._index.get(name)
+        if not item_id:
+            return
+        return self._data[item_id]
+
+    def append(self, item: Item):
+        if not (item.id and item.name):
+            raise LibraryError("无法加入未完成的Item")
+        if item.id in self._data:
+            raise LibraryError(f"id:{item.id}已经存在")
+        if item.name in self._data:
+            raise LibraryError(f"name:{item.name}已经存在")
+        self._data[item.id] = item
+        self._index[item.name] = item.id
+
+    def rename(self, item_id: str, item_name: str):
+        item = self.search(item_id)
+        if not item:
+            raise LibraryError(f"未找到{item_id}")
+        if item_name in self._data:
+            raise LibraryError(f"name:{item.name}已经存在")
+        del self._index[item.name]
+        item.name = item_name
+        self._index[item.name] = item.id
+
+    def update(self, data: list[ItemClass]):
+        self._data.update({item.id: item for item in data})
+        self.index_update()
 
 
 class Stock(Item, BaseModel):

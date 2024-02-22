@@ -1,3 +1,11 @@
+"""
+小游戏运行时的主实例
+    config_file:配置路径
+    config:配置
+    plugin:本插件
+    manager:小游戏管理器
+"""
+
 import random
 import math
 import re
@@ -5,15 +13,17 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 from clovers_core.plugin import Result
-
+from io import BytesIO
+from collections.abc import Callable, Coroutine
+from clovers_core.plugin import Plugin, Result
 from .core.clovers import Event
-from .account import Manager
+from .core.manager import Manager
 from .core.data import Bank, Account
 from .core.utils import to_int
 
-from .config import config, BG_PATH
-from .clover import plugin, Check
-from .library import prop_search, GOLD, VIP_CARD, AIR_PACK, LICENSE, gacha
+from .core.config import Config
+
+from .item.prop import library, GOLD, VIP_CARD, AIR_PACK, LICENSE
 from .utils.linecard import info_splicing
 from .utils.tools import download_url, format_number, item_name_rule, gini_coef
 from .output import (
@@ -21,22 +31,31 @@ from .output import (
     bank_card,
     prop_card,
     invest_card,
-    gacha_report_card,
     draw_rank,
 )
+
+config_file = Path() / "LiteGames" / "config.toml"
+# 加载配置
+config = Config.load(config_file)
+# 创建插件实例
+plugin = Plugin(
+    build_event=lambda event: Event(event),
+    build_result=lambda result: (
+        Result("text", result) if isinstance(result, str) else Result("image", result) if isinstance(result, BytesIO) else result
+    ),
+)
+main_path = config.main_path
+# 加载或创建背景图片路径
+BG_PATH = Path(main_path) / "BG_image"
+BG_PATH.mkdir(exist_ok=True, parents=True)
+# 加载小游戏管理器实例
+manager = Manager(Path(main_path) / "russian_data.json")
 
 
 sign_gold = config.sign_gold
 revolt_gold = config.revolt_gold
 company_public_gold = config.company_public_gold
 gacha_gold = config.gacha_gold
-
-manager = Manager(Path(config.main_path) / "russian_data.json")
-
-to_me = Check(to_me=True)
-superuser = Check(superuser=True)
-group_admin = Check(group_admin=True)
-at = Check(at=True)
 
 
 def info_card(info, user_id, BG_type=None):
