@@ -14,7 +14,7 @@ from collections import Counter
 from sys import platform
 
 from .clovers import Event
-from .data import Bank, Account, User, Group, Account, DataBase
+from .data import Bank, Library, Account, User, Group, Account, DataBase, Stock
 from .linecard import info_splicing, ImageList
 
 UserAccount = tuple[User, Account]
@@ -25,11 +25,12 @@ RankKey = Callable[[str], int | float]
 class Manager:
     data: DataBase
     main_path: Path
+    stocks_library: Library[Stock]
 
     def __init__(self, main_path: Path) -> None:
         self.main_path = Path(main_path)
         self.DATA_PATH = self.main_path / "russian_data.json"
-        self.BG_PATH = Path(main_path) / "bg"
+        self.BG_PATH = Path(main_path) / "BG_image"
         self.BG_PATH.mkdir(exist_ok=True, parents=True)
         self.load()
 
@@ -41,14 +42,18 @@ class Manager:
         if self.DATA_PATH.exists():
             with open(self.DATA_PATH, "r", encoding="utf8") as f:
                 self.data = DataBase.parse_obj(json.load(f))
+        self.stocks_library.data = [stock for group in self.data.group_dict.values() if (stock := group.stock)]
 
     def info_card(self, info: ImageList, user_id: str, BG_type=None):
         extra = self.locate_user(user_id).extra
         BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
         BG_PATH = self.BG_PATH / f"{user_id}.png"
         if not BG_PATH.exists():
-            BG_PATH = BG_PATH / "default.png"
+            BG_PATH = self.BG_PATH / "default.png"
         return info_splicing(info, BG_PATH, spacing=10, BG_type=BG_type)
+
+    def group_search(self, gruup_name: str):
+        return self.data.group_dict.get(stock.id if (stock := self.stocks_library.search(gruup_name)) else gruup_name)
 
     def locate_group(self, group_id: str) -> Group:
         """

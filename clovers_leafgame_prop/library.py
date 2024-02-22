@@ -2,7 +2,7 @@ import random
 import os
 import json
 from pathlib import Path
-from clovers_leafgame.item.prop import Prop, library, AIR
+from clovers_leafgame.prop import Prop, library, AIR
 
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 

@@ -268,12 +268,12 @@ def info_splicing(
         height = height - spacing + padding
 
     size = (width + padding * 2, height)
-    if BG_path:
+    if BG_path.exists():
         bg = Image.open(BG_path).convert("RGB")
         canvas = CropResize(bg, size)
     else:
         canvas = Image.new("RGB", size, "white")
-        BG_type = "#00000099"
+        BG_type = "NONE"
 
     height = padding
 

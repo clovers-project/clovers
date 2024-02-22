@@ -7,15 +7,13 @@ from datetime import datetime
 from io import BytesIO
 from PIL import ImageColor
 from collections.abc import Callable, Coroutine
-from clovers_core.plugin import Plugin, Result
 from .core.clovers import Event, to_me, superuser, group_admin, at
 from .core.manager import Manager
 from .core.data import Bank, Account
 from .core.utils import to_int
 
-from .item.prop import library, GOLD, VIP_CARD, LICENSE
-from .core.linecard import info_splicing
-from .core.tools import download_url, format_number, item_name_rule, gini_coef
+from .prop import library as props_library, GOLD, VIP_CARD, LICENSE
+from .core.tools import download_url, item_name_rule, gini_coef
 from .output import (
     bank_to_data,
     bank_card,
@@ -25,12 +23,15 @@ from .output import (
 )
 from .main import plugin, config, manager
 
-__plugin__ = plugin
+sign_gold = config.sign_gold
+revolt_gold = config.revolt_gold
+company_public_gold = config.company_public_gold
+gacha_gold = config.gacha_gold
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
 @to_me.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     user_id = event.user_id
     user = manager.locate_user(user_id)
     print(user.bank, LICENSE.id)
@@ -67,19 +68,13 @@ async def _(event: Event) -> Result:
 
 @plugin.handle({"删除背景"}, {"user_id", "to_me"})
 @to_me.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     Path.unlink(manager.BG_PATH / f"{event.user_id}.png", True)
     return "背景图片删除成功！"
 
 
-sign_gold = config.sign_gold
-revolt_gold = config.revolt_gold
-company_public_gold = config.company_public_gold
-gacha_gold = config.gacha_gold
-
-
 @plugin.handle({"金币签到", "轮盘签到"}, {"user_id", "group_id", "nickname", "avatar"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     user, account = manager.account(event)
     user.avatar_url = event.avatar
     delta_days = (datetime.today() - account.sign_date).days
@@ -91,7 +86,7 @@ async def _(event: Event) -> Result:
 
 
 @plugin.handle({"重置签到", "领取金币"}, {"user_id", "group_id", "nickname", "avatar"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     user, account = manager.account(event)
     user.avatar_url = event.avatar
     if account.revolution:
@@ -104,7 +99,7 @@ async def _(event: Event) -> Result:
 
 @plugin.handle({"发红包", "赠送金币"}, {"user_id", "group_id", "at", "permission"})
 @at.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     group_id = event.group_id
     N = event.args_to_int() or random.randint(*sign_gold)
     user_out = manager.locate_user(event.user_id)
@@ -117,28 +112,27 @@ async def _(event: Event) -> Result:
         sender = "对方"
     else:
         sender = "你"
-    if user_out.locate_bank(group_id, VIP_CARD.domain).get(VIP_CARD.id, 0) > 0:
+    if VIP_CARD.user_bank(user_out, group_id).get(VIP_CARD.id, 0) > 0:
         tax = 0
         tip = f"『{VIP_CARD.name}』免手续费"
     else:
         tax = int(N * 0.02)
         tip = f"扣除2%手续费：{tax}，实际到账金额{N - tax}"
 
-    if n := user_out.deal(group_id, GOLD, -N):
+    if n := GOLD.deal_with(user_out, group_id, -N):
         return f"数量不足。\n——{sender}还有{n}枚金币。"
-
-    user_in.deal(group_id, GOLD, N - tax)
+    GOLD.deal_with(user_in, group_id, -N)
     GOLD.deal(manager.locate_group(group_id).bank, tax)
     return f"{user_out.nickname(group_id)} 向 {user_in.nickname(group_id)} 赠送{N}枚金币\n{tip}"
 
 
 @plugin.handle({"送道具", "赠送道具"}, {"user_id", "group_id", "at", "permission"})
 @at.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     if not (args := event.args_parse()):
         return
     prop_name, N, _ = args
-    prop = prop_search(prop_name)
+    prop = props_library.search(prop_name)
     if not prop:
         return f"没有【{prop_name}】这种道具。"
     group_id = event.group_id
@@ -160,15 +154,16 @@ async def _(event: Event) -> Result:
     else:
         tax, tip = 0, ""
 
-    if n := user_out.deal(group_id, prop, -N):
+    if n := prop.deal_with(user_out, group_id, -N):
         return f"数量不足。\n——{sender}还有{n}个{prop.name}。"
-    user_in.deal(group_id, prop, N - tax)
+    prop.deal_with(user_in, group_id, N - tax)
     prop.deal(manager.locate_group(group_id).bank, tax)
+
     return f"{user_out.nickname(group_id)} 向 {user_in.nickname(group_id)} 赠送{N}个{prop.name}\n{tip}"
 
 
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     if not (args := event.args_parse()):
         return
     group_name, xfer_out, _ = args
@@ -248,13 +243,13 @@ async def _(event: Event) -> Result:
 
 
 @plugin.handle({"我的金币"}, {"user_id", "group_id"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     user = manager.locate_user(event.user_id)
     code = GOLD.id
     if event.is_private():
         info = []
         for group_id, accounts in user.accounts.items():
-            group = manager.group_search(group_id, False)
+            group = manager.group_search(group_id)
             if not group:
                 group_name = "账户已失效"
             else:
@@ -267,7 +262,7 @@ async def _(event: Event) -> Result:
 
 
 @plugin.handle({"我的道具"}, {"user_id", "group_id", "nickname"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     user, group_account = manager.account(event)
     props = {}
     props.update(user.bank)
@@ -275,30 +270,30 @@ async def _(event: Event) -> Result:
     if not props:
         return "您的仓库空空如也。"
     flag = len(props) < 10 or event.single_arg() in {"信息", "介绍", "详情"}
-    data = bank_to_data(props, prop_search)
+    data = bank_to_data(props, props_library.search)
     if flag:
         info = bank_card(data)
     else:
         info = [prop_card(data)]
-    return info_card(info, event.user_id)
+    return manager.info_card(info, event.user_id)
 
 
 @plugin.handle({"我的资产"}, {"user_id", "group_id", "nickname"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     user, group_account = manager.account(event)
     invest = {}
     invest.update(user.bank)
     invest.update(group_account.bank)
     if not invest:
         return "您的资产是空的。"
-    return info_card(
-        [invest_card(bank_to_data(invest, manager.stock_search))],
+    return manager.info_card(
+        [invest_card(bank_to_data(invest, manager.stocks_library.search))],
         event.user_id,
     )
 
 
 @plugin.handle({"群金库"}, {"user_id", "group_id", "permission"})
-async def _(event: Event) -> Result:
+async def _(event: Event):
     if not (args := event.args_parse()):
         return
     command, N, _ = args
@@ -306,17 +301,17 @@ async def _(event: Event) -> Result:
     group_id = event.group_id
     group = manager.locate_group(group_id)
     if command == "查看":
-        bank_data = bank_to_data(group.bank, prop_search)
+        bank_data = bank_to_data(group.bank, props_library.search)
         if len(bank_data) < 6:
             info = bank_card(bank_data)
         else:
             info = [prop_card(bank_data)]
-        invest_data = bank_to_data(group.bank, manager.stock_search)
+        invest_data = bank_to_data(group.bank, manager.stocks_library.search)
         info.append(invest_card(invest_data))
-        return info_card(info, user_id)
+        return manager.info_card(info, user_id)
     sign, name = command[0], command[1:]
     user = manager.locate_user(user_id)
-    if item := prop_search(name):
+    if item := props_library.search(name):
         bank_in = group.bank
         bank_out = user.locate_bank(group_id, item.domain)
     elif item := manager.stock_search(name):
@@ -344,7 +339,7 @@ async def _(event: Event) -> Result:
 @plugin.handle({"市场注册", "公司注册", "注册公司"}, {"to_me", "permission"})
 @at.wrapper
 @group_admin.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     group_id = event.group_id
     group = manager.locate_group(group_id)
     stock = group.stock
@@ -395,9 +390,8 @@ async def _(event: Event):
                 return
             namelist = manager.namelist(group_name)
             key = manager.rankkey(title)
-            prop = prop_search(title)
+            prop = props_library.search(title)
             if not key:
-                prop = prop_search(title)
                 if not prop:
                     return
                 key = lambda user_id: manager.locate_user(user_id).locate_bank(group_id, prop.domain).get(prop.id, 0)
@@ -415,18 +409,7 @@ async def _(event: Event):
         rank_data.append(v)
         task_list.append(download_url(user.avatar_url))
     avatar_data = await asyncio.gather(*task_list)
-    return info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id, "NONE")
-
-
-@plugin.handle({"使用道具"}, {"user_id", "group_id"})
-async def _(event: Event) -> Result:
-    if not (args := event.args_parse()):
-        return
-    prop_name, count, _ = event.args_parse()
-    prop = prop_search(prop_name)
-    if not prop:
-        return f"没有{prop_name}这种道具"
-    return prop.use()
+    return manager.info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id, "NONE")
 
 
 # 超管指令
@@ -434,7 +417,7 @@ async def _(event: Event) -> Result:
 
 @plugin.handle({"获取金币"}, {"user_id", "group_id", "permission"})
 @superuser.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     N = event.args_to_int()
     user = manager.locate_user(event.user_id)
     if n := GOLD.deal_with(user, event.group_id, N):
@@ -444,15 +427,15 @@ async def _(event: Event) -> Result:
 
 @plugin.handle({"获取道具"}, {"user_id", "group_id", "nickname", "permission"})
 @superuser.wrapper
-async def _(event: Event) -> Result:
+async def _(event: Event):
     if not (args := event.args_parse()):
         return
     name, N, _ = args
-    prop = prop_search(name)
+    prop = props_library.search(name)
     if not prop:
         return f"没有【{name}】这种道具。"
     user = manager.locate_user(event.user_id)
-    if n := user.deal(event.group_id, prop, N):
+    if n := prop.deal_with(user, event.group_id, N):
         return f"获取道具失败，你的【{prop.name}】（{n}））数量不足。"
     return f"你获得了{N}个【{prop.name}】！"
 
@@ -462,6 +445,7 @@ async def _():
     print("游戏数据已保存！")
 
 
+__plugin__ = plugin
 """
 恶魔轮盘：
 

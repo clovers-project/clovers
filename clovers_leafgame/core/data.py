@@ -81,19 +81,6 @@ class Library[ItemClass: Item]:
         self.index_update()
 
 
-class Stock(Item, BaseModel):
-    issuance: int = 0
-    """股票发行量"""
-    time: datetime = None
-    """注册时间"""
-    floating: int = 0
-    """浮动资产"""
-    fixed: int = 0
-    """固定资产"""
-    stock_value: int = 0
-    """全群资产"""
-
-
 class Account(BaseModel):
     """
     用户群账户
@@ -105,6 +92,9 @@ class Account(BaseModel):
     bank: Bank = Bank()
     invest: Bank = Bank()
     extra: dict = {}
+
+
+import typing_extensions
 
 
 class User(BaseModel):
@@ -131,6 +121,71 @@ class User(BaseModel):
         return self.name
 
 
+class Prop(Item):
+    rare: int
+    """稀有度"""
+    domain: int
+    """
+    作用域   
+        0:无(空气)
+        1:群内
+        2:全局
+    """
+    flow: int
+    """
+    道具时效
+        0:永久道具
+        1:时效道具
+    """
+    number: int
+    """道具编号"""
+
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        color: str,
+        intro: str,
+        tip: str,
+    ) -> None:
+        self.id = id
+        self.name = name
+        self.color: str = color
+        self.intro: str = intro
+        self.tip: str = tip
+        self.rare, self.domain, self.flow, self.number = self.code_info()
+
+    def code_info(self):
+        rare = int(self.id[0])
+        domain = int(self.id[1])
+        flow = int(self.id[2])
+        number = int(self.id[3:])
+        return rare, domain, flow, number
+
+    def user_bank(self, user: User, group_id: str):
+        match self.domain:
+            case 1:
+                return user.connecting(group_id).bank
+            case _:
+                return user.bank
+
+    def deal_with(self, user: User, group_id: str, unsettled: int):
+        return self.deal(self.user_bank(user, group_id), unsettled)
+
+
+class Stock(Item, BaseModel):
+    issuance: int = 0
+    """股票发行量"""
+    time: float = None
+    """注册时间"""
+    floating: int = 0
+    """浮动资产"""
+    fixed: int = 0
+    """固定资产"""
+    stock_value: int = 0
+    """全群资产"""
+
+
 class Group(BaseModel):
     """
     群字典
@@ -138,10 +193,10 @@ class Group(BaseModel):
 
     group_id: str = None
     """群号"""
+    stock: Stock = None
+    """群名"""
     namelist: set[str] = set()
     """群员名单"""
-    stock: Stock = Stock()
-    """发行ID"""
     level: int = 1
     """群等级"""
     bank: Bank = Bank()
