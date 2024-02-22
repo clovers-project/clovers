@@ -1,18 +1,18 @@
 """小游戏运行实例"""
 
-from pathlib import Path
 from io import BytesIO
 from clovers_core.plugin import Plugin, Result
-
+from clovers_core.config import config as clovers_config
 from .core.clovers import Event
 from .core.manager import Manager
-from .core.config import Config
+from .config import Config
 
-config_file = Path() / "LiteGames" / "config.toml"
-"""配置路径"""
-config = Config.load(config_file)
+config_key = __package__
+
+config = Config.parse_obj(clovers_config.get(config_key, {}))
 """主配置类"""
-main_path = config.main_path
+clovers_config[config_key] = config.dict()
+clovers_config.save()
 plugin = Plugin(
     build_event=lambda event: Event(event),
     build_result=lambda result: (
@@ -20,5 +20,5 @@ plugin = Plugin(
     ),
 )
 """小游戏插件实例"""
-manager = Manager(Path(main_path) / "russian_data.json")
+manager = Manager(config.main_path)
 """小游戏管理器实例"""

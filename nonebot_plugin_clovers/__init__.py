@@ -2,25 +2,54 @@ import sys
 
 sys.path.append(r"D:\GIT\clovers_core")
 sys.path.append(r"D:\GIT\clovers_leafgame")
-
-import nonebot
+import os
+from pathlib import Path
+from pydantic import BaseModel
 from nonebot import on_message, get_driver
 from nonebot.matcher import Matcher
-
-
+from clovers_core.plugin import PluginLoader
+from clovers_core.adapter import Adapter
 from nonebot.adapters.qq import Bot as QQBot, MessageEvent as QQMsgEvent
 from nonebot.adapters.onebot.v11 import Bot as v11Bot, MessageEvent as v11MsgEvent
 from .adapters import qq, v11
-from .clovers import adapter
 
+# 加载配置
 driver = get_driver()
+
+
+global_config = driver.config
+
+clovers_config_file = getattr(global_config, "clovers_config_file", "clovers.toml")
+print(clovers_config_file)
+os.environ["clovers_config_file"] = clovers_config_file
+
+# 添加环境变量之后加载config
+from clovers_core.config import config as clovers_config
+
+
+# 加载clovers配置
+class Config(BaseModel):
+    plugins_path: str = "./clovers/plugins"
+    plugins_list: list = []
+
+
+config_key = __package__
+config = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config.dict()
+clovers_config.save()
+
+plugins_path = Path(config.plugins_path)
+plugins_path.mkdir(exist_ok=True, parents=True)
+loader = PluginLoader(plugins_path, config.plugins_list)
+adapter = Adapter()
+adapter.plugins = loader.plugins
 
 driver.on_startup(adapter.task)
 
-Bot_NICKNAME = list(nonebot.get_driver().config.nickname)
+Bot_NICKNAME = list(global_config.nickname)
 Bot_NICKNAME = Bot_NICKNAME[0] if Bot_NICKNAME else "bot"
 
-command_start = {x for x in driver.config.command_start if x}
+command_start = {x for x in global_config.command_start if x}
 
 
 def extract_command(msg: str):

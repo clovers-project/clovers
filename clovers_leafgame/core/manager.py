@@ -1,5 +1,11 @@
+"""+++++++++++++++++
+————————————————————
+    ᕱ⑅ᕱ。 ᴍᴏʀɴɪɴɢ
+   (｡•ᴗ-)_
+————————————————————
++++++++++++++++++"""
+
 import json
-import time
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from pathlib import Path
@@ -9,6 +15,7 @@ from sys import platform
 
 from .clovers import Event
 from .data import Bank, Account, User, Group, Account, DataBase
+from .linecard import info_splicing, ImageList
 
 UserAccount = tuple[User, Account]
 
@@ -16,28 +23,32 @@ RankKey = Callable[[str], int | float]
 
 
 class Manager:
-    """+++++++++++++++++
-    ————————————————————
-      ᕱ⑅ᕱ。 ᴍᴏʀɴɪɴɢ
-     (｡•ᴗ-)_
-    ————————————————————
-    +++++++++++++++++"""
-
     data: DataBase
-    file_path: Path
+    main_path: Path
 
-    def __init__(self, file_path: Path) -> None:
-        self.file_path = file_path
+    def __init__(self, main_path: Path) -> None:
+        self.main_path = Path(main_path)
+        self.DATA_PATH = self.main_path / "russian_data.json"
+        self.BG_PATH = Path(main_path) / "bg"
+        self.BG_PATH.mkdir(exist_ok=True, parents=True)
         self.load()
 
     def save(self):
-        with open(self.file_path, "w") as f:
+        with open(self.DATA_PATH, "w") as f:
             f.write(self.data.json(indent=4))
 
     def load(self):
-        if self.file_path.exists():
-            with open(self.file_path, "r", encoding="utf8") as f:
+        if self.DATA_PATH.exists():
+            with open(self.DATA_PATH, "r", encoding="utf8") as f:
                 self.data = DataBase.parse_obj(json.load(f))
+
+    def info_card(self, info: ImageList, user_id: str, BG_type=None):
+        extra = self.locate_user(user_id).extra
+        BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
+        BG_PATH = self.BG_PATH / f"{user_id}.png"
+        if not BG_PATH.exists():
+            BG_PATH = BG_PATH / "default.png"
+        return info_splicing(info, BG_PATH, spacing=10, BG_type=BG_type)
 
     def locate_group(self, group_id: str) -> Group:
         """

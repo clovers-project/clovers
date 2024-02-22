@@ -14,15 +14,11 @@ class FontManager:
     def __init__(self, font_name: str, fallback: list[str], size: tuple = None) -> None:
         self.font_name: str = font_name
         self.fallback: list[str] = fallback
-        self.cmap = TTFont(
-            fm.findfont(fm.FontProperties(family=font_name)), fontNumber=0
-        ).getBestCmap()
+        self.cmap = TTFont(fm.findfont(fm.FontProperties(family=font_name)), fontNumber=0).getBestCmap()
         self.fallback_cmap = {}
         for font in self.fallback:
             font_path = fm.findfont(fm.FontProperties(family=font))
-            self.fallback_cmap[font_path] = TTFont(
-                font_path, fontNumber=0
-            ).getBestCmap()
+            self.fallback_cmap[font_path] = TTFont(font_path, fontNumber=0).getBestCmap()
 
         self.font_def = {self.new_font(font_name, k): k for k in size} if size else {}
 
@@ -151,12 +147,8 @@ def linecard(
                 inner_font_size = int(inner_font_size) if inner_font_size else font_size
                 inner_font_name = inner_font_name or font_def.path
                 try:
-                    tag.font = ImageFont.truetype(
-                        font=inner_font_name, size=inner_font_size, encoding="utf-8"
-                    )
-                    tag.cmap = TTFont(
-                        tag.font.path, fontNumber=tag.font.index
-                    ).getBestCmap()
+                    tag.font = ImageFont.truetype(font=inner_font_name, size=inner_font_size, encoding="utf-8")
+                    tag.cmap = TTFont(tag.font.path, fontNumber=tag.font.index).getBestCmap()
                 except OSError:
                     pass
 
@@ -178,12 +170,7 @@ def linecard(
             line = data[0]
             tag.passport = True
 
-        if (
-            autowrap
-            and not tag.noautowrap
-            and width
-            and tag.font.getlength(line) > width
-        ):
+        if autowrap and not tag.noautowrap and width and tag.font.getlength(line) > width:
             line = line_wrap(line, width - padding_x, tag.font, x)
 
         if line == "----":
@@ -255,8 +242,11 @@ def linecard(
     return canvas
 
 
+ImageList = list[IMG]
+
+
 def info_splicing(
-    info: list[IMG],
+    info: ImageList,
     BG_path: Path = None,
     width: int = 880,
     padding: int = 20,

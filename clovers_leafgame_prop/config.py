@@ -1,6 +1,5 @@
-from clovers_core.config import Config as CloversConfig
+from pydantic import BaseModel
 
 
-class Config(CloversConfig):
+class Config(BaseModel):
     gacha_gold: int = 50
-    lucky_clover = "• ＬＵＣＫＹ  ＣＬＯＶＥＲ •"

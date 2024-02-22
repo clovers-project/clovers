@@ -142,7 +142,7 @@ class PluginLoader:
         except ImportError as e:
             traceback.print_exc()
 
-    def load_plugins_from_path(self):
+    def plugins_from_path(self):
         plugins_raw_path = str(self.plugins_path)
         sys.path.insert(0, plugins_raw_path)
         plugins = []
@@ -151,14 +151,15 @@ class PluginLoader:
             if name.startswith("_"):
                 continue
             plugins.append(self.load(name))
-        sys.path = [path for path in sys.path if path != plugins_raw_path]
+        sys.path.remove(plugins_raw_path)
         return [plugin for plugin in plugins if plugin]
 
-    def load_plugins_from_list(self):
+    def plugins_from_list(self):
         plugins = []
         for x in self.plugins_list:
             plugins.append(self.load(x))
         return [plugin for plugin in plugins if plugin]
 
-    def load_plugins(self) -> list[Plugin]:
-        return self.load_plugins_from_list() + self.load_plugins_from_path()
+    @property
+    def plugins(self) -> list[Plugin]:
+        return self.plugins_from_path() + self.plugins_from_list()

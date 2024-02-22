@@ -1,8 +1,8 @@
-from clovers_core.config import Config as CloversConfig
+from pydantic import BaseModel
 from pathlib import Path
 
 
-class Config(CloversConfig):
+class Config(BaseModel):
     # 超时时间
     timeout: int = 120
     # 主路径

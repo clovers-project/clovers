@@ -7,8 +7,8 @@ from io import BytesIO
 
 from .item.prop import Prop
 from .core.data import Bank, Item, Stock
-from .utils.linecard import FontManager, linecard, info_splicing
-from .utils.tools import format_number
+from .core.linecard import FontManager, linecard, info_splicing
+from .core.tools import format_number
 from .main import config, manager
 
 main_path = config.main_path
@@ -18,22 +18,6 @@ font_manager = FontManager(
     config.fallback_fonts,
     (30, 40, 60),
 )
-# 加载或创建背景图片路径
-BG_PATH = Path(main_path) / "BG_image"
-BG_PATH.mkdir(exist_ok=True, parents=True)
-
-
-def info_card(info, user_id, BG_type=None):
-    extra = manager.locate_user(user_id).extra
-    BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
-    bg_path = BG_PATH / f"{user_id}.png"
-    if not bg_path.exists():
-        bg_path = BG_PATH / "default.png"
-    try:
-        return info_splicing(info, bg_path, spacing=10, BG_type=BG_type)
-    except:
-        if "BG_type" in extra:
-            del extra["BG_type"]
 
 
 def endline(tip: str) -> str:

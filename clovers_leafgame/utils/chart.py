@@ -15,7 +15,7 @@ import numpy as np
 import re
 from re import Pattern
 
-from .tools import download_url
+from ..core.tools import download_url
 
 
 class ChartImage:
@@ -35,9 +35,7 @@ class ChartImage:
         self.font_normal = ImageFont.truetype(font=fontname, size=40, encoding="utf-8")
         self.font_small = ImageFont.truetype(font=fontname, size=30, encoding="utf-8")
 
-        cmap_default = TTFont(
-            self.font_normal.path, fontNumber=self.font_normal.index
-        ).getBestCmap()
+        cmap_default = TTFont(self.font_normal.path, fontNumber=self.font_normal.index).getBestCmap()
 
         self.fallback_fonts_cmap = {}
         default_fallback_path = fm.findfont(fm.FontProperties())
@@ -45,9 +43,7 @@ class ChartImage:
             fallback_path = fm.findfont(fm.FontProperties(family=fallback))
             if fallback_path == default_fallback_path:
                 continue
-            self.fallback_fonts_cmap[fallback_path] = TTFont(
-                fallback_path, fontNumber=0
-            ).getBestCmap()
+            self.fallback_fonts_cmap[fallback_path] = TTFont(fallback_path, fontNumber=0).getBestCmap()
         del default_fallback_path
 
 
@@ -200,9 +196,7 @@ def my_info_head(gold: int, win: int, lose: int, nickname: str, avatar: bytes):
     draw = ImageDraw.Draw(canvas)
     draw.text((300, 40), f"{nickname}", fill=(0, 0, 0), font=font_big)
     draw.line(((300, 120), (860, 120)), fill="gray", width=4)
-    draw.text(
-        (300, 140), f"金币 {'{:,}'.format(gold)}", fill=(0, 0, 0), font=font_normal
-    )
+    draw.text((300, 140), f"金币 {'{:,}'.format(gold)}", fill=(0, 0, 0), font=font_normal)
     draw.text((300, 190), f"战绩 {win}:{lose}", fill=(0, 0, 0), font=font_normal)
     draw.text(
         (300, 240),
@@ -225,9 +219,7 @@ def my_exchange_head(gold: int, nickname: str, invest: dict, avatar: bytes):
     draw = ImageDraw.Draw(canvas)
     draw.text((250, 40), f"{nickname}", fill=(0, 0, 0), font=font_big)
     draw.line(((250, 120), (860, 120)), fill="gray", width=4)
-    draw.text(
-        (250, 140), f"金币 {'{:,}'.format(gold)}", fill=(0, 0, 0), font=font_normal
-    )
+    draw.text((250, 140), f"金币 {'{:,}'.format(gold)}", fill=(0, 0, 0), font=font_normal)
     draw.text((250, 190), f"股票 {len(invest)}", fill=(0, 0, 0), font=font_normal)
     return canvas
 
@@ -274,9 +266,7 @@ def my_info_account(msg: str, dist):
 
     statistics = Image.open(output)
     canvas.paste(statistics, (880 - statistics.size[0], 0))
-    linecard(
-        msg, width=880, height=400, padding=(20, 30), endline="账户信息", canvas=canvas
-    )
+    linecard(msg, width=880, height=400, padding=(20, 30), endline="账户信息", canvas=canvas)
     return canvas
 
 
@@ -293,9 +283,7 @@ def group_info_head(company_name: str, group_id: int, member_count: int):
         font=font_big,
     )
     draw.line(((0, 120), (880, 120)), fill="gray", width=4)
-    draw.text(
-        (20, 140), f"注册：{str(group_id)[:4]}...", fill=(0, 0, 0), font=font_normal
-    )
+    draw.text((20, 140), f"注册：{str(group_id)[:4]}...", fill=(0, 0, 0), font=font_normal)
     draw.text((20, 190), f"成员：{member_count}", fill=(0, 0, 0), font=font_normal)
     return canvas
 
@@ -363,9 +351,7 @@ def group_info_account(company: Company, dist):
         explode=explode[0:N],
     )
     plt.legend(labels, loc=(-0.6, 0), frameon=False)
-    plt.subplots_adjust(
-        top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0, wspace=0.6
-    )
+    plt.subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0, wspace=0.6)
     plt.savefig(output, format="png", dpi=100, transparent=True)
     plt.close()
 

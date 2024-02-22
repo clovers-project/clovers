@@ -5,17 +5,17 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 from io import BytesIO
+from PIL import ImageColor
 from collections.abc import Callable, Coroutine
 from clovers_core.plugin import Plugin, Result
 from .core.clovers import Event, to_me, superuser, group_admin, at
 from .core.manager import Manager
 from .core.data import Bank, Account
 from .core.utils import to_int
-from .core.config import Config
 
 from .item.prop import library, GOLD, VIP_CARD, LICENSE
-from .utils.linecard import info_splicing
-from .utils.tools import download_url, format_number, item_name_rule, gini_coef
+from .core.linecard import info_splicing
+from .core.tools import download_url, format_number, item_name_rule, gini_coef
 from .output import (
     bank_to_data,
     bank_card,
@@ -26,6 +26,51 @@ from .output import (
 from .main import plugin, config, manager
 
 __plugin__ = plugin
+
+
+@plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
+@to_me.wrapper
+async def _(event: Event) -> Result:
+    user_id = event.user_id
+    user = manager.locate_user(user_id)
+    print(user.bank, LICENSE.id)
+    if user.bank.get(LICENSE.id, 0) < 1:
+        return f"你的【{LICENSE.name}】已失效"
+    log = []
+    BG_type = event.single_arg()
+    if BG_type:
+        if BG_type in {"高斯模糊", "模糊"}:
+            user.extra["BG_type"] = "GAUSS"
+            log.append("背景蒙版类型设置为：高斯模糊")
+        elif BG_type in {"无", "透明"}:
+            log.append("背景蒙版类型设置为：透明")
+            user.extra["BG_type"] = "NONE"
+        elif BG_type.startswith("#"):
+            log.append(f"背景蒙版类型设置为：{BG_type}")
+            try:
+                ImageColor.getcolor(BG_type, "RGB")
+                user.extra["BG_type"] = BG_type
+            except ValueError:
+                log.append("设置失败")
+
+    if url_list := event.raw_event.kwargs["image_list"]:
+        image = await download_url(url_list[0])
+        if not image:
+            log.append("图片下载失败")
+        else:
+            with open(manager.BG_PATH / f"{user_id}.png", "wb") as f:
+                f.write(image.getvalue())
+            log.append("图片下载成功")
+    if log:
+        return "\n".join(log)
+
+
+@plugin.handle({"删除背景"}, {"user_id", "to_me"})
+@to_me.wrapper
+async def _(event: Event) -> Result:
+    Path.unlink(manager.BG_PATH / f"{event.user_id}.png", True)
+    return "背景图片删除成功！"
+
 
 sign_gold = config.sign_gold
 revolt_gold = config.revolt_gold
@@ -392,7 +437,7 @@ async def _(event: Event) -> Result:
 async def _(event: Event) -> Result:
     N = event.args_to_int()
     user = manager.locate_user(event.user_id)
-    if n := user.deal(event.group_id, GOLD, N):
+    if n := GOLD.deal_with(user, event.group_id, N):
         return f"获取金币失败，你的金币（{n}）数量不足。"
     return f"你获得了 {N} 金币"
 

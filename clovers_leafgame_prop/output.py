@@ -1,5 +1,5 @@
 import numpy as np
-from clovers_leafgame.utils.linecard import linecard
+from clovers_leafgame.core.linecard import linecard
 from clovers_leafgame.output import font_manager, endline
 
 

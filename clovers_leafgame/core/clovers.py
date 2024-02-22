@@ -43,7 +43,9 @@ class Event:
         return self.raw_event.kwargs["group_info"]
 
     def args_to_int(self):
-        return to_int(self.raw_event.args[0])
+        if args := self.raw_event.args:
+            return to_int(self.raw_event.args[0])
+        return 0
 
     def args_parse(self):
         args = self.raw_event.args

@@ -1,22 +1,25 @@
-import random
-import math
 import re
-import asyncio
-from pathlib import Path
-from datetime import datetime
 from collections import Counter
+
 
 from clovers_leafgame.core.clovers import Event, to_me
 from clovers_leafgame.core.utils import to_int
-from clovers_leafgame.main import config_file, plugin, manager
+from clovers_leafgame.main import plugin, manager
+
 from clovers_leafgame.item.prop import Prop, GOLD
-from .config import Config
 from .library import library, gacha, AIR_PACK
-from clovers_leafgame.output import info_card, prop_card
+
+from clovers_leafgame.output import prop_card
 from .output import report_card
 
+from clovers_core.config import config as clovers_config
+from .config import Config
 
-config = Config.load(config_file)
+config_key = __package__
+config = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config.dict()
+clovers_config.save()
+
 gacha_gold = config.gacha_gold
 
 
@@ -43,16 +46,15 @@ async def _(event: Event):
         prop = library.search(prop_id)
         prop_data[prop.domain].append((prop, n))
         if prop.domain == 0:
-            report_star = report_data["air_star"]
-            report_n = report_data["air_n"]
+            star_key = "air_star"
+            n_key = "air_n"
         else:
             prop.deal_with(user, group_id, n)
-            report_star = report_data["prop_star"]
-            report_n = report_data["prop_n"]
+            star_key = "prop_star"
+            n_key = "prop_n"
 
-        report_star += prop.rare * n
-        report_n += n
-
+        report_data[star_key] += prop.rare * n
+        report_data[n_key] += n
     if N < 10:
         info = ["你获得了"]
         info += [f"({prop.rare}☆){prop.name}:{n}个" for prop, n in prop_data[0]]
@@ -72,4 +74,4 @@ async def _(event: Event):
         if data := prop_data[0]:
             info.append(prop_card(data, "未获取"))
 
-    return info_card(info, user_id)
+    return manager.info_card(info, user_id)
