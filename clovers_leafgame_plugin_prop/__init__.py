@@ -52,11 +52,14 @@ async def _(event: Event) -> Result:
 
         report_star += prop.rare * n
         report_n += n
-    return info_card(gacha_card(user.nickname(group_id), **report_data), user_id)
     if report_data["prop_n"] == 0:
         user.deal(group_id, GOLD, gold)
         user.deal(group_id, AIR_PACK, 1)
-        info.append(prop_card([(AIR_PACK, 1)], f"本次抽卡已免费（{gold}金币）"))
+        info.append(prop_card([(AIR_PACK, 1)], f"本次抽卡已免费（{gold}金币）"))        
+    info = gacha_card(user.nickname(group_id), **report_data)
+
+    return info_card(gacha_card(user.nickname(group_id), **report_data), user_id)
+
     if data := prop_data[2]:
         info.append(prop_card(data, "全局道具"))
     if data := prop_data[1]:
