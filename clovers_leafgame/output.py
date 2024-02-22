@@ -1,18 +1,39 @@
+from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from PIL.ImageFont import FreeTypeFont
 from PIL.Image import Image as IMG
 from io import BytesIO
 
-from .core.data import Bank, Item, Prop, Stock
-from .utils.linecard import FontManager, linecard
+from .item.prop import Prop
+from .core.data import Bank, Item, Stock
+from .utils.linecard import FontManager, linecard, info_splicing
 from .utils.tools import format_number
-from .core.config import config
+from .main import config, manager
+
+main_path = config.main_path
 
 font_manager = FontManager(
     config.fontname,
     config.fallback_fonts,
     (30, 40, 60),
 )
+# 加载或创建背景图片路径
+BG_PATH = Path(main_path) / "BG_image"
+BG_PATH.mkdir(exist_ok=True, parents=True)
+
+
+def info_card(info, user_id, BG_type=None):
+    extra = manager.locate_user(user_id).extra
+    BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
+    bg_path = BG_PATH / f"{user_id}.png"
+    if not bg_path.exists():
+        bg_path = BG_PATH / "default.png"
+    try:
+        return info_splicing(info, bg_path, spacing=10, BG_type=BG_type)
+    except:
+        if "BG_type" in extra:
+            del extra["BG_type"]
 
 
 def endline(tip: str) -> str:
@@ -44,7 +65,7 @@ def bank_card(data: list[tuple[Prop, int]]):
     return [result(*args) for args in data]
 
 
-def prop_card(data: list[tuple[Prop, int]], endline: str = "仓库列表"):
+def prop_card(data: list[tuple[Prop, int]], tip: str = None):
     data.sort(key=lambda x: x[0].rare)
 
     def result(prop: Prop, n: int):
@@ -55,26 +76,24 @@ def prop_card(data: list[tuple[Prop, int]], endline: str = "仓库列表"):
             f"[right]{format_number(n)}{quant}"
         )
 
-    return linecard(
-        "\n".join(result(*args) for args in data) + "\n" + end_line(endline),
-        font_manager,
-        40,
-        spacing=1.5,
-        width=880,
-    )
+    info = "\n".join(result(*args) for args in data)
+    if tip:
+        info += "\n" + endline(tip)
+    return linecard(info, font_manager, 40, spacing=1.5, width=880)
 
 
-def invest_card(data: list[tuple[Stock, int]]):
-    info = []
-    for stock, n in data:
-        stock_value = format_number(stock.floating / stock.issuance)
-        info.append(
+def invest_card(data: list[tuple[Stock, int]], tip: str = None):
+    def result(stock: Stock, n: int):
+        return (
             f"[pixel][20]公司 {stock.name}\n"
-            f"[pixel][20]结算 [nowrap]\n[color][green]{stock_value}[nowrap]\n"
+            f"[pixel][20]结算 [nowrap]\n[color][green]{format_number(stock.floating / stock.issuance)}[nowrap]\n"
             f"[pixel][400]数量 [nowrap]\n[color][green]{n}"
         )
-    info.append(end_line("投资列表"))
-    return linecard("\n".join(info), font_manager, 40, width=880)
+
+    info = "\n".join(result(*args) for args in data)
+    if tip:
+        info += "\n" + endline(tip)
+    return linecard(info, font_manager, 40, width=880)
 
 
 def draw_rank(data: list[tuple[str, int, bytes]]) -> IMG:

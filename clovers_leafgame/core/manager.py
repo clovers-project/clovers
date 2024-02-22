@@ -7,9 +7,8 @@ from collections.abc import Callable
 from collections import Counter
 from sys import platform
 
-from clovers_core.plugin import Result
 from .clovers import Event
-from .data import Bank, Prop, Stock, Account, User, Group, Account, DataBase
+from .data import Bank, Account, User, Group, Account, DataBase
 
 UserAccount = tuple[User, Account]
 
@@ -26,12 +25,10 @@ class Manager:
 
     data: DataBase
     file_path: Path
-    group_index: dict[str, str] = {}
 
     def __init__(self, file_path: Path) -> None:
         self.file_path = file_path
         self.load()
-        self.group_index_update()
 
     def save(self):
         with open(self.file_path, "w") as f:
@@ -41,24 +38,6 @@ class Manager:
         if self.file_path.exists():
             with open(self.file_path, "r", encoding="utf8") as f:
                 self.data = DataBase.parse_obj(json.load(f))
-
-    def group_index_update(self):
-        group_dict = self.data.group_dict
-        self.group_index.clear()
-        self.group_index.update({k: k for k in group_dict})
-        self.group_index.update({stock_name: k for k, v in group_dict.items() if (stock_name := v.stock.name)})
-
-    def group_search(self, group_name: str, retry: bool = True) -> Group:
-        group_id = self.group_index.get(group_name)
-        if group_id:
-            return self.data.group_dict[group_id]
-        if retry:
-            self.group_index_update()
-            return self.group_search(group_name, False)
-
-    def stock_search(self, stock_name: str):
-        if group := self.group_search(stock_name):
-            return group.stock
 
     def locate_group(self, group_id: str) -> Group:
         """

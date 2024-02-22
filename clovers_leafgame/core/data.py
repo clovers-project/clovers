@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 from collections.abc import Callable, Coroutine
-from typing import TypeVar, Generic
 
 Bank = dict[str, int]
 
@@ -26,10 +25,7 @@ class LibraryError(Exception):
         super().__init__(message)
 
 
-ItemClass = TypeVar("ItemClass", bound=Item)
-
-
-class Library(Generic[ItemClass]):
+class Library[ItemClass: Item]:
     _data: dict[str, ItemClass]
     _index: dict[str, str]
 
@@ -42,7 +38,7 @@ class Library(Generic[ItemClass]):
 
     @property
     def data(self):
-        return self._data
+        return list(self._data.values())
 
     @data.setter
     def data(self, data: list[ItemClass]):
@@ -128,16 +124,6 @@ class User(BaseModel):
         """连接到账户"""
         group_id = group_id or self.connect
         return self.accounts.setdefault(group_id, Account(nickname=self.name))
-
-    def locate_bank(self, group_id: str, domain: int):
-        match domain:
-            case 1:
-                return self.connecting(group_id).bank
-            case _:
-                return self.bank
-
-    def deal(self, group_id: str, prop: Prop, unsettled: int):
-        return prop.deal(self.locate_bank(group_id, prop.domain), unsettled)
 
     def nickname(self, group_id: str = None):
         if group_id and (account := self.accounts.get(group_id)):

@@ -18,6 +18,8 @@ pool = {
         6: ["纯净空气", "钻石", "道具兑换券", "超级幸运硬币", "重开券"],
     }.items()
 }
+AIR_PACK = library.search("空气礼包")
+RED_PACK = library.search("随机红包")
 
 
 def gacha() -> str:

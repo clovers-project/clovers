@@ -14,7 +14,9 @@ Library实例
 import os
 import json
 from pathlib import Path
-from ..core.data import Item, Library
+
+from clovers_leafgame.core.data import Bank
+from ..core.data import Item, Library, User
 
 
 class Prop(Item):
@@ -58,13 +60,23 @@ class Prop(Item):
         number = int(self.id[3:])
         return rare, domain, flow, number
 
+    def user_bank(self, user: User, group_id: str):
+        match self.domain:
+            case 1:
+                return user.connecting(group_id).bank
+            case _:
+                return user.bank
+
+    def deal_with(self, user: User, group_id: str, unsettled: int):
+        return self.deal(self.user_bank(user, group_id), unsettled)
+
 
 library: Library[Prop] = Library()
 
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 
 with open(library_file, "r", encoding="utf8") as f:
-    library.data = {k: Prop(k, **v) for k, v in json.load(f).items()}
+    library.update(Prop(k, **v) for k, v in json.load(f).items())
 
 AIR = library.search("空气")
 GOLD = library.search("金币")

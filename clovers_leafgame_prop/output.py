@@ -1,7 +1,6 @@
 import numpy as np
-
-def gacha_card():
-    pass
+from clovers_leafgame.utils.linecard import linecard
+from clovers_leafgame.output import font_manager, endline
 
 
 def report_card(
@@ -22,6 +21,7 @@ def report_card(
         5: lambda x: -0.27071466714377795 * np.log(1.2743174700041504e-11 * x) + 0.0014031052967047675 * x + -4.106094299018067,
         6: lambda x: -0.5213387432196357 * np.log(16.300736342820436 * x) + 0.0027842719423569447 * x + 5.3464181044586425,
     }
+    print(id(curve_fit))
     if not prop_n:
         title.append("[center][color][#003300]理 想 气 体")
     elif pt < curve_fit[1](N):
@@ -48,5 +48,5 @@ def report_card(
         f"[pixel][450]空气平均☆ {round(air_star/(air_n or 1),3)}\n"
         f"数据来源：{nickname}"
     )
-    title.append(end_line("抽卡报告"))
+    title.append(endline("抽卡报告"))
     return linecard("\n".join(title), font_manager, 40, width=880)
