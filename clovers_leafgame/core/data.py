@@ -208,6 +208,32 @@ class Group(BaseModel):
     def name(self) -> str:
         return self.stock.name or self.group_id
 
+    @property
+    def xfer_record(self) -> dict[str, int]:
+        return self.extra.setdefault("xfers", {"record": 0, "limit": 0})
+
+    def xferout_check(self, xfer: int):
+        """是否能转出"""
+        xfer_record = self.xfer_record
+        limit = xfer_record["limit"]
+        record = xfer_record["record"]
+        if record <= -limit:
+            return None
+        if limit < xfer - record:
+            return limit + record
+        return xfer
+
+    def xferin_check(self, xfer: int):
+        """是否能转入该群"""
+        xfer_record = self.xfer_record
+        limit = xfer_record["limit"]
+        record = xfer_record["record"]
+        if limit <= record:
+            return None
+        if limit < record + xfer:
+            return limit - record
+        return xfer
+
 
 class DataBase(BaseModel):
     user_dict: dict[str, User] = {}

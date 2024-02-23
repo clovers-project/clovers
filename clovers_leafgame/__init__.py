@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
 from .core.clovers import Event, to_me, superuser, group_admin, at
-from .core.utils import item_name_rule
+from .core.utils import item_name_rule, to_int
 
 from .prop import library as props_library, GOLD, VIP_CARD, LICENSE
 from .core.utils import download_url, gini_coef
@@ -162,82 +162,38 @@ async def _(event: Event):
 
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
 async def _(event: Event):
-    if not (args := event.args_parse()):
+    args = event.args_parse()
+    if not args:
         return
-    group_name, xfer_out, _ = args
-    group_in = manager.group_search(group_name)
+    group_name, xfer_out = args[:2]
+    user = manager.locate_user(event.user_id)
+    group_in = manager.group_search(args[0])
     if not group_in:
         return f"没有 {group_name} 的注册信息"
-    user = manager.locate_user(event.user_id)
-    group_out = manager.locate_group(event.group_id or user.connect)
-
     bank_in = user.connecting(group_in.group_id).bank
+    group_out = manager.locate_group(event.group_id or user.connect)
     bank_out = user.connecting(group_out.group_id).bank
-
     if xfer_out < 0:
         bank_out, bank_in = bank_in, bank_out
         group_out, group_in = group_in, group_out
         xfer_out = -xfer_out
 
-    def get_xfer_record(extra: dict) -> dict:
-        return extra.setdefault(
-            "xfers",
-            {
-                "record": 0,
-                "limit": int((None or company_public_gold) / 20),
-            },
-        )
+    # 解析完成
 
-    xfer_record_out = get_xfer_record(group_out.extra)
-    if xfer_record_out["limit"] == 0:
-        xfer_record_out["limit"] = int((None or company_public_gold) / 20)
-    limit = xfer_record_out["limit"]
-    record = xfer_record_out["record"]
-
-    info = []
-
-    def return_info():
-        return "\n".join(info)
-
-    # 计算转出
-    if limit <= abs(record - xfer_out):
-        info.append(f"{group_out.name} 转出金币已到达限制：{limit}")
-        if limit <= record:
-            return return_info()
-        xfer_out = limit - record
-        info.append(f"重新转出：{xfer_out}金币")
-
-    # 计算转入
-    ExRate = group_out.level / group_in.level
-    xfer_in = int(ExRate * xfer_out)
-
-    xfer_record_in = get_xfer_record(group_in.extra)
-    if xfer_record_in["limit"] == 0:
-        xfer_record_in["limit"] = int((None or company_public_gold) / 20)
-    limit = xfer_record_in["limit"]
-    record = xfer_record_in["record"]
-
-    if limit <= record + xfer_in:
-        info.append(f"{group_in.name} 转入金币已到达限制：{limit}")
-        if limit <= record:
-            return return_info()
-        xfer_in_OK = limit - record
-        xfer_out_OK = math.ceil(xfer_in_OK / ExRate)
-        info.append(f"重新转入：{xfer_in_OK} 金币")
-    else:
-        xfer_in_OK = xfer_in
-        xfer_out_OK = xfer_out
-
-    if n := GOLD.deal(bank_out, -xfer_out_OK):
-        info.append(f"数量不足。\n——你还有{n}枚金币。")
-        return return_info()
-    GOLD.deal(bank_in, xfer_in_OK)
-    info.append(f"{group_out.name} 向 {group_in.name} 转移{xfer_out_OK}金币")
-    info.append(f"汇率 {round(ExRate,2)}\n实际到账金额 {xfer_in_OK}")
-    xfer_record_out["record"] -= xfer_out_OK
-    xfer_record_in["record"] += xfer_in_OK
-
-    return return_info()
+    xfer_out = group_out.xferout_check(xfer_out)
+    if not xfer_out:
+        return f"{group_out.name} 转出金币已到达限制：{group_out.xfer_record["record"]}"
+    ExRate = group_out.level / group_in.level     
+    xfer_in = group_in.xferin_check(int(ExRate * xfer_out))
+    if not xfer_out:
+        return f"{group_in.name} 转入金币已到达限制：{group_in.xfer_record["record"]}"
+    xfer_out = xfer_in / ExRate
+    if n := GOLD.deal(bank_out, -xfer_out):
+        return f"数量不足。\n——你还有{n}枚金币。"
+    GOLD.deal(bank_in, xfer_in)
+    group_out.xfer_record["record"] -= xfer_out
+    group_in.xfer_record["record"] += xfer_in    
+    return f"{group_out.name}向{group_in.name}转移{xfer_out} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {xfer_in}"
 
 
 @plugin.handle({"我的金币"}, {"user_id", "group_id"})
@@ -276,12 +232,9 @@ async def _(event: Event):
     return manager.info_card(info, event.user_id)
 
 
-@plugin.handle({"我的资产"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"我的资产"}, {"user_id"})
 async def _(event: Event):
-    user, group_account = manager.account(event)
-    invest = {}
-    invest.update(user.bank)
-    invest.update(group_account.bank)
+    invest = user = manager.locate_user(event.user_id).invest
     if not invest:
         return "您的资产是空的。"
     return manager.info_card(
