@@ -42,6 +42,7 @@ class Manager:
         if self.DATA_PATH.exists():
             with open(self.DATA_PATH, "r", encoding="utf8") as f:
                 self.data = DataBase.parse_obj(json.load(f))
+        self.stocks_library = Library()
         self.stocks_library.data = [stock for group in self.data.group_dict.values() if (stock := group.stock)]
 
     def info_card(self, info: ImageList, user_id: str, BG_type=None):

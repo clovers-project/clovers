@@ -60,7 +60,7 @@ async def _(event: Event):
             log.append("图片下载失败")
         else:
             with open(manager.BG_PATH / f"{user_id}.png", "wb") as f:
-                f.write(image.getvalue())
+                f.write(image)
             log.append("图片下载成功")
     if log:
         return "\n".join(log)

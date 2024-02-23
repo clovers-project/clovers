@@ -1,5 +1,6 @@
 import re
 from collections import Counter
+from collections.abc import Callable, Coroutine
 
 from clovers_leafgame.core.data import Prop
 from clovers_leafgame.core.clovers import Event, to_me
@@ -15,6 +16,7 @@ from .output import report_card
 from clovers_core.config import config as clovers_config
 from .config import Config
 
+
 config_key = __package__
 config = Config.parse_obj(clovers_config.get(config_key, {}))
 clovers_config[config_key] = config.dict()
@@ -23,7 +25,7 @@ clovers_config.save()
 gacha_gold = config.gacha_gold
 
 
-@plugin.handle(r"^.+连抽?卡?|单抽", {"user_id", "group_id", "nickname", "to_me"})
+@plugin.handle(r"^.+连抽?卡?|单抽", {"user_id", "group_id", "to_me"})
 @to_me.wrapper
 async def _(event: Event):
     N = re.search(r"^(.*)连抽?卡?$", event.raw_event.raw_command)
@@ -75,3 +77,41 @@ async def _(event: Event):
             info.append(prop_card(data, "未获取"))
 
     return manager.info_card(info, user_id)
+
+
+from clovers_core.plugin import PluginError
+
+
+def usage(prop_name: str, extra_args: list[str] | set[str] | tuple[str] = None):
+    def decorator(func: Callable[..., Coroutine]):
+        prop = library.search(prop_name)
+        if not prop:
+            raise PluginError(f"不存在道具{prop_name}，无法注册使用方法。")
+
+        @plugin.handle(f"使用(道具)?\s*{prop_name}(.*)", extra_args)
+        async def _(event: Event):
+            res = re.search(f"使用(道具)?\s*{prop_name}\s*(\d*)(.*)", event.raw_event.raw_command)
+            count = res.group(2)
+            return await func(prop, event, int(count) if count else 1, res.group(3))
+
+    return decorator
+
+
+@usage("金币", {"user_id", "group_id", "nickname"})
+async def _(prop: Prop, event: Event, count: int, extra: str):
+    user_id = event.user_id
+    group_id = event.group_id
+    user = manager.locate_user(user_id)
+    if n := prop.deal_with(user, group_id, -count):
+        return f"使用失败，你还有{n}枚金币。"
+    return f"你使用了{count}枚金币。"
+
+
+@usage("金币", {"user_id", "group_id", "nickname"})
+async def _(prop: Prop, event: Event, count: int, extra: str):
+    user_id = event.user_id
+    group_id = event.group_id
+    user = manager.locate_user(user_id)
+    if n := prop.deal_with(user, group_id, -count):
+        return f"使用失败，你还有{n}枚金币。"
+    return f"你使用了{count}枚金币。"
