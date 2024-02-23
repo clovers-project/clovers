@@ -6,18 +6,13 @@ import time
 from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
+from clovers_apscheduler import scheduler
 from .core.clovers import Event, to_me, superuser, group_admin, at
 from .core.utils import item_name_rule, to_int
 
-from .prop import library as props_library, GOLD, STD_GOLD, VIP_CARD, LICENSE
-from .core.utils import download_url, gini_coef
-from .output import (
-    bank_to_data,
-    bank_card,
-    prop_card,
-    invest_card,
-    draw_rank,
-)
+from .prop import library as props_library, GOLD, STD_GOLD, VIP_CARD, LICENSE, CLOVERS_MARKING, HANGERS_MARKING
+from .core.utils import download_url, gini_coef, format_number
+from .output import bank_to_data, bank_card, prop_card, invest_card, avatar_card
 from .main import plugin, config, manager
 
 sign_gold = config.sign_gold
@@ -25,6 +20,7 @@ revolt_gold = config.revolt_gold
 revolt_gini = config.revolt_gini
 company_public_gold = config.company_public_gold
 gacha_gold = config.gacha_gold
+lucky_clover = config.lucky_clover
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
@@ -160,9 +156,14 @@ async def _(event: Event):
     return f"{user_out.nickname(group_id)} 向 {user_in.nickname(group_id)} 赠送{N}个{prop.name}\n{tip}"
 
 
-@plugin.handle({"金币转移"}, {"user_id"})
+@plugin.handle({"金币转移"}, {"user_id", "group_id"})
 async def _(event: Event):
-    xfer = event.args_to_int()
+    args = event.raw_event.args
+    if len(args) != 1:
+        return
+    xfer = to_int(args[0])
+    if not xfer:
+        return
     user = manager.locate_user(event.user_id)
     user_bank = user.bank
     group = manager.locate_group(event.group_id or user.connect)
@@ -176,13 +177,16 @@ async def _(event: Event):
         if n := GOLD.deal(account_bank, -xfer):
             return f"数量不足。\n——你在{group.name}还有{n}枚金币。"
         STD_GOLD.deal(user_bank, int(xfer * level))
+        group.xfer_record["record"] -= xfer
     else:
         xfer = group.xfer_in(xfer)
         if not xfer:
             return f"{group.name} 转入金币已到达限制：{group.xfer_record['record']}"
-        if n := STD_GOLD.deal(user_bank, -math.ceil(xfer * level)):
-            return f"数量不足。\n——你在还有{n}枚标准金币(本群汇率：{level})。"
+        if n := STD_GOLD.deal(user_bank, -xfer):
+            return f"数量不足。\n——你还有{n}枚标准金币(本群汇率：{level})。"
+        xfer = int(xfer / level)
         GOLD.deal(account_bank, xfer)
+        group.xfer_record["record"] += xfer
     return f"金币转移完成。目标账户实际入账{xfer}"
 
 
@@ -206,11 +210,12 @@ async def _(event: Event):
         bank_out, bank_in = bank_in, bank_out
         group_out, group_in = group_in, group_out
         xfer_out = -xfer_out
-
+    ExRate = group_out.level / group_in.level
+    if xfer_out * ExRate < 1:
+        return f"转入金币不可小于1枚（汇率：{round(ExRate,2)}）。"
     xfer_out = group_out.xfer_out(xfer_out)
     if not xfer_out:
         return f"{group_out.name} 转出金币已到达限制：{group_out.xfer_record['record']}"
-    ExRate = group_out.level / group_in.level
     xfer_in = group_in.xfer_in(int(ExRate * xfer_out))
     if not xfer_in:
         return f"{group_in.name} 转入金币已到达限制：{group_in.xfer_record['record']}"
@@ -240,6 +245,85 @@ async def _(event: Event):
         if info:
             return "你的账户:\n" + "\n".join(info)
     return f"你还有 {user.connecting(event.group_id).bank.get(code,0)} 枚金币"
+
+
+@plugin.handle({"我的信息", "我的资料"}, {"user_id", "group_id", "nickname"})
+async def _(event: Event):
+    user = manager.locate_user(event.user_id)
+    group_id = event.group_id or user.connect
+    account = user.connecting(group_id)
+    info = []
+    lines = []
+    count = HANGERS_MARKING.user_N(user, group_id)
+    if count:
+        if count <= 4:
+            lines.append(f"{count*'☆'} 路灯挂件 {count*'☆'}")
+        else:
+            lines.append("☆☆☆☆☆路灯挂件☆☆☆☆☆")
+
+    if CLOVERS_MARKING.user_N(user, group_id):
+        lines.append(lucky_clover)
+
+    lines.append(f"金币 {format_number(user.get(STD_GOLD.id,0))}")
+    info.append(avatar_card(account.nickname, await download_url(user.avatar_url)))
+    return manager.info_card(info, event.user_id)
+    # 加载卡片
+    PropsCard = Manager.PropsCard_list((user, group_account))
+    msg = ""
+    for x in PropsCard:
+        msg += f"----\n[center]{x}\n"
+    if msg:
+        info.append(linecard(msg + "----", width=880, padding=(0, -28), spacing=1, font_size=60))
+    # 加载成就卡片
+    Achieve = Manager.Achieve_list((user, group_account))[:2]
+    # 加载本群账户
+    gold = group_account.gold
+    value = Manager.invest_value(group_account.invest)
+    is_sign = group_account.is_sign
+    if is_sign:
+        is_sign = ["已签到", "green"]
+    else:
+        is_sign = ["未签到", "red"]
+    security = group_account.security
+    if security:
+        security = [security, "green"]
+    else:
+        security = [security, "red"]
+    msg = ""
+    for x in Achieve:
+        msg += f"{x}\n"
+    msg += (2 - len(Achieve)) * "\n"
+    msg += (
+        f"金币 {format_number(gold)}\n"
+        f"股票 {format_number(value)}\n"
+        "签到 [nowrap]\n"
+        f"[color][{is_sign[1]}]{is_sign[0]}\n"
+        "补贴 还剩 [nowrap]\n"
+        f"[color][{security[1]}]{security[0]}[nowrap]\n 次"
+    )
+    # 加载资产分析
+    dist = []
+    for group_id, group_account in user.group_accounts.items():
+        group_name = Manager.locate_group(group_id).company.company_name
+        group_name = group_name if group_name else f"（{str(group_id)[:4]}）"
+        dist.append(
+            [
+                group_account.gold + Manager.invest_value(group_account.invest),
+                group_name,
+            ]
+        )
+    dist = [x for x in dist if x[0] > 0]
+    info.append(my_info_account(msg, dist or [(1.0, "None")]))
+    # 加载股票信息
+    msg = "".join(
+        f"{Manager.locate_group(stock).company.company_name}[nowrap]\n[right][color][green]{i}\n"
+        for stock, i in group_account.invest.items()
+        if i > 0
+    )
+    if msg:
+        info.append(linecard(msg, width=880, endline="股票信息"))
+
+    return info_splicing(info, Manager.BG_path(event.user_id))
 
 
 @plugin.handle({"我的道具"}, {"user_id", "group_id", "nickname"})
@@ -376,13 +460,14 @@ async def _(event: Event):
 
 @plugin.handle({"保存游戏"}, {"permission"})
 @superuser.wrapper
-@plugin.task
+@scheduler.scheduled_job("cron", minute="*/10", misfire_grace_time=120)
 async def _():
     manager.save()
     print("游戏数据已保存！")
 
 
 __plugin__ = plugin
+
 """
 恶魔轮盘：
 

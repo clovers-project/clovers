@@ -5,7 +5,7 @@ from collections.abc import Callable, Coroutine
 Bank = dict[str, int]
 
 
-class Item:
+class Item(BaseModel):
     id: str = None
     name: str = None
 
@@ -119,38 +119,31 @@ class User(BaseModel):
 
 
 class Prop(Item):
-    rare: int
+    rare: int = None
     """稀有度"""
-    domain: int
+    domain: int = None
     """
     作用域   
         0:无(空气)
         1:群内
         2:全局
     """
-    flow: int
+    flow: int = None
     """
     道具时效
         0:永久道具
         1:时效道具
     """
-    number: int
+    number: int = None
     """道具编号"""
+    color: str = None
+    intro: str = None
+    tip: str = None
 
-    def __init__(
-        self,
-        id: str,
-        name: str,
-        color: str,
-        intro: str,
-        tip: str,
-    ) -> None:
-        self.id = id
-        self.name = name
-        self.color: str = color
-        self.intro: str = intro
-        self.tip: str = tip
-        self.rare, self.domain, self.flow, self.number = self.code_info()
+    def __init__(self, **data) -> None:
+        super().__init__(**data)
+        if self.id:
+            self.rare, self.domain, self.flow, self.number = self.code_info()
 
     def code_info(self):
         rare = int(self.id[0])
@@ -166,11 +159,14 @@ class Prop(Item):
             case _:
                 return user.bank
 
+    def user_N(self, user: User, group_id: str):
+        return self.user_bank(user, group_id).get(self.id, 0)
+
     def deal_with(self, user: User, group_id: str, unsettled: int):
         return self.deal(self.user_bank(user, group_id), unsettled)
 
 
-class Stock(Item, BaseModel):
+class Stock(Item):
     issuance: int = 0
     """股票发行量"""
     time: float = None
@@ -190,7 +186,7 @@ class Group(BaseModel):
 
     group_id: str = None
     """群号"""
-    stock: Stock = None
+    stock: Stock = Stock()
     """群名"""
     namelist: set[str] = set()
     """群员名单"""
@@ -217,7 +213,7 @@ class Group(BaseModel):
         limit = xfer_record["limit"]
         record = xfer_record["record"]
         if record <= -limit:
-            return None
+            return 0
         if limit < xfer - record:
             return limit + record
         return xfer
@@ -227,7 +223,7 @@ class Group(BaseModel):
         limit = xfer_record["limit"]
         record = xfer_record["record"]
         if limit <= record:
-            return None
+            return 0
         if limit < record + xfer:
             return limit - record
         return xfer

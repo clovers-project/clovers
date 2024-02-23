@@ -18,72 +18,6 @@ from re import Pattern
 from ..core.utils import download_url
 
 
-class ChartImage:
-
-    def __init__(
-        self,
-        fontname: str,
-        fallback_fonts: list[str],
-        default_BG: Path,
-    ) -> None:
-        self.fontname: str = fontname
-        self.fallback_fonts: str = fallback_fonts
-        self.default_BG: Path = default_BG
-        if not default_BG.exists():
-            Image.new("RGB", (200, 200), (0, 51, 102)).save(default_BG)
-        self.font_big = ImageFont.truetype(font=fontname, size=60, encoding="utf-8")
-        self.font_normal = ImageFont.truetype(font=fontname, size=40, encoding="utf-8")
-        self.font_small = ImageFont.truetype(font=fontname, size=30, encoding="utf-8")
-
-        cmap_default = TTFont(self.font_normal.path, fontNumber=self.font_normal.index).getBestCmap()
-
-        self.fallback_fonts_cmap = {}
-        default_fallback_path = fm.findfont(fm.FontProperties())
-        for fallback in fallback_fonts:
-            fallback_path = fm.findfont(fm.FontProperties(family=fallback))
-            if fallback_path == default_fallback_path:
-                continue
-            self.fallback_fonts_cmap[fallback_path] = TTFont(fallback_path, fontNumber=0).getBestCmap()
-        del default_fallback_path
-
-
-def line_splicing(info: list):
-    """
-    抽卡信息拼接
-    """
-    if len(info) == 1:
-        return linecard_to_png(info[0])
-    l = linecard(info[0], bg_color="white")
-    r = linecard(info[1], bg_color="white")
-    canvas = Image.new("RGB", (l.size[0] + r.size[0], l.size[1]), "white")
-    canvas.paste(l, (0, 0))
-    canvas.paste(r, (l.size[0], 0))
-    output = BytesIO()
-    canvas.save(output, "png")
-    return output
-
-
-def bar_chart(info: str, lenth: float):
-    """
-    带头像的条形图
-    """
-    canvas = Image.new("RGBA", (880, 60))
-    draw = ImageDraw.Draw(canvas)
-    draw.rectangle(((70, 10), (860, 50)), fill="#00000033")
-    draw.rectangle(((70, 10), (80 + int(lenth * 780), 50)), fill="#99CCFF")
-    draw.text((80, 10), info, fill=(0, 0, 0), font=font_normal)
-
-    async def func(url: str):
-        avatar = Image.open(await download_url(url))
-        avatar = avatar.resize((60, 60))
-        circle_mask = Image.new("RGBA", avatar.size, (255, 255, 255, 0))
-        ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
-        canvas.paste(avatar, (5, 0), circle_mask)
-        return canvas
-
-    return func
-
-
 def alchemy_info(alchemy: dict, nickname: str, avatar: bytes):
     """
     炼金账户
@@ -190,7 +124,8 @@ def my_info_head(gold: int, win: int, lose: int, nickname: str, avatar: bytes):
     """
     canvas = Image.new("RGBA", (880, 300))
     avatar = Image.open(avatar).resize((260, 260))
-    circle_mask = Image.new("RGBA", avatar.size, (255, 255, 255, 0))
+    circle_mask = Image.new("RGBA", (260, 260), (255, 255, 255, 0))
+    print(id(circle_mask))
     ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
     canvas.paste(avatar, (20, 20), circle_mask)
     draw = ImageDraw.Draw(canvas)
@@ -198,12 +133,7 @@ def my_info_head(gold: int, win: int, lose: int, nickname: str, avatar: bytes):
     draw.line(((300, 120), (860, 120)), fill="gray", width=4)
     draw.text((300, 140), f"金币 {'{:,}'.format(gold)}", fill=(0, 0, 0), font=font_normal)
     draw.text((300, 190), f"战绩 {win}:{lose}", fill=(0, 0, 0), font=font_normal)
-    draw.text(
-        (300, 240),
-        f"胜率 {(round(win * 100 / (win + lose), 2) if win > 0 else 0)}%\n",
-        fill=(0, 0, 0),
-        font=font_normal,
-    )
+    draw.text((300, 240), f"胜率 {(round(win * 100 / (win + lose), 2) if win > 0 else 0)}%\n", fill=(0, 0, 0), font=font_normal)
     return canvas
 
 

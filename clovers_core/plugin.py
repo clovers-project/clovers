@@ -34,12 +34,7 @@ class Event:
 class Handle:
     func: Callable[..., Coroutine]
 
-    def __init__(
-        self,
-        commands: set[str] | re.Pattern,
-        extra_args: list[str],
-    ):
-        self.commands = commands
+    def __init__(self, extra_args: list[str] | set[str] | tuple[str]):
         self.extra_args = extra_args
 
     async def __call__(self, event: Event) -> Result:
@@ -60,7 +55,8 @@ class Plugin:
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
         self.got_dict: dict = {}
-        self.task_list: list[Coroutine] = []
+        self.startup_tasklist: list[Coroutine] = []
+        self.shutdown_tasklist: list[Coroutine] = []
         self.build_event: Callable = build_event
         self.build_result: Callable = build_result
 
@@ -81,7 +77,7 @@ class Plugin:
             else:
                 raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
 
-            handle = Handle(commands, list(extra_args))
+            handle = Handle(extra_args)
 
             async def wrapper(event: Event) -> Result:
                 if result := await func(self.build_event(event)):
@@ -92,9 +88,23 @@ class Plugin:
 
         return decorator
 
-    def task(self, func: Callable[[], Coroutine]):
-        self.task_list.append(func())
-        return func
+    def startup(self, func: Callable[[], Coroutine]):
+        """注册一个启动任务"""
+        self.startup_tasklist.append(func())
+
+        async def wrapper(*args):
+            return await func()
+
+        return wrapper
+
+    def shutdown(self, func: Callable[[], Coroutine]):
+        """注册一个结束任务"""
+        self.shutdown_tasklist.append(func())
+
+        async def wrapper(*args):
+            return await func()
+
+        return wrapper
 
     def command_check(self, command: str) -> dict[int, Event]:
         kv = {}
@@ -109,8 +119,8 @@ class Plugin:
             else:
                 command_list[0] = command_list[0][len(cmd) :]
                 args = command_list
-            for key in keys:
-                kv[key] = Event(command, args)
+            event = Event(command, args)
+            kv.update({key: event for key in keys})
 
         return kv
 
@@ -118,8 +128,8 @@ class Plugin:
         kv = {}
         for pattern, keys in self.regex_dict.items():
             if re.match(pattern, command):
-                for key in keys:
-                    kv[key] = Event(command)
+                event = Event(command)
+                kv.update({key: event for key in keys})
         return kv
 
     def __call__(self, command: str) -> dict[int, Event]:

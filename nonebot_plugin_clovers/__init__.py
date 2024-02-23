@@ -20,7 +20,6 @@ driver = get_driver()
 global_config = driver.config
 
 clovers_config_file = getattr(global_config, "clovers_config_file", "clovers.toml")
-print(clovers_config_file)
 os.environ["clovers_config_file"] = clovers_config_file
 
 # 添加环境变量之后加载config
@@ -44,7 +43,7 @@ loader = PluginLoader(plugins_path, config.plugins_list)
 adapter = Adapter()
 adapter.plugins = loader.plugins
 
-driver.on_startup(adapter.task)
+driver.on_startup(adapter.startup)
 
 Bot_NICKNAME = list(global_config.nickname)
 Bot_NICKNAME = Bot_NICKNAME[0] if Bot_NICKNAME else "bot"
@@ -59,7 +58,7 @@ def extract_command(msg: str):
     return msg
 
 
-@adapter.main_method.kwarg("Bot_Nickname")
+@adapter.method.kwarg("Bot_Nickname")
 async def _():
     return Bot_NICKNAME
 

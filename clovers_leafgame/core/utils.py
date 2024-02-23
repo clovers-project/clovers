@@ -33,6 +33,7 @@ def to_int(N) -> int:
             "九": 9,
             "十": 10,
         }.get(N)
+    return result
 
 
 def format_number(num) -> str:

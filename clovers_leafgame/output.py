@@ -78,3 +78,20 @@ def invest_card(data: list[tuple[Stock, int]], tip: str = None):
     if tip:
         info += "\n" + endline(tip)
     return linecard(info, font_manager, 40, width=880)
+
+
+AVATAR_MASK = Image.new("RGBA", (260, 260), (255, 255, 255, 0))
+ImageDraw.Draw(AVATAR_MASK).ellipse(((0, 0), (260, 260)), fill="black")
+
+
+def avatar_card(avatar: bytes, nickname: str, lines: list[str]):
+    font = font_manager.font(40)
+    canvas = Image.new("RGBA", (880, 300))
+    avatar = Image.open(BytesIO(avatar)).resize((260, 260))
+    canvas.paste(avatar, (20, 20), AVATAR_MASK)
+    draw = ImageDraw.Draw(canvas)
+    draw.text((300, 40), f"{nickname}", fill=(0, 0, 0), font=font)
+    draw.line(((300, 120), (860, 120)), fill="gray", width=4)
+    for n, line in enumerate(lines):
+        draw.text((300, 140 + n * 50), line, fill=(0, 0, 0), font=font)
+    return canvas

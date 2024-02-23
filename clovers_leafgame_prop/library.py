@@ -7,7 +7,7 @@ from clovers_leafgame.prop import Prop, library, AIR
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 
 with open(library_file, "r", encoding="utf8") as f:
-    library.update(Prop(k, **v) for k, v in json.load(f).items())
+    library.update(Prop(id=k, **v) for k, v in json.load(f).items())
 
 pool = {
     rare: [library.search(name).id for name in name_list]

@@ -26,12 +26,12 @@ async def _(event: Event):
             namelist = manager.namelist()
             new_title = title[:-1]
             key = manager.rankkey(new_title)
-            if not key and new_title.startswith("总"):
-                prop = library.search(new_title[1:])
+            if not key:
+                prop = library.search(new_title)
                 if not prop or prop.domain != 1:
                     return
-                key = sum(
-                    account.bank.get(prop.id) * manager.locate_group(group_id).level
+                key = lambda user_id: sum(
+                    account.bank.get(prop.id, 0) * manager.locate_group(group_id).level
                     for group_id, account in manager.locate_user(user_id).accounts.items()
                 )
         else:
@@ -57,4 +57,4 @@ async def _(event: Event):
         rank_data.append(v)
         task_list.append(download_url(user.avatar_url))
     avatar_data = await asyncio.gather(*task_list)
-    return manager.info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id, "NONE")
+    return manager.info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id)

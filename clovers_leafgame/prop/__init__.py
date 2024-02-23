@@ -23,10 +23,12 @@ library: Library[Prop] = Library()
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 
 with open(library_file, "r", encoding="utf8") as f:
-    library.update(Prop(k, **v) for k, v in json.load(f).items())
+    library.update(Prop(id=k, **v) for k, v in json.load(f).items())
 
 AIR = library.search("空气")
 GOLD = library.search("金币")
 STD_GOLD = library.search("标准金币")
 VIP_CARD = library.search("钻石会员卡")
 LICENSE = library.search("设置许可证")
+CLOVERS_MARKING = library.search("幸运四叶草")
+HANGERS_MARKING = library.search("幸运四叶草")

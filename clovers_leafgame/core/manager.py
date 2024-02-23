@@ -42,6 +42,8 @@ class Manager:
         if self.DATA_PATH.exists():
             with open(self.DATA_PATH, "r", encoding="utf8") as f:
                 self.data = DataBase.parse_obj(json.load(f))
+        else:
+            self.data = DataBase()
         self.stocks_library = Library()
         self.stocks_library.data = [stock for group in self.data.group_dict.values() if (stock := group.stock)]
 
@@ -124,7 +126,7 @@ class Manager:
     def ranklist(
         self,
         namelist: set[str],
-        title: str,
+        key: str,
         reverse: bool = True,
     ):
         """
@@ -132,8 +134,6 @@ class Manager:
             param:
                 key:从用户寻找可以排名的排名内容
         """
-        if key := self.rankkey(title):
-            return
         data = [(k, v) for k in namelist if (v := key(k))]
         data.sort(key=lambda x: x[1], reverse=reverse)
         return data

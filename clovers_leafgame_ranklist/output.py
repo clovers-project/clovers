@@ -23,7 +23,7 @@ def draw_rank(data: list[tuple[str, int, bytes]]) -> IMG:
             avatar = Image.open(BytesIO(avatar)).resize((60, 60))
             canvas.paste(avatar, (5, y), circle_mask)
         draw.rectangle(((70, y + 10), (70 + int(v / first * 790), y + 50)), fill="#99CCFFCC")
-        draw.text((80, y + 10), f"{i+1}.{nickname} {format_number(v)}", fill=(0, 0, 0), font=font)
+        draw.text((80, y + 10), f"{i}.{nickname} {format_number(v)}", fill=(0, 0, 0), font=font)
         y += 80
         i += 1
     return canvas

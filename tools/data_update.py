@@ -183,7 +183,10 @@ for group in data.group.values():
     group.level = company.level
     group.intro = company.intro
     group.stock = Stock()
+    group.stock.id = group.group_id
+    group.stock.name = company.company_name
     group.stock.time = company.time
+    group.stock.issuance = company.issuance
     group.extra["revolution_achieve"] = group.Achieve_revolution
     group.extra["revolution_time"] = group.revolution_time
 data.group_dict = data.group
