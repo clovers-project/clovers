@@ -94,9 +94,6 @@ class Account(BaseModel):
     extra: dict = {}
 
 
-import typing_extensions
-
-
 class User(BaseModel):
     """
     用户数据

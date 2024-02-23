@@ -8,7 +8,7 @@ from io import BytesIO
 
 from .core.data import Bank, Prop, Stock
 from .core.linecard import FontManager, linecard, info_splicing
-from .core.tools import format_number
+from .core.utils import format_number
 from .main import config, manager
 
 main_path = config.main_path
@@ -78,26 +78,3 @@ def invest_card(data: list[tuple[Stock, int]], tip: str = None):
     if tip:
         info += "\n" + endline(tip)
     return linecard(info, font_manager, 40, width=880)
-
-
-def draw_rank(data: list[tuple[str, int, bytes]]) -> IMG:
-    """
-    排名信息
-    """
-    first = data[0][1]
-    canvas = Image.new("RGBA", (880, 80 * len(data) + 20))
-    draw = ImageDraw.Draw(canvas)
-    y = 20
-    i = 1
-    font = font_manager.font(40)
-    circle_mask = Image.new("RGBA", (60, 60), (255, 255, 255, 0))
-    ImageDraw.Draw(circle_mask).ellipse(((0, 0), (60, 60)), fill="black")
-    for nickname, v, avatar in data:
-        if avatar:
-            avatar = Image.open(BytesIO(avatar)).resize((60, 60))
-            canvas.paste(avatar, (5, y), circle_mask)
-        draw.rectangle(((70, y + 10), (70 + int(v / first * 790), y + 50)), fill="#99CCFFCC")
-        draw.text((80, y + 10), f"{i+1}.{nickname} {format_number(v)}", fill=(0, 0, 0), font=font)
-        y += 80
-        i += 1
-    return canvas

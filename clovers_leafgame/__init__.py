@@ -2,18 +2,15 @@ import random
 import math
 import re
 import asyncio
+import time
 from pathlib import Path
 from datetime import datetime
-from io import BytesIO
 from PIL import ImageColor
-from collections.abc import Callable, Coroutine
 from .core.clovers import Event, to_me, superuser, group_admin, at
-from .core.manager import Manager
-from .core.data import Bank, Account
-from .core.utils import to_int
+from .core.utils import item_name_rule
 
 from .prop import library as props_library, GOLD, VIP_CARD, LICENSE
-from .core.tools import download_url, item_name_rule, gini_coef
+from .core.utils import download_url, gini_coef
 from .output import (
     bank_to_data,
     bank_card,
@@ -25,6 +22,7 @@ from .main import plugin, config, manager
 
 sign_gold = config.sign_gold
 revolt_gold = config.revolt_gold
+revolt_gini = config.revolt_gini
 company_public_gold = config.company_public_gold
 gacha_gold = config.gacha_gold
 
@@ -305,16 +303,16 @@ async def _(event: Event):
         if len(bank_data) < 6:
             info = bank_card(bank_data)
         else:
-            info = [prop_card(bank_data)]
+            info = [prop_card(bank_data, "群金库")]
         invest_data = bank_to_data(group.bank, manager.stocks_library.search)
-        info.append(invest_card(invest_data))
+        info.append(invest_card(invest_data, "群投资"))
         return manager.info_card(info, user_id)
     sign, name = command[0], command[1:]
     user = manager.locate_user(user_id)
     if item := props_library.search(name):
         bank_in = group.bank
-        bank_out = user.locate_bank(group_id, item.domain)
-    elif item := manager.stock_search(name):
+        bank_out = item.user_bank(user, group_id)
+    elif item := manager.stocks_library.search(name):
         bank_in = group.invest
         bank_out = user.connecting(group_id).invest
     else:
@@ -323,7 +321,7 @@ async def _(event: Event):
     if sign == "取":
         if not event.permission:
             return f"你的权限不足。"
-        N = -1
+        N = -N
         bank_out, bank_in = bank_in, bank_out
         sender = "群金库"
     elif sign == "存":
@@ -343,26 +341,27 @@ async def _(event: Event):
     group_id = event.group_id
     group = manager.locate_group(group_id)
     stock = group.stock
-    if stock.name:
+    if stock and stock.name:
         return f"本群已在市场注册，注册名：{stock.name}"
     stock_name = event.single_arg()
-    if manager.group_search(stock_name):
-        return f"{stock_name} 已被注册"
     if check := item_name_rule(stock_name):
         return check
-    stock_value = manager.group_wealths(group_id, GOLD.id)
+    if manager.group_search(stock_name):
+        return f"{stock_name} 已被注册"
+    wealths = manager.group_wealths(group_id, GOLD.id)
+    stock_value = sum(wealths)
     if stock_value < (limit := company_public_gold):
         return f"本群金币（{round(stock_value,2)}）小于{limit}，注册失败。"
-    gini = gini_coef(group_id)
-    if gini > 0.56:
+    gini = gini_coef(wealths[:-1])
+    if gini > revolt_gini:
         return f"本群基尼系数（{round(gini,3)}）过高，注册失败。"
     stock.id = group_id
     stock.name = stock_name
-    stock.time = datetime.today()
-    group.extra.get("revolution", {}).values()
-    level = group.level = sum(group.extra.get("revolution", {}).values()) + 1
-    if stock.issuance == 0:
-        group.invest[group_id] = stock.issuance = 20000 * level
+    stock.time = time.time()
+    level = group.level = sum(group.extra.setdefault("revolution_achieve", {}).values()) + 1
+    issuance = 20000 * level
+    group.invest[group_id] = stock.issuance - issuance
+    stock.issuance = issuance
     stock.fixed = stock.floating = stock.stock_value = stock_value * level
     return f"{stock.name}发行成功，发行价格为{round((stock.stock_value/ 20000),2)}金币"
 

@@ -95,22 +95,36 @@ class Manager:
         account.nickname = event.nickname
         return user, account
 
-    def group_wealths(self, group_id: str, prop_id: str) -> int:
+    def group_wealths(self, group_id: str, prop_id: str) -> list[int]:
         """
         群内总资产
         """
         group = self.group_search(group_id)
         if not group:
             return 0
+        wealths = [self.locate_user(user_id).connecting(group_id).bank.get(prop_id, 0) for user_id in group.namelist]
+        wealths.append(group.bank.get(prop_id, 0))
+        return wealths
 
-        return group.bank.get(prop_id, 0) + sum(
-            self.locate_user(user_id).connecting(group_id).bank.get(prop_id, 0) for user_id in group.namelist
-        )
+    def namelist(self, group_name: str = None):
+        if group_name:
+            group = self.group_search(group_name)
+            if group:
+                return group.namelist
+        else:
+            return set().union(*(group.namelist for group in self.data.group_dict.values()))
+
+    def stock_value(self, invest: Bank):
+        i = 0.0
+        for group_id, n in invest.items():
+            stock = self.stocks_library.search(group_id)
+            i += stock.stock_value * n / stock.issuance
+        return int(i)
 
     def ranklist(
         self,
         namelist: set[str],
-        key: RankKey,
+        title: str,
         reverse: bool = True,
     ):
         """
@@ -118,31 +132,14 @@ class Manager:
             param:
                 key:从用户寻找可以排名的排名内容
         """
+        if key := self.rankkey(title):
+            return
         data = [(k, v) for k in namelist if (v := key(k))]
         data.sort(key=lambda x: x[1], reverse=reverse)
         return data
 
-    def gold_value(self, group_id: str, account: Account):
-        return account.bank.get("1111", 0) * self.locate_group(group_id).level
-
-    def stock_value(self, invest: Bank):
-        i = 0.0
-        for group_id, n in invest.items():
-            stock = self.stock_search(group_id)
-            i += stock.stock_value * n / stock.issuance
-        return int(i)
-
     def rankkey(self, title) -> RankKey:
         match title:
-            case "总金币":
-                return lambda user_id: sum(
-                    self.gold_value(group_id, account) for group_id, account in self.locate_user(user_id).accounts.items()
-                )
-            case "总资产":
-                return lambda user_id: sum(
-                    self.gold_value(group_id, account) + self.stock_value(account.invest)
-                    for group_id, account in self.locate_user(user_id).accounts.items()
-                )
             case "胜场":
                 return lambda user_id: self.locate_user(user_id).extra.setdefault("win", 0)
             case "连胜":
@@ -153,11 +150,3 @@ class Manager:
                 return lambda user_id: self.locate_user(user_id).extra.setdefault("lose_achieve", 0)
             case _:
                 return
-
-    def namelist(self, group_name: str = None):
-        if group_name:
-            return set().union(*(group.namelist for group in self.data.group_dict.values()))
-        else:
-            group = self.group_search(group_name)
-            if group:
-                return group.namelist

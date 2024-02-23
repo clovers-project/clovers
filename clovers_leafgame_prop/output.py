@@ -1,6 +1,6 @@
-import numpy as np
 from clovers_leafgame.core.linecard import linecard
 from clovers_leafgame.output import font_manager, endline
+import numpy as np
 
 
 def report_card(

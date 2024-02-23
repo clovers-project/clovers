@@ -15,7 +15,7 @@ import numpy as np
 import re
 from re import Pattern
 
-from ..core.tools import download_url
+from ..core.utils import download_url
 
 
 class ChartImage:
