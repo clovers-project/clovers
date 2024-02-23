@@ -94,6 +94,7 @@ class Plugin:
 
     def task(self, func: Callable[[], Coroutine]):
         self.task_list.append(func())
+        return func
 
     def command_check(self, command: str) -> dict[int, Event]:
         kv = {}

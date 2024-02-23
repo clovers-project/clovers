@@ -374,8 +374,11 @@ async def _(event: Event):
     return f"你获得了{N}个【{prop.name}】！"
 
 
+@plugin.handle({"保存游戏"}, {"permission"})
+@superuser.wrapper
 @plugin.task
 async def _():
+    manager.save()
     print("游戏数据已保存！")
 
 
