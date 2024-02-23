@@ -44,8 +44,8 @@ class Event:
 
     def args_to_int(self):
         if args := self.raw_event.args:
-            return to_int(self.raw_event.args[0])
-        return 0
+            n = to_int(args[0])
+        return n or 0
 
     def args_parse(self):
         args = self.raw_event.args

@@ -27,5 +27,6 @@ with open(library_file, "r", encoding="utf8") as f:
 
 AIR = library.search("空气")
 GOLD = library.search("金币")
+STD_GOLD = library.search("标准金币")
 VIP_CARD = library.search("钻石会员卡")
 LICENSE = library.search("设置许可证")

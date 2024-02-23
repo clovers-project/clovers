@@ -9,7 +9,7 @@ from PIL import ImageColor
 from .core.clovers import Event, to_me, superuser, group_admin, at
 from .core.utils import item_name_rule, to_int
 
-from .prop import library as props_library, GOLD, VIP_CARD, LICENSE
+from .prop import library as props_library, GOLD, STD_GOLD, VIP_CARD, LICENSE
 from .core.utils import download_url, gini_coef
 from .output import (
     bank_to_data,
@@ -129,7 +129,7 @@ async def _(event: Event):
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
-    prop_name, N, _ = args
+    prop_name, N = args[:2]
     prop = props_library.search(prop_name)
     if not prop:
         return f"没有【{prop_name}】这种道具。"
@@ -160,12 +160,41 @@ async def _(event: Event):
     return f"{user_out.nickname(group_id)} 向 {user_in.nickname(group_id)} 赠送{N}个{prop.name}\n{tip}"
 
 
+@plugin.handle({"金币转移"}, {"user_id"})
+async def _(event: Event):
+    xfer = event.args_to_int()
+    user = manager.locate_user(event.user_id)
+    user_bank = user.bank
+    group = manager.locate_group(event.group_id or user.connect)
+    account_bank = user.connecting(group.group_id).bank
+    level = group.level
+    if xfer < 0:
+        xfer = -xfer
+        xfer = group.xfer_out(xfer)
+        if not xfer:
+            return f"{group.name} 转出金币已到达限制：{group.xfer_record['record']}"
+        if n := GOLD.deal(account_bank, -xfer):
+            return f"数量不足。\n——你在{group.name}还有{n}枚金币。"
+        STD_GOLD.deal(user_bank, int(xfer * level))
+    else:
+        xfer = group.xfer_in(xfer)
+        if not xfer:
+            return f"{group.name} 转入金币已到达限制：{group.xfer_record['record']}"
+        if n := STD_GOLD.deal(user_bank, -math.ceil(xfer * level)):
+            return f"数量不足。\n——你在还有{n}枚标准金币(本群汇率：{level})。"
+        GOLD.deal(account_bank, xfer)
+    return f"金币转移完成。目标账户实际入账{xfer}"
+
+
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
 async def _(event: Event):
-    args = event.args_parse()
-    if not args:
+    args = event.raw_event.args
+    if len(args) < 2:
         return
     group_name, xfer_out = args[:2]
+    xfer_out = to_int(xfer_out)
+    if not xfer_out:
+        return
     user = manager.locate_user(event.user_id)
     group_in = manager.group_search(args[0])
     if not group_in:
@@ -178,21 +207,19 @@ async def _(event: Event):
         group_out, group_in = group_in, group_out
         xfer_out = -xfer_out
 
-    # 解析完成
-
-    xfer_out = group_out.xferout_check(xfer_out)
+    xfer_out = group_out.xfer_out(xfer_out)
     if not xfer_out:
-        return f"{group_out.name} 转出金币已到达限制：{group_out.xfer_record["record"]}"
-    ExRate = group_out.level / group_in.level     
-    xfer_in = group_in.xferin_check(int(ExRate * xfer_out))
-    if not xfer_out:
-        return f"{group_in.name} 转入金币已到达限制：{group_in.xfer_record["record"]}"
-    xfer_out = xfer_in / ExRate
+        return f"{group_out.name} 转出金币已到达限制：{group_out.xfer_record['record']}"
+    ExRate = group_out.level / group_in.level
+    xfer_in = group_in.xfer_in(int(ExRate * xfer_out))
+    if not xfer_in:
+        return f"{group_in.name} 转入金币已到达限制：{group_in.xfer_record['record']}"
+    xfer_out = math.ceil(xfer_in / ExRate)
     if n := GOLD.deal(bank_out, -xfer_out):
         return f"数量不足。\n——你还有{n}枚金币。"
     GOLD.deal(bank_in, xfer_in)
+    group_in.xfer_record["record"] += xfer_in
     group_out.xfer_record["record"] -= xfer_out
-    group_in.xfer_record["record"] += xfer_in    
     return f"{group_out.name}向{group_in.name}转移{xfer_out} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {xfer_in}"
 
 
@@ -247,7 +274,7 @@ async def _(event: Event):
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
-    command, N, _ = args
+    command, Nc = args[:2]
     user_id = event.user_id
     group_id = event.group_id
     group = manager.locate_group(group_id)
@@ -319,51 +346,6 @@ async def _(event: Event):
     return f"{stock.name}发行成功，发行价格为{round((stock.stock_value/ 20000),2)}金币"
 
 
-@plugin.handle(r"^.+排行.*", {"user_id", "group_id"})
-async def _(event: Event):
-    cmd_match = re.search(r"(.+)排行(.*)", event.raw_event.raw_command.strip())
-    title = cmd_match.group(1)
-    group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
-    group = manager.group_search(group_name)
-    group_id = group.group_id if group else None
-    if title == "路灯挂件":
-        data = {}
-        for group in manager.data.group_dict.values():
-            for k, v in group.extra.setdefault("revolution_achieve"):
-                data[k] = data.get(k, 0) + v
-        ranklist = list(data.items())
-        ranklist.sort(key=lambda x: x[1], reverse=True)
-    else:
-        if title.endswith("总"):
-            namelist = manager.namelist()
-            key = manager.rankkey(title[:-1])
-        else:
-            if not group_id:
-                return
-            namelist = manager.namelist(group_name)
-            key = manager.rankkey(title)
-            prop = props_library.search(title)
-            if not key:
-                if not prop:
-                    return
-                key = lambda user_id: manager.locate_user(user_id).locate_bank(group_id, prop.domain).get(prop.id, 0)
-
-        ranklist = manager.ranklist(namelist, key)
-
-    if not ranklist:
-        return f"无数据，无法进行{title}排行"
-    nickname_data = []
-    rank_data = []
-    task_list = []
-    for user_id, v in ranklist[:20]:
-        user = manager.locate_user(user_id)
-        nickname_data.append(user.nickname(group_id))
-        rank_data.append(v)
-        task_list.append(download_url(user.avatar_url))
-    avatar_data = await asyncio.gather(*task_list)
-    return manager.info_card([draw_rank(list(zip(nickname_data, rank_data, avatar_data)))], event.user_id, "NONE")
-
-
 # 超管指令
 
 
@@ -382,7 +364,7 @@ async def _(event: Event):
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
-    name, N, _ = args
+    name, N = args[:2]
     prop = props_library.search(name)
     if not prop:
         return f"没有【{name}】这种道具。"

@@ -212,8 +212,7 @@ class Group(BaseModel):
     def xfer_record(self) -> dict[str, int]:
         return self.extra.setdefault("xfers", {"record": 0, "limit": 0})
 
-    def xferout_check(self, xfer: int):
-        """是否能转出"""
+    def xfer_out(self, xfer: int):
         xfer_record = self.xfer_record
         limit = xfer_record["limit"]
         record = xfer_record["record"]
@@ -223,8 +222,7 @@ class Group(BaseModel):
             return limit + record
         return xfer
 
-    def xferin_check(self, xfer: int):
-        """是否能转入该群"""
+    def xfer_in(self, xfer: int):
         xfer_record = self.xfer_record
         limit = xfer_record["limit"]
         record = xfer_record["record"]

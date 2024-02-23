@@ -140,8 +140,6 @@ class Manager:
 
     def rankkey(self, title) -> RankKey:
         match title:
-            case "资产":
-                return lambda user_id: self.locate_user(user_id).inv
             case "胜场":
                 return lambda user_id: self.locate_user(user_id).extra.setdefault("win", 0)
             case "连胜":
