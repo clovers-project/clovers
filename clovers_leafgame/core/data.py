@@ -90,7 +90,6 @@ class Account(BaseModel):
     sign_date: datetime = datetime.today() - timedelta(days=1)
     revolution: bool = False
     bank: Bank = Bank()
-    invest: Bank = Bank()
     extra: dict = {}
 
 
@@ -105,6 +104,7 @@ class User(BaseModel):
     accounts: dict[str, Account] = {}
     connect: str = None
     bank: Bank = Bank()
+    invest: Bank = Bank()
     extra: dict = {}
 
     def connecting(self, group_id: str = None) -> Account:
