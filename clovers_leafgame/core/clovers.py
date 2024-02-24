@@ -1,5 +1,6 @@
 from collections.abc import Callable, Coroutine
 from clovers_core.plugin import Event as CloversEvent
+from clovers_core.utils import kwfilter
 from .utils import to_int
 
 
@@ -98,7 +99,7 @@ class Check:
         self.at: bool = at
         self.check: list[Callable[[Event], bool]] = []
 
-    def wrapper(self, func: Callable[[Event], Coroutine]):
+    def decorator(self, func: Callable[[Event], Coroutine]):
         if self.superuser:
             self.check.append(lambda event: event.permission > 2)
         elif self.group_owner:
@@ -122,12 +123,14 @@ class Check:
 
             check = check_all
 
-        async def decorator(event: Event):
+        wrapper = kwfilter(func)
+
+        async def checker(event: Event):
             if not check(event):
                 return
-            return await func(event)
+            return await wrapper(event)
 
-        return decorator
+        return checker
 
 
 to_me = Check(to_me=True)

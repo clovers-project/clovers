@@ -1,8 +1,8 @@
-import inspect
 import asyncio
 from collections.abc import Coroutine, Callable, Awaitable
 
 from .plugin import Plugin, Handle, Event
+from .utils import kwfilter
 
 
 class AdapterError(Exception):
@@ -20,7 +20,7 @@ class AdapterMethod:
         """添加一个获取参数方法"""
 
         def decorator(func: Callable[..., Coroutine]):
-            self.kwarg_dict[method_name] = self.kwfilter(func)
+            self.kwarg_dict[method_name] = kwfilter(func)
 
         return decorator
 
@@ -28,18 +28,9 @@ class AdapterMethod:
         """添加一个发送消息方法"""
 
         def decorator(func: Callable[..., Coroutine]):
-            self.send_dict[method_name] = self.kwfilter(func)
+            self.send_dict[method_name] = kwfilter(func)
 
         return decorator
-
-    @staticmethod
-    def kwfilter(func: Callable[..., Coroutine]):
-        kw = inspect.signature(func).parameters.keys()
-
-        async def wrapper(*args, **kwargs):
-            return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
-
-        return wrapper
 
 
 class Adapter:

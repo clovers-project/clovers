@@ -24,7 +24,7 @@ gacha_gold = config.gacha_gold
 
 
 @plugin.handle(r"^.+连抽?卡?|单抽", {"user_id", "group_id", "to_me"})
-@to_me.wrapper
+@to_me.decorator
 async def _(event: Event):
     N = re.search(r"^(.*)连抽?卡?$", event.raw_event.raw_command)
     if not N:

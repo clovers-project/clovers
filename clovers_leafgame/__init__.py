@@ -36,7 +36,7 @@ debug_marking = config.debug_marking
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
-@to_me.wrapper
+@to_me.decorator
 async def _(event: Event):
     user_id = event.user_id
     user = manager.locate_user(user_id)
@@ -73,7 +73,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"删除背景"}, {"user_id", "to_me"})
-@to_me.wrapper
+@to_me.decorator
 async def _(event: Event):
     Path.unlink(manager.BG_PATH / f"{event.user_id}.png", True)
     return "背景图片删除成功！"
@@ -104,7 +104,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"发红包", "赠送金币"}, {"user_id", "group_id", "at", "permission"})
-@at.wrapper
+@at.decorator
 async def _(event: Event):
     group_id = event.group_id
     N = event.args_to_int() or random.randint(*sign_gold)
@@ -133,7 +133,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"送道具", "赠送道具"}, {"user_id", "group_id", "at", "permission"})
-@at.wrapper
+@at.decorator
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
@@ -288,7 +288,7 @@ async def _(event: Event):
     if delta_days == 0:
         is_sign = ["今日已签到", "green"]
     else:
-        is_sign = [f"连续{delta_days}天未签到", "red"]
+        is_sign = [f"连续{delta_days}天 未签到", "red"]
 
     lines += ["" for _ in range(3 - len(lines))]
     lines.append(f"金币 {format_number(GOLD.user_N(user, group_id))}")
@@ -296,6 +296,7 @@ async def _(event: Event):
     lines.append(f"[color][{is_sign[1]}]{is_sign[0]}")
     # 加载资产分析
     dist = [(n, manager.locate_group(group_id).name) for group_id in user.accounts if (n := GOLD.user_N(user, group_id)) > 0]
+    info.append(invest_card(bank_to_data(user.invest, manager.stocks_library.search), "股票信息"))
     info.append(account_card(dist or [(1, "None")], "\n".join(lines)))
     return manager.info_card(info, event.user_id)
 
@@ -384,8 +385,8 @@ async def _(event: Event):
 
 
 @plugin.handle({"市场注册", "公司注册", "注册公司"}, {"to_me", "permission"})
-@at.wrapper
-@group_admin.wrapper
+@at.decorator
+@group_admin.decorator
 async def _(event: Event):
     group_id = event.group_id
     group = manager.locate_group(group_id)
@@ -419,7 +420,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"获取金币"}, {"user_id", "group_id", "permission"})
-@superuser.wrapper
+@superuser.decorator
 async def _(event: Event):
     N = event.args_to_int()
     user = manager.locate_user(event.user_id)
@@ -429,7 +430,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"获取道具"}, {"user_id", "group_id", "nickname", "permission"})
-@superuser.wrapper
+@superuser.decorator
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
@@ -444,20 +445,18 @@ async def _(event: Event):
 
 
 @plugin.handle({"保存游戏"}, {"permission"})
-@superuser.wrapper
+@superuser.decorator
 @scheduler.scheduled_job("cron", minute="*/10", misfire_grace_time=120)
 async def _():
     manager.save()
     print("游戏数据已保存！")
 
 
-@plugin.handle({"设置"}, {"permission"})
-@superuser.wrapper
+@plugin.handle({"执行代码"}, {"permission"})
+@superuser.decorator
 async def _(event: Event):
     exec(event.raw_event.raw_command[2:])
 
-
-marking_library.append(props_library.search("金币"))
 
 __plugin__ = plugin
 

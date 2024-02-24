@@ -1,9 +1,6 @@
 import sys
 import importlib
-import importlib.util
-import importlib.machinery
 import traceback
-
 import re
 from pathlib import Path
 from collections.abc import Callable, Coroutine
@@ -92,10 +89,7 @@ class Plugin:
         """注册一个启动任务"""
         self.startup_tasklist.append(func())
 
-        async def wrapper(*args):
-            return await func()
-
-        return wrapper
+        return func
 
     def shutdown(self, func: Callable[[], Coroutine]):
         """注册一个结束任务"""

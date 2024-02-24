@@ -73,7 +73,7 @@ def prop_card(data: list[tuple[Prop, int]], tip: str = None):
 def invest_card(data: list[tuple[Stock, int]], tip: str = None):
     def result(stock: Stock, n: int):
         return (
-            f"[pixel][20]公司 {stock.name}\n"
+            f"[pixel][20]{stock.name}\n"
             f"[pixel][20]结算 [nowrap]\n[color][green]{format_number(stock.floating / stock.issuance)}[nowrap]\n"
             f"[pixel][400]数量 [nowrap]\n[color][green]{n}"
         )
@@ -81,7 +81,6 @@ def invest_card(data: list[tuple[Stock, int]], tip: str = None):
     info = "\n".join(result(*args) for args in data)
     if tip:
         info += "\n" + endline(tip)
-    print(info)
     return linecard(info, font_manager, 40, width=880)
 
 
