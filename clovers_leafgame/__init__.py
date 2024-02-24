@@ -10,17 +10,29 @@ from clovers_apscheduler import scheduler
 from .core.clovers import Event, to_me, superuser, group_admin, at
 from .core.utils import item_name_rule, to_int
 
-from .prop import library as props_library, GOLD, STD_GOLD, VIP_CARD, LICENSE, CLOVERS_MARKING, HANGERS_MARKING
+from .prop import (
+    library as props_library,
+    marking_library,
+    GOLD,
+    STD_GOLD,
+    VIP_CARD,
+    LICENSE,
+    CLOVERS_MARKING,
+    REVOLUTION_MARKING,
+    DEBUG_MARKING,
+)
 from .core.utils import download_url, gini_coef, format_number
-from .output import bank_to_data, bank_card, prop_card, invest_card, avatar_card
+from .output import bank_to_data, bank_card, prop_card, invest_card, avatar_card, account_card
 from .main import plugin, config, manager
 
 sign_gold = config.sign_gold
 revolt_gold = config.revolt_gold
 revolt_gini = config.revolt_gini
 company_public_gold = config.company_public_gold
-gacha_gold = config.gacha_gold
-lucky_clover = config.lucky_clover
+
+clovers_marking = config.clovers_marking
+revolution_marking = config.revolution_marking
+debug_marking = config.debug_marking
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
@@ -254,66 +266,39 @@ async def _(event: Event):
     account = user.connecting(group_id)
     info = []
     lines = []
-    count = HANGERS_MARKING.user_N(user, group_id)
-    if count:
-        if count <= 4:
-            lines.append(f"{count*'☆'} 路灯挂件 {count*'☆'}")
-        else:
-            lines.append("☆☆☆☆☆路灯挂件☆☆☆☆☆")
-
+    if DEBUG_MARKING.user_N(user, group_id):
+        lines.append(debug_marking)
     if CLOVERS_MARKING.user_N(user, group_id):
-        lines.append(lucky_clover)
+        lines.append(clovers_marking)
+    if REVOLUTION_MARKING.user_N(user, group_id):
+        lines.append(revolution_marking)
 
-    lines.append(f"金币 {format_number(user.get(STD_GOLD.id,0))}")
-    info.append(avatar_card(account.nickname, await download_url(user.avatar_url)))
-    return manager.info_card(info, event.user_id)
-    # 加载卡片
-    PropsCard = Manager.PropsCard_list((user, group_account))
-    msg = ""
-    for x in PropsCard:
-        msg += f"----\n[center]{x}\n"
-    if msg:
-        info.append(linecard(msg + "----", width=880, padding=(0, -28), spacing=1, font_size=60))
-    # 加载成就卡片
-    Achieve = Manager.Achieve_list((user, group_account))[:2]
-    # 加载本群账户
-    gold = group_account.gold
-    value = Manager.invest_value(group_account.invest)
-    is_sign = group_account.is_sign
-    if is_sign:
-        is_sign = ["已签到", "green"]
+    info.append(avatar_card(await download_url(user.avatar_url), account.nickname, lines))
+    lines = []
+    i = 0
+    for marking_prop in marking_library.data:
+        if count := marking_prop.user_N(user, group_id):
+            count = min(count, 99)
+            lines.append(f"[color][{marking_prop.color}]Lv.{count}{'  'if count < 10 else ' '}{marking_prop.tip}")
+            i += 1
+            if i == 3:
+                break
+    delta_days = (datetime.today() - account.sign_date).days
+
+    if delta_days == 0:
+        is_sign = ["今日已签到", "green"]
     else:
-        is_sign = ["未签到", "red"]
-    security = group_account.security
-    if security:
-        security = [security, "green"]
-    else:
-        security = [security, "red"]
-    msg = ""
-    for x in Achieve:
-        msg += f"{x}\n"
-    msg += (2 - len(Achieve)) * "\n"
-    msg += (
-        f"金币 {format_number(gold)}\n"
-        f"股票 {format_number(value)}\n"
-        "签到 [nowrap]\n"
-        f"[color][{is_sign[1]}]{is_sign[0]}\n"
-        "补贴 还剩 [nowrap]\n"
-        f"[color][{security[1]}]{security[0]}[nowrap]\n 次"
-    )
+        is_sign = [f"连续{delta_days}天未签到", "red"]
+
+    lines += ["" for _ in range(3 - len(lines))]
+    lines.append(f"金币 {format_number(GOLD.user_N(user, group_id))}")
+    lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
+    lines.append(f"[color][{is_sign[1]}]{is_sign[0]}")
     # 加载资产分析
-    dist = []
-    for group_id, group_account in user.group_accounts.items():
-        group_name = Manager.locate_group(group_id).company.company_name
-        group_name = group_name if group_name else f"（{str(group_id)[:4]}）"
-        dist.append(
-            [
-                group_account.gold + Manager.invest_value(group_account.invest),
-                group_name,
-            ]
-        )
-    dist = [x for x in dist if x[0] > 0]
-    info.append(my_info_account(msg, dist or [(1.0, "None")]))
+    dist = [(n, manager.locate_group(group_id).name) for group_id in user.accounts if (n := GOLD.user_N(user, group_id)) > 0]
+    info.append(account_card(dist or [(1, "None")], "\n".join(lines)))
+    return manager.info_card(info, event.user_id)
+
     # 加载股票信息
     msg = "".join(
         f"{Manager.locate_group(stock).company.company_name}[nowrap]\n[right][color][green]{i}\n"
@@ -345,7 +330,7 @@ async def _(event: Event):
 
 @plugin.handle({"我的资产"}, {"user_id"})
 async def _(event: Event):
-    invest = user = manager.locate_user(event.user_id).invest
+    invest = manager.locate_user(event.user_id).invest
     if not invest:
         return "您的资产是空的。"
     return manager.info_card(
@@ -378,7 +363,7 @@ async def _(event: Event):
         bank_out = item.user_bank(user, group_id)
     elif item := manager.stocks_library.search(name):
         bank_in = group.invest
-        bank_out = user.connecting(group_id).invest
+        bank_out = user.invest
     else:
         return f"没有名为【{name}】的道具或股票。"
 
@@ -465,6 +450,14 @@ async def _():
     manager.save()
     print("游戏数据已保存！")
 
+
+@plugin.handle({"设置"}, {"permission"})
+@superuser.wrapper
+async def _(event: Event):
+    exec(event.raw_event.raw_command[2:])
+
+
+marking_library.append(props_library.search("金币"))
 
 __plugin__ = plugin
 

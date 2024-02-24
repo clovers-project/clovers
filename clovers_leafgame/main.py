@@ -12,7 +12,6 @@ config_key = __package__
 config = Config.parse_obj(clovers_config.get(config_key, {}))
 """主配置类"""
 clovers_config[config_key] = config.dict()
-clovers_config.save()
 plugin = Plugin(
     build_event=lambda event: Event(event),
     build_result=lambda result: (

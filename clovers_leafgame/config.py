@@ -23,10 +23,10 @@ class Config(BaseModel):
     company_public_gold: int = 20000
     # 默认赌注
     bet_gold: int = 200
-    # 单抽所需金币
-    gacha_gold: int = 50
-    # 一个测试字符串，不要动（
-    lucky_clover = "• ＬＵＣＫＹ  ＣＬＯＶＥＲ •"
+    # 标记字符串
+    clovers_marking = "ＬＵＣＫＹ ＣＬＯＶＥＲ"
+    revolution_marking = " ＣＡＰＩＴＡＬＩＳＴ "
+    debug_marking = "  ＯＦＦＩＣＩＡＬ  "
     # 默认显示字体
     fontname = "simsun"
     # 默认备用字体

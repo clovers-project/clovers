@@ -7,7 +7,6 @@ from .config import Config
 config_key = __package__
 config = Config.parse_obj(clovers_config.get(config_key, {}))
 clovers_config[config_key] = config.dict()
-clovers_config.save()
 
 plugin = Plugin()
 scheduler = AsyncIOScheduler()

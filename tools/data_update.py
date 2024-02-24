@@ -4,6 +4,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import Union
+from collections import Counter
 
 resource_file = Path(os.path.dirname(__file__))
 
@@ -61,6 +62,7 @@ class User(BaseModel):
     props: Bank = Bank()
     """更名为bank"""
     bank: Bank = Bank()
+    invest: Bank = Bank()
     extra: dict = {}
 
 
@@ -164,10 +166,12 @@ def recode(code: str):
 
 
 for user in data.user.values():
+    invest = Counter()
     for group_id, group_account in user.group_accounts.items():
         group_account.props = {recode(k): v for k, v in group_account.props.items()}
         group_account.bank = group_account.props
         group_account.bank["1111"] = group_account.gold
+        invest += group_account.invest
         user.accounts[group_id] = group_account
         user.extra["win"] = user.win
         user.extra["win_achieve"] = user.Achieve_win
@@ -175,7 +179,7 @@ for user in data.user.values():
         user.extra["lose_achieve"] = user.Achieve_lose
     user.name = user.nickname
     user.bank = user.props
-
+    user.invest = Bank(invest)
 for group in data.group.values():
     company = group.company
     group.bank["1111"] = company.bank

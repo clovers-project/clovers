@@ -118,25 +118,6 @@ def alchemy_info(alchemy: dict, nickname: str, avatar: bytes):
     return info
 
 
-def my_info_head(gold: int, win: int, lose: int, nickname: str, avatar: bytes):
-    """
-    我的资料卡第一个信息
-    """
-    canvas = Image.new("RGBA", (880, 300))
-    avatar = Image.open(avatar).resize((260, 260))
-    circle_mask = Image.new("RGBA", (260, 260), (255, 255, 255, 0))
-    print(id(circle_mask))
-    ImageDraw.Draw(circle_mask).ellipse(((0, 0), avatar.size), fill="black")
-    canvas.paste(avatar, (20, 20), circle_mask)
-    draw = ImageDraw.Draw(canvas)
-    draw.text((300, 40), f"{nickname}", fill=(0, 0, 0), font=font_big)
-    draw.line(((300, 120), (860, 120)), fill="gray", width=4)
-    draw.text((300, 140), f"金币 {'{:,}'.format(gold)}", fill=(0, 0, 0), font=font_normal)
-    draw.text((300, 190), f"战绩 {win}:{lose}", fill=(0, 0, 0), font=font_normal)
-    draw.text((300, 240), f"胜率 {(round(win * 100 / (win + lose), 2) if win > 0 else 0)}%\n", fill=(0, 0, 0), font=font_normal)
-    return canvas
-
-
 def my_exchange_head(gold: int, nickname: str, invest: dict, avatar: bytes):
     """
     我的交易信息第一个信息
