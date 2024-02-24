@@ -1,15 +1,13 @@
 import random
 import math
-import re
-import asyncio
 import time
 from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
 from clovers_apscheduler import scheduler
-from .core.clovers import Event, to_me, superuser, group_admin, at
-from .core.utils import item_name_rule, to_int
-
+from clovers_leafgame_core.clovers import Event, to_me, superuser, group_admin, at
+from clovers_leafgame_core.utils import item_name_rule, to_int
+from clovers_leafgame_core.utils import download_url, gini_coef, format_number
 from .prop import (
     library as props_library,
     marking_library,
@@ -21,8 +19,14 @@ from .prop import (
     REVOLUTION_MARKING,
     DEBUG_MARKING,
 )
-from .core.utils import download_url, gini_coef, format_number
-from .output import bank_to_data, bank_card, prop_card, invest_card, avatar_card, account_card
+from .output import (
+    bank_to_data,
+    bank_card,
+    prop_card,
+    invest_card,
+    avatar_card,
+    account_card,
+)
 from .main import plugin, config, manager
 
 sign_gold = config.sign_gold
@@ -40,7 +44,6 @@ debug_marking = config.debug_marking
 async def _(event: Event):
     user_id = event.user_id
     user = manager.locate_user(user_id)
-    print(user.bank, LICENSE.id)
     if user.bank.get(LICENSE.id, 0) < 1:
         return f"你的【{LICENSE.name}】已失效"
     log = []
@@ -294,22 +297,11 @@ async def _(event: Event):
     lines.append(f"金币 {format_number(GOLD.user_N(user, group_id))}")
     lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
     lines.append(f"[color][{is_sign[1]}]{is_sign[0]}")
-    # 加载资产分析
     dist = [(n, manager.locate_group(group_id).name) for group_id in user.accounts if (n := GOLD.user_N(user, group_id)) > 0]
-    info.append(invest_card(bank_to_data(user.invest, manager.stocks_library.search), "股票信息"))
     info.append(account_card(dist or [(1, "None")], "\n".join(lines)))
+    if data := invest_card(bank_to_data(user.invest, manager.stocks_library.search), "股票信息"):
+        info.append(data)
     return manager.info_card(info, event.user_id)
-
-    # 加载股票信息
-    msg = "".join(
-        f"{Manager.locate_group(stock).company.company_name}[nowrap]\n[right][color][green]{i}\n"
-        for stock, i in group_account.invest.items()
-        if i > 0
-    )
-    if msg:
-        info.append(linecard(msg, width=880, endline="股票信息"))
-
-    return info_splicing(info, Manager.BG_path(event.user_id))
 
 
 @plugin.handle({"我的道具"}, {"user_id", "group_id", "nickname"})
@@ -327,17 +319,6 @@ async def _(event: Event):
     else:
         info = [prop_card(data)]
     return manager.info_card(info, event.user_id)
-
-
-@plugin.handle({"我的资产"}, {"user_id"})
-async def _(event: Event):
-    invest = manager.locate_user(event.user_id).invest
-    if not invest:
-        return "您的资产是空的。"
-    return manager.info_card(
-        [invest_card(bank_to_data(invest, manager.stocks_library.search))],
-        event.user_id,
-    )
 
 
 @plugin.handle({"群金库"}, {"user_id", "group_id", "permission"})
@@ -455,7 +436,7 @@ async def _():
 @plugin.handle({"执行代码"}, {"permission"})
 @superuser.decorator
 async def _(event: Event):
-    exec(event.raw_event.raw_command[2:])
+    exec(event.raw_event.raw_command[4:])
 
 
 __plugin__ = plugin

@@ -3,8 +3,8 @@
 from io import BytesIO
 from clovers_core.plugin import Plugin, Result
 from clovers_core.config import config as clovers_config
-from .core.clovers import Event
-from .core.manager import Manager
+from clovers_leafgame_core.clovers import Event
+from clovers_leafgame_core.manager import Manager
 from .config import Config
 
 config_key = __package__

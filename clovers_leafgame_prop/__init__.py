@@ -2,9 +2,9 @@ import re
 from collections import Counter
 from collections.abc import Callable, Coroutine
 from clovers_leafgame.main import plugin, manager
-from clovers_leafgame.core.clovers import Event, to_me
-from clovers_leafgame.core.data import Prop
-from clovers_leafgame.core.utils import to_int
+from clovers_leafgame_core.clovers import Event, to_me
+from clovers_leafgame_core.data import Prop
+from clovers_leafgame_core.utils import to_int
 
 from clovers_leafgame.prop import GOLD
 from .library import library, gacha, AIR_PACK

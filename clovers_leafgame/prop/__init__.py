@@ -1,7 +1,4 @@
 """
-道具类:Prop,Item子类
-运行时
-
 Library实例
     props_library:道具储存库
 
@@ -16,7 +13,7 @@ import os
 import json
 from pathlib import Path
 
-from ..core.data import Library, Prop
+from clovers_leafgame_core.data import Library, Prop
 
 library: Library[Prop] = Library()
 
