@@ -7,9 +7,9 @@ from PIL.Image import Image as IMG
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
-from .core.data import Bank, Prop, Stock
-from .core.linecard import FontManager, linecard, info_splicing
-from .core.utils import format_number
+from clovers_leafgame_core.data import Bank, Prop, Stock
+from clovers_leafgame_core.linecard import FontManager, linecard, info_splicing
+from clovers_leafgame_core.utils import format_number
 from .main import config, manager
 
 main_path = config.main_path
