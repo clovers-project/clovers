@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
 from clovers_leafgame_core.data import Bank, Prop, Stock
-from clovers_leafgame_core.linecard import FontManager, linecard, info_splicing
-from clovers_leafgame_core.utils import format_number
+from clovers_utils.linecard import FontManager, linecard, info_splicing
+from clovers_utils.tools import format_number
 from .main import config, manager
 
 main_path = config.main_path

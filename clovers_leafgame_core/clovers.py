@@ -1,7 +1,7 @@
 from collections.abc import Callable, Coroutine
 from clovers_core.plugin import Event as CloversEvent
 from clovers_core.utils import kwfilter
-from .utils import to_int
+from ..clovers_utils.tools import to_int
 
 
 class Event:

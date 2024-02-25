@@ -42,3 +42,13 @@ class Library[K, V]:
 
     def update(self, data):
         return self._key_data.update(data)
+
+    def get(self, index: K, default: V = None):
+        if key := self._key_indices.get(index):
+            return self._key_data[key]
+        return self._key_data.get(index, default)
+
+    def setdefault(self, index: K, default: V = None):
+        if key := self._key_indices.get(index):
+            return self._key_data[key]
+        return self._key_data.setdefault(index, default)

@@ -2,7 +2,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw
 from PIL.Image import Image as IMG
 
-from clovers_leafgame_core.utils import format_number
+from clovers_utils.tools import format_number
 from clovers_leafgame.output import font_manager
 
 

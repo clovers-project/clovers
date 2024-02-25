@@ -1,6 +1,6 @@
-import httpx
 import asyncio
 import numpy as np
+import httpx
 
 
 async def download_url(url: str):
@@ -37,9 +37,6 @@ def to_int(N) -> int:
 
 
 def format_number(num) -> str:
-    """
-    格式化金币
-    """
     if num < 10000:
         return "{:,}".format(num if isinstance(num, int) else round(num, 2))
     x = str(int(num))
