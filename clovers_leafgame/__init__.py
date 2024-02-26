@@ -6,11 +6,8 @@ from datetime import datetime
 from PIL import ImageColor
 from clovers_apscheduler import scheduler
 from clovers_leafgame_core.clovers import Event, to_me, superuser, group_admin, at
-from clovers_utils.tools import item_name_rule, to_int
-from clovers_utils.tools import download_url, gini_coef, format_number
+from clovers_utils.tools import item_name_rule, to_int, download_url, gini_coef, format_number
 from .item import (
-    library as props_library,
-    marking_library,
     GOLD,
     STD_GOLD,
     VIP_CARD,
@@ -43,9 +40,9 @@ debug_marking = config.debug_marking
 @to_me.decorator
 async def _(event: Event):
     user_id = event.user_id
-    user = manager.locate_user(user_id)
-    if user.bank.get(LICENSE.id, 0) < 1:
-        return f"你的【{LICENSE.name}】已失效"
+    user = manager.data.user(user_id)
+    if user.bank.get(LICENSE, 0) < 1:
+        return f"你未持有【{LICENSE.name}】"
     log = []
     BG_type = event.single_arg()
     if BG_type:
@@ -86,7 +83,7 @@ async def _(event: Event):
 async def _(event: Event):
     user, account = manager.account(event)
     user.avatar_url = event.avatar
-    delta_days = (datetime.today() - account.sign_date).days
+    delta_days = (datetime.today() - account.sign_in).days
     if delta_days == 0:
         return "你已经签过到了哦"
     N = random.randint(*sign_gold) * delta_days

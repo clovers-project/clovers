@@ -70,7 +70,7 @@ class Prop(Item):
 class Stock(Item):
     issuance: int = 0
     """股票发行量"""
-    time: datetime = None
+    time: float = None
     """注册时间"""
     floating: int = 0
     """浮动资产"""
@@ -94,25 +94,25 @@ class User(BaseModel):
 
 class Group(BaseModel):
     id: str
-    level: int = 1
+    name: str = None
+    avatar_url: str = None
     stock: Stock = None
     bank: Bank = Bank()
     invest: Bank = Bank()
-    intro: str = None
     extra: dict = {}
     accounts_map: KeyMap = {}
     """Find account ID from user_id"""
 
     @property
-    def name(self):
-        return self.stock.name if self.stock else self.id
+    def nickname(self):
+        return self.stock.name if self.stock else self.name or self.id
 
 
 class Account(BaseModel):
     user_id: str
     group_id: str
     name: str = None
-    sign_date: datetime = None
+    sign_in: datetime = None
     bank: Bank = Bank()
     extra: dict = {}
 

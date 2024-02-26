@@ -45,7 +45,6 @@ CLOVERS_MARKING = props_library.get("四叶草标记")
 REVOLUTION_MARKING = props_library.get("路灯挂件标记")
 DEBUG_MARKING = props_library.get("Debug奖章")
 PROP_FOR_TEST = props_library.get("测试金库")
-
-marking_library: Library[Prop] = Library()
+marking_library: Library[str, Prop] = Library()
 marking_library.set_item(PROP_FOR_TEST.id, [PROP_FOR_TEST.name], PROP_FOR_TEST)
 marking_library.set_item(AIR.id, [AIR.name], AIR)

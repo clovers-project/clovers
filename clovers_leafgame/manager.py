@@ -14,7 +14,7 @@ from clovers_utils.linecard import info_splicing, ImageList
 from clovers_utils.library import Library
 from clovers_leafgame_core.clovers import Event
 from clovers_leafgame_core.data import Bank, Account, User, Group, Account, DataBase
-from .item import props_library, marking_library
+from .item import Prop, props_library, marking_library
 
 RankKey = Callable[[str], int | float]
 
@@ -69,29 +69,47 @@ class Manager:
     def locate_user(self, user_id: str) -> User:
         return self.data.user(user_id)
 
-    @typing_extensions.deprecated("The `locate_account` method is deprecated; use `data.account` instead.", category=None)
-    def locate_account(self, user_id: str, group_id: str) -> Account:
-        return self.data.account(user_id, group_id)
+    def new_account(self, user_id: str, group_id: str, **kwargs):
+        account = Account(user_id=user_id, group_id=group_id, sign_in=datetime.today() - timedelta(days=1), **kwargs)
+        self.data.register(account)
+        return account
 
-    def account(self, event: Event) -> Account:
+    def locate_account(self, user_id: str, group_id: str):
+        user = self.data.user(user_id)
+        account_id = user.accounts_map.get(group_id)
+        if not (account_id and (account := self.data.account(account_id))):
+            account = self.new_account(user_id, group_id)
+        return account
+
+    def account(self, event: Event):
         """
         定位账户
         """
         user_id = event.user_id
-        group_id = event.group_id
-        account = self.data.account(user_id, group_id)
-        if not account:
-            account = Account(
-                user_id=user_id,
-                group_id=group_id,
-                sign_date=datetime.today() - timedelta(days=1),
-            )
-            self.data.register(account)
         user = self.data.user(user_id)
+        group_id = event.group_id or user.connect
+        account_id = user.accounts_map.get(group_id)
+        if not (account_id and (account := self.data.account(account_id))):
+            account = self.new_account(user_id, group_id)
         if not user.name or event.is_private():
             user.name = event.nickname
         account.name = event.nickname
-        return account
+        return user, account
+
+    def locate_bank(self, prop: Prop, user_id: str, group_id: str):
+        match prop.domain:
+            case 1:
+                return self.locate_account(user_id, group_id).bank
+            case _:
+                return self.data.user(user_id).bank
+
+    def deal(self, prop: Prop, user_id: str, group_id: str, unsettled: int):
+        bank = self.locate_bank(prop, user_id, group_id)
+        return prop.deal(bank, unsettled)
+
+    def prop_number(self, prop: Prop, user_id: str, group_id: str):
+        bank = self.locate_bank(prop, user_id, group_id)
+        return bank.get(prop.id, 0)
 
     def group_wealths(self, group_name: str, prop_id: str) -> list[int]:
         """

@@ -6,8 +6,8 @@ class Library[K, V]:
         self._index_key: dict[K, K] = {}
         self._key_indices: dict[K, set[K]] = {}
         if data:
-            for key, value in data:
-                self.set_item(key, value)
+            for key, alias, value in data:
+                self.set_item(key, alias, value)
 
     def __getitem__(self, index: K) -> V:
         return self._key_data.get(index) or self._key_data[self._index_key[index]]
@@ -44,11 +44,11 @@ class Library[K, V]:
         return self._key_data.update(data)
 
     def get(self, index: K, default: V = None):
-        if key := self._key_indices.get(index):
+        if key := self._index_key.get(index):
             return self._key_data[key]
         return self._key_data.get(index, default)
 
     def setdefault(self, index: K, default: V = None):
-        if key := self._key_indices.get(index):
+        if key := self._index_key.get(index):
             return self._key_data[key]
         return self._key_data.setdefault(index, default)

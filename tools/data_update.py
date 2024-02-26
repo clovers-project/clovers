@@ -29,7 +29,10 @@ class Account(BaseModel):
     用户群账户
     """
 
+    user_id: str = None
+    group_id: str = None
     gold: int
+    name: str = None
     nickname: str = None
     revolution: bool = False
     props: Bank = Bank()
@@ -44,6 +47,7 @@ class User(BaseModel):
     用户数据
     """
 
+    id: str = None
     user_id: str = None
     nickname: str = None
     """更名为name"""
@@ -108,6 +112,7 @@ class Group(BaseModel):
     群字典
     """
 
+    id: str = None
     group_id: str = None
     namelist: set = set()
     revolution_time: float = 0.0
@@ -131,6 +136,7 @@ class DataBase(BaseModel):
 
     user_dict: dict[str, User] = {}
     group_dict: dict[str, Group] = {}
+    account_dict: dict[str, Account] = {}
 
     def save(self, file):
         """
@@ -165,9 +171,11 @@ def recode(code: str):
     return f"{rare}{domain}{flow}{number}"
 
 
-for user in data.user.values():
+for user_id, user in data.user.items():
+    user.id = user_id
     invest = Counter()
     for group_id, group_account in user.group_accounts.items():
+        group_account.name = group_account.nickname
         group_account.props = {recode(k): v for k, v in group_account.props.items()}
         group_account.bank = group_account.props
         group_account.bank["1111"] = group_account.gold
@@ -177,22 +185,27 @@ for user in data.user.values():
         user.extra["win_achieve"] = user.Achieve_win
         user.extra["lose"] = user.lose
         user.extra["lose_achieve"] = user.Achieve_lose
+        group_account.group_id = group_id
+        group_account.user_id = user_id
+        data.account_dict[f"{user_id}-{group_id}"] = group_account
     user.name = user.nickname
-    user.bank = user.props
+    user.bank = {recode(k): v for k, v in user.props.items()}
     user.invest = Bank(invest)
-for group in data.group.values():
+for group_id, group in data.group.items():
+    group.id = group_id
     company = group.company
     group.bank["1111"] = company.bank
-    group.invest = company.invest
-    group.level = company.level
-    group.intro = company.intro
-    group.stock = Stock()
-    group.stock.id = group.group_id
-    group.stock.name = company.company_name
-    group.stock.time = company.time
-    group.stock.issuance = company.issuance
     group.extra["revolution_achieve"] = group.Achieve_revolution
     group.extra["revolution_time"] = group.revolution_time
+    if company.invest:
+        group.invest = company.invest
+        group.intro = company.intro
+        group.stock = Stock()
+        group.stock.id = group.group_id
+        group.stock.name = company.company_name
+        group.stock.time = company.time
+        group.stock.issuance = company.issuance
+
 data.group_dict = data.group
 data.user_dict = data.user
 
