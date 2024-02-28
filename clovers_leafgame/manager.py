@@ -50,12 +50,81 @@ class Manager:
                 self.group_library[group.id] = group
 
     def info_card(self, info: ImageList, user_id: str, BG_type=None):
-        extra = self.locate_user(user_id).extra
-        BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
+        extra = self.data.user(user_id).extra
+        BG_type = BG_type or extra.setdefault("BG_type", "#FFFFFF99")
         BG_PATH = self.BG_PATH / f"{user_id}.png"
         if not BG_PATH.exists():
             BG_PATH = self.BG_PATH / "default.png"
         return info_splicing(info, BG_PATH, spacing=10, BG_type=BG_type)
+
+    def new_account(self, user_id: str, group_id: str, **kwargs):
+        account = Account(user_id=user_id, group_id=group_id, sign_in=datetime.today() - timedelta(days=1), **kwargs)
+        self.data.register(account)
+        return account
+
+    def locate_account(self, user_id: str, group_id: str):
+        user = self.data.user(user_id)
+        account_id = user.accounts_map.get(group_id)
+        if not (account_id and (account := self.data.account_dict.get(account_id))):
+            account = self.new_account(user_id, group_id)
+        return user, account
+
+    def account(self, event: Event):
+        """
+        定位账户
+        """
+        user_id = event.user_id
+        user = self.data.user(user_id)
+        group_id = event.group_id or user.connect
+        account_id = user.accounts_map.get(group_id)
+        if not (account_id and (account := self.data.account_dict.get(account_id))):
+            account = self.new_account(user_id, group_id)
+        if not user.name or event.is_private():
+            user.name = event.nickname
+        account.name = event.nickname
+        return user, account
+
+    def locate_bank(self, prop: Prop, user_id: str, group_id: str):
+        user, account = self.locate_account(user_id, group_id)
+        match prop.domain:
+            case 1:
+                return account.bank
+            case _:
+                return user.bank
+
+    def deal(self, prop: Prop, user_id: str, group_id: str, unsettled: int):
+        bank = self.locate_bank(prop, user_id, group_id)
+        return prop.deal(bank, unsettled)
+
+    def prop_number(self, prop: Prop, user_id: str, group_id: str):
+        bank = self.locate_bank(prop, user_id, group_id)
+        return bank.get(prop.id, 0)
+
+    def nickname(self, user_id: str, group_id: str):
+        user, account = self.locate_account(user_id, group_id)
+        return account.name or user.name or user_id
+
+    def group_wealths(self, group_name: str, prop_id: str) -> list[int]:
+        """
+        群内总资产
+        """
+        group = self.group_library.get(group_name)
+        if not group:
+            return 0
+        wealths = [self.data.account(account_id).bank.get(prop_id, 0) for account_id in group.accounts_map]
+        wealths.append(group.bank.get(prop_id, 0))
+        return wealths
+
+    def stock_value(self, invest: Bank):
+        i = 0.0
+        for group_id, n in invest.items():
+            group = self.data.group_dict.get(group_id)
+            if not group or group.stock is None:
+                invest[group_id] = 0
+                continue
+            stock = group.stock
+            i += stock.stock_value * n / stock.issuance
+        return int(i)
 
     @typing_extensions.deprecated("The `group_search` method is deprecated; use `group_library.get` instead.", category=None)
     def group_search(self, group_name: str):
@@ -69,73 +138,9 @@ class Manager:
     def locate_user(self, user_id: str) -> User:
         return self.data.user(user_id)
 
-    def new_account(self, user_id: str, group_id: str, **kwargs):
-        account = Account(user_id=user_id, group_id=group_id, sign_in=datetime.today() - timedelta(days=1), **kwargs)
-        self.data.register(account)
-        return account
-
-    def locate_account(self, user_id: str, group_id: str):
-        user = self.data.user(user_id)
-        account_id = user.accounts_map.get(group_id)
-        if not (account_id and (account := self.data.account(account_id))):
-            account = self.new_account(user_id, group_id)
-        return account
-
-    def account(self, event: Event):
-        """
-        定位账户
-        """
-        user_id = event.user_id
-        user = self.data.user(user_id)
-        group_id = event.group_id or user.connect
-        account_id = user.accounts_map.get(group_id)
-        if not (account_id and (account := self.data.account(account_id))):
-            account = self.new_account(user_id, group_id)
-        if not user.name or event.is_private():
-            user.name = event.nickname
-        account.name = event.nickname
-        return user, account
-
-    def locate_bank(self, prop: Prop, user_id: str, group_id: str):
-        match prop.domain:
-            case 1:
-                return self.locate_account(user_id, group_id).bank
-            case _:
-                return self.data.user(user_id).bank
-
-    def deal(self, prop: Prop, user_id: str, group_id: str, unsettled: int):
-        bank = self.locate_bank(prop, user_id, group_id)
-        return prop.deal(bank, unsettled)
-
-    def prop_number(self, prop: Prop, user_id: str, group_id: str):
-        bank = self.locate_bank(prop, user_id, group_id)
-        return bank.get(prop.id, 0)
-
-    def group_wealths(self, group_name: str, prop_id: str) -> list[int]:
-        """
-        群内总资产
-        """
-        group = self.group_library.get(group_name)
-        if not group:
-            return 0
-        wealths = [self.data.account(account_id).bank.get(prop_id, 0) for account_id in group.accounts_map]
-        wealths.append(group.bank.get(prop_id, 0))
-        return wealths
-
     @typing_extensions.deprecated("The `namelist` method is deprecated", category=None)
     def namelist(self, group_name: str = None):
         pass
-
-    def stock_value(self, invest: Bank):
-        i = 0.0
-        for group_id, n in invest.items():
-            group = self.data.group_dict.get(group_id)
-            if not group or group.stock is None:
-                invest[group_id] = 0
-                continue
-            stock = group.stock
-            i += stock.stock_value * n / stock.issuance
-        return int(i)
 
     def ranklist(
         self,

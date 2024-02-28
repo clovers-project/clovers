@@ -8,6 +8,7 @@ from clovers_apscheduler import scheduler
 from clovers_leafgame_core.clovers import Event, to_me, superuser, group_admin, at
 from clovers_utils.tools import item_name_rule, to_int, download_url, gini_coef, format_number
 from .item import (
+    Prop,
     GOLD,
     STD_GOLD,
     VIP_CARD,
@@ -95,77 +96,75 @@ async def _(event: Event):
 async def _(event: Event):
     user, account = manager.account(event)
     user.avatar_url = event.avatar
-    if account.revolution:
+    extra = account.extra
+    if extra.setdefault("revolution", False):
         return "你没有待领取的金币"
     N = random.randint(*revolt_gold)
     GOLD.deal(account.bank, N)
-    account.revolution = True
+    extra["revolution"] = True
     return f"这是你重置后获得的金币！你获得了 {N} 金币"
 
 
-@plugin.handle({"发红包", "赠送金币"}, {"user_id", "group_id", "at", "permission"})
+@plugin.handle({"发红包"}, {"user_id", "group_id", "at", "permission"})
 @at.decorator
 async def _(event: Event):
-    group_id = event.group_id
-    N = event.args_to_int() or random.randint(*sign_gold)
-    user_out = manager.locate_user(event.user_id)
-    user_in = manager.locate_user(event.at[0])
-    if N < 0:
-        if event.permission < 2:
-            return "你发了负数的红包，请不要这样做。"
-        user_out, user_in = user_in, user_out
-        N = -N
-        sender = "对方"
-    else:
-        sender = "你"
-    if VIP_CARD.user_bank(user_out, group_id).get(VIP_CARD.id, 0) > 0:
-        tax = 0
-        tip = f"『{VIP_CARD.name}』免手续费"
-    else:
-        tax = int(N * 0.02)
-        tip = f"扣除2%手续费：{tax}，实际到账金额{N - tax}"
-
-    if n := GOLD.deal_with(user_out, group_id, -N):
-        return f"数量不足。\n——{sender}还有{n}枚金币。"
-    GOLD.deal_with(user_in, group_id, -N)
-    GOLD.deal(manager.locate_group(group_id).bank, tax)
-    return f"{user_out.nickname(group_id)} 向 {user_in.nickname(group_id)} 赠送{N}枚金币\n{tip}"
+    return settlement(GOLD, event.args_to_int(), event.user_id, event.at[0])
 
 
-@plugin.handle({"送道具", "赠送道具"}, {"user_id", "group_id", "at", "permission"})
+@plugin.handle({"送道具"}, {"user_id", "group_id", "at", "permission"})
 @at.decorator
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
     prop_name, N = args[:2]
-    prop = props_library.search(prop_name)
+    prop = manager.props_library.get(prop_name)
     if not prop:
         return f"没有【{prop_name}】这种道具。"
-    group_id = event.group_id
-    N = event.args_to_int() or random.randint(*sign_gold)
-    user_out = manager.locate_user(event.user_id)
-    user_in = manager.locate_user(event.at[0])
+    return settlement(GOLD, N, event.user_id, event.at[0])
+
+
+def settlement(prop: Prop, unsettled: int, sender_id: str, receiver_id: int):
+    pass
+
+
+@plugin.handle({"发红包", "送道具"}, {"user_id", "group_id", "at", "permission"})
+@at.decorator
+async def _(event: Event):
+    if not (args := event.args_parse()):
+        return
+    if event.raw_event.raw_command.startswith("发红包"):
+        prop = GOLD
+        N = event.args_to_int()
+    else:
+        prop_name, N = args[:2]
+        prop = manager.props_library.get(prop_name)
+        if not prop:
+            return f"没有【{prop_name}】这种道具。"
+    user_out = manager.data.user(event.user_id)
+    user_in = manager.data.user(event.at[0])
     if N < 0:
         if event.permission < 2:
-            return "你发了负数的红包，请不要这样做。"
+            return "你输入了负数，请不要这样做。"
         user_out, user_in = user_in, user_out
         N = -N
         sender = "对方"
     else:
         sender = "你"
+    group_id = event.group_id
 
-    if prop is GOLD:
-        tax = int(N * 0.1)
-        tip = f"消耗10%道具转换成本：{tax}，实际到账金额{N - tax}"
-    else:
-        tax, tip = 0, ""
-
-    if n := prop.deal_with(user_out, group_id, -N):
+    if n := manager.deal(prop, user_out.id, group_id, -N):
         return f"数量不足。\n——{sender}还有{n}个{prop.name}。"
-    prop.deal_with(user_in, group_id, N - tax)
-    prop.deal(manager.locate_group(group_id).bank, tax)
 
-    return f"{user_out.nickname(group_id)} 向 {user_in.nickname(group_id)} 赠送{N}个{prop.name}\n{tip}"
+    if manager.prop_number(VIP_CARD, user_out.id, group_id) > 0:
+        tax = 0
+        tip = f"『{VIP_CARD.name}』免手续费"
+    else:
+        tax = int(N * 0.02)
+        tip = f"扣除2%手续费：{tax}，实际到账{prop.name}数{N - tax}"
+
+    manager.deal(prop, user_in.id, group_id, N - tax)
+    prop.deal(manager.data.group(group_id).bank, tax)
+    return f"{manager.nickname(user_out.id,group_id)} 向 {manager.nickname(user_in.id,group_id)} 赠送{N}个{prop.name}\n{tip}"
 
 
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
@@ -242,21 +241,17 @@ async def _(event: Event):
 
 @plugin.handle({"我的金币"}, {"user_id", "group_id"})
 async def _(event: Event):
-    user = manager.locate_user(event.user_id)
-    code = GOLD.id
-    if event.is_private():
-        info = []
-        for group_id, accounts in user.accounts.items():
-            group = manager.group_search(group_id)
-            if not group:
-                group_name = "账户已失效"
-            else:
-                group_name = group.name
-            if N := accounts.bank.get(code):
-                info.append(f"【{group_name}】金币{N}枚")
-        if info:
-            return "你的账户:\n" + "\n".join(info)
-    return f"你还有 {user.connecting(event.group_id).bank.get(code,0)} 枚金币"
+    user_id = event.user_id
+    user = manager.data.user(user_id)
+    if not event.is_private():
+        return f"你还有 {manager.prop_number(GOLD,user_id,event.group_id)} 枚金币"
+    info = []
+    for group_id in user.accounts_map.keys():
+        info.append(f"【{manager.data.group(group_id).nickname}】金币{manager.prop_number(GOLD,user_id,group_id)}枚")
+    if info:
+        return "你的账户:\n" + "\n".join(info)
+    else:
+        return "你的账户是空的"
 
 
 @plugin.handle({"我的信息", "我的资料"}, {"user_id", "group_id", "nickname"})

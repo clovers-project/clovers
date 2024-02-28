@@ -147,9 +147,6 @@ class DataBase(BaseModel):
 
         return self.group_dict[group_id]
 
-    def account(self, account_id: str):
-        return self.account_dict.get(account_id)
-
     def cancel_account(self, account_id: str):
         """注销 account"""
         account = self.account_dict.get(account_id)
