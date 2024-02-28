@@ -18,7 +18,6 @@ from .item import (
     DEBUG_MARKING,
 )
 from .output import (
-    bank_to_data,
     bank_card,
     prop_card,
     invest_card,
@@ -35,6 +34,26 @@ company_public_gold = config.company_public_gold
 clovers_marking = config.clovers_marking
 revolution_marking = config.revolution_marking
 debug_marking = config.debug_marking
+
+
+def xfer_out(limit: int, record: int, xfer: int):
+    if record <= -limit:
+        return 0
+    if limit < xfer - record:
+        return limit + record
+    return xfer
+
+
+def xfer_in(limit: int, record: int, xfer: int):
+    if limit <= record:
+        return 0
+    if limit < record + xfer:
+        return limit - record
+    return xfer
+
+
+invest_data = lambda bank: [(stock, n) for group_id, n in bank.items() if n != 0 and (stock := manager.group_library[group_id].stock)]
+props_data = lambda bank: [(prop, n) for prop_id, n in bank.items() if n != 0 and (prop := manager.props_library.get(prop_id))]
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
@@ -108,7 +127,15 @@ async def _(event: Event):
 @plugin.handle({"发红包"}, {"user_id", "group_id", "at", "permission"})
 @at.decorator
 async def _(event: Event):
-    return settlement(GOLD, event.args_to_int(), event.user_id, event.at[0])
+    unsettled = event.args_to_int()
+    sender_id = event.user_id
+    receiver_id = event.at[0]
+    if unsettled < 0:
+        if event.permission < 2:
+            return "你输入了负数，请不要这样做。"
+        sender_id, receiver_id = receiver_id, sender_id
+        unsettled = -unsettled
+    return manager.transfer(GOLD, unsettled, sender_id, receiver_id, event.group_id)
 
 
 @plugin.handle({"送道具"}, {"user_id", "group_id", "at", "permission"})
@@ -116,55 +143,16 @@ async def _(event: Event):
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
-    prop_name, N = args[:2]
+    prop_name, unsettled = args[:2]
     prop = manager.props_library.get(prop_name)
     if not prop:
         return f"没有【{prop_name}】这种道具。"
-    return settlement(GOLD, N, event.user_id, event.at[0])
-
-
-def settlement(prop: Prop, unsettled: int, sender_id: str, receiver_id: int):
-    pass
-
-
-@plugin.handle({"发红包", "送道具"}, {"user_id", "group_id", "at", "permission"})
-@at.decorator
-async def _(event: Event):
-    if not (args := event.args_parse()):
-        return
-    if event.raw_event.raw_command.startswith("发红包"):
-        prop = GOLD
-        N = event.args_to_int()
-    else:
-        prop_name, N = args[:2]
-        prop = manager.props_library.get(prop_name)
-        if not prop:
-            return f"没有【{prop_name}】这种道具。"
-    user_out = manager.data.user(event.user_id)
-    user_in = manager.data.user(event.at[0])
-    if N < 0:
+    if unsettled < 0:
         if event.permission < 2:
             return "你输入了负数，请不要这样做。"
-        user_out, user_in = user_in, user_out
-        N = -N
-        sender = "对方"
-    else:
-        sender = "你"
-    group_id = event.group_id
-
-    if n := manager.deal(prop, user_out.id, group_id, -N):
-        return f"数量不足。\n——{sender}还有{n}个{prop.name}。"
-
-    if manager.prop_number(VIP_CARD, user_out.id, group_id) > 0:
-        tax = 0
-        tip = f"『{VIP_CARD.name}』免手续费"
-    else:
-        tax = int(N * 0.02)
-        tip = f"扣除2%手续费：{tax}，实际到账{prop.name}数{N - tax}"
-
-    manager.deal(prop, user_in.id, group_id, N - tax)
-    prop.deal(manager.data.group(group_id).bank, tax)
-    return f"{manager.nickname(user_out.id,group_id)} 向 {manager.nickname(user_in.id,group_id)} 赠送{N}个{prop.name}\n{tip}"
+        sender_id, receiver_id = receiver_id, sender_id
+        unsettled = -unsettled
+    return manager.transfer(prop, unsettled, sender_id, receiver_id, event.group_id)
 
 
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
@@ -175,30 +163,29 @@ async def _(event: Event):
     xfer = to_int(args[0])
     if not xfer:
         return
-    user = manager.locate_user(event.user_id)
-    user_bank = user.bank
-    group = manager.locate_group(event.group_id or user.connect)
-    account_bank = user.connecting(group.group_id).bank
-    level = group.level
+    user_id = event.user_id
+    group_id = event.group_id
+    user, account = manager.locate_account(user_id, group_id)
+    group = manager.data.group(group_id)
+    xfer_record = group.extra.setdefault("xfers", {"record": 0, "limit": 0})
     if xfer < 0:
-        xfer = -xfer
-        xfer = group.xfer_out(xfer)
+        xfer = xfer_out(xfer_record["limit"], xfer_record["record"], -xfer)
         if not xfer:
-            return f"{group.name} 转出金币已到达限制：{group.xfer_record['record']}"
-        if n := GOLD.deal(account_bank, -xfer):
+            return f"{group.name} 转出金币已到达限制：{xfer_record['limit']}"
+        if n := GOLD.deal(account.bank, -xfer):
             return f"数量不足。\n——你在{group.name}还有{n}枚金币。"
-        STD_GOLD.deal(user_bank, int(xfer * level))
-        group.xfer_record["record"] -= xfer
+        STD_GOLD.deal(user.bank, int(xfer * group.level))
+        xfer_record["record"] -= xfer
     else:
-        xfer = group.xfer_in(xfer)
+        xfer = xfer_in(xfer_record["limit"], xfer_record["record"], xfer)
         if not xfer:
-            return f"{group.name} 转入金币已到达限制：{group.xfer_record['record']}"
-        if n := STD_GOLD.deal(user_bank, -xfer):
-            return f"数量不足。\n——你还有{n}枚标准金币(本群汇率：{level})。"
-        xfer = int(xfer / level)
-        GOLD.deal(account_bank, xfer)
-        group.xfer_record["record"] += xfer
-    return f"金币转移完成。目标账户实际入账{xfer}"
+            return f"{group.name} 转入金币已到达限制：{xfer_record['limit']}"
+        if n := STD_GOLD.deal(user.bank, -xfer):
+            return f"数量不足。\n——你还有{n}枚标准金币。"
+        xfer = int(xfer / group.level)
+        GOLD.deal(account.bank, xfer)
+        xfer_record["record"] += xfer
+    return f"金币转移完成。目标账户实际入账{xfer}(本群汇率：{group.level})"
 
 
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
@@ -206,94 +193,128 @@ async def _(event: Event):
     args = event.raw_event.args
     if len(args) < 2:
         return
-    group_name, xfer_out = args[:2]
-    xfer_out = to_int(xfer_out)
-    if not xfer_out:
+    group_name, xfer = args[:2]
+    xfer = to_int(xfer)
+    if not xfer:
         return
-    user = manager.locate_user(event.user_id)
-    group_in = manager.group_search(args[0])
+    group_in = manager.group_library.get(group_name)
     if not group_in:
         return f"没有 {group_name} 的注册信息"
-    bank_in = user.connecting(group_in.group_id).bank
-    group_out = manager.locate_group(event.group_id or user.connect)
-    bank_out = user.connecting(group_out.group_id).bank
-    if xfer_out < 0:
-        bank_out, bank_in = bank_in, bank_out
+    user = manager.data.user(event.user_id)
+    if not (receiver_account_id := user.accounts_map.get(group_in.id)):
+        return f"你在{group_in.nickname}没有帐户"
+    group_out = manager.data.group(event.group_id or user.connect)
+    if not (sender_account_id := user.accounts_map.get(group_out.id)):
+        return "你在本群没有帐户"
+
+    sender_bank = manager.data.account_dict[sender_account_id].bank
+    receiver_bank = manager.data.account_dict[receiver_account_id].bank
+    if xfer < 0:
+        sender_bank, receiver_bank = receiver_bank, sender_bank
         group_out, group_in = group_in, group_out
-        xfer_out = -xfer_out
+        xfer = -xfer
     ExRate = group_out.level / group_in.level
-    if xfer_out * ExRate < 1:
+    if xfer * ExRate < 1:
         return f"转入金币不可小于1枚（汇率：{round(ExRate,2)}）。"
-    xfer_out = group_out.xfer_out(xfer_out)
-    if not xfer_out:
-        return f"{group_out.name} 转出金币已到达限制：{group_out.xfer_record['record']}"
-    xfer_in = group_in.xfer_in(int(ExRate * xfer_out))
-    if not xfer_in:
-        return f"{group_in.name} 转入金币已到达限制：{group_in.xfer_record['record']}"
-    xfer_out = math.ceil(xfer_in / ExRate)
-    if n := GOLD.deal(bank_out, -xfer_out):
+    record_out = group_out.extra.setdefault("xfers", {"record": 0, "limit": 0})
+    sender_xfer = xfer_out(record_out["limit"], record_out["record"], xfer)
+    if not sender_xfer:
+        return f"{group_out.name} 转出金币已到达限制：{record_out['limit']}"
+    record_in = group_in.extra.setdefault("xfers", {"record": 0, "limit": 0})
+    receiver_xfer = xfer_in(record_in["limit"], record_in["record"], int(ExRate * sender_xfer))
+    if not receiver_xfer:
+        return f"{group_in.name} 转入金币已到达限制：{record_in['limit']}"
+    sender_xfer = math.ceil(receiver_xfer / ExRate)
+    if n := GOLD.deal(sender_bank, -sender_xfer):
         return f"数量不足。\n——你还有{n}枚金币。"
-    GOLD.deal(bank_in, xfer_in)
-    group_in.xfer_record["record"] += xfer_in
-    group_out.xfer_record["record"] -= xfer_out
-    return f"{group_out.name}向{group_in.name}转移{xfer_out} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {xfer_in}"
+    GOLD.deal(receiver_bank, receiver_xfer)
+    record_out["record"] -= sender_xfer
+    record_in["record"] += receiver_xfer
+    return f"{group_out.name}向{group_in.name}转移{sender_xfer} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {receiver_xfer}"
 
 
-@plugin.handle({"我的金币"}, {"user_id", "group_id"})
+@plugin.handle({"我的"}, {"user_id", "group_id"})
 async def _(event: Event):
+    if not (args := event.args_parse()):
+        return
+    prop = manager.props_library.get(args[0])
+    if not prop:
+        return
     user_id = event.user_id
     user = manager.data.user(user_id)
-    if not event.is_private():
-        return f"你还有 {manager.prop_number(GOLD,user_id,event.group_id)} 枚金币"
-    info = []
-    for group_id in user.accounts_map.keys():
-        info.append(f"【{manager.data.group(group_id).nickname}】金币{manager.prop_number(GOLD,user_id,group_id)}枚")
-    if info:
-        return "你的账户:\n" + "\n".join(info)
+    if prop.domain != 1:
+        return f"你还有 {user.bank.get(prop.id,0)} 个{prop.name}"
+    if event.is_private():
+        info = []
+        for group_id, account_id in user.accounts_map.items():
+            account = manager.data.account_dict[account_id]
+            info.append(f"【{manager.data.group(group_id).nickname}】{prop.name} {account.bank.get(prop.id,0)}个")
+        if info:
+            return "你的账户:\n" + "\n".join(info)
+        else:
+            return "你的账户是空的"
+    group_id = event.group_id
+    account_id = user.accounts_map.get(group_id)
+    if account_id:
+        account = manager.data.account_dict[account_id]
     else:
-        return "你的账户是空的"
+        account = manager.new_account(user_id, group_id)
+    return f"你还有 {account.bank.get(prop.id,0)} 个{prop.name}"
 
 
 @plugin.handle({"我的信息", "我的资料"}, {"user_id", "group_id", "nickname"})
 async def _(event: Event):
-    user = manager.locate_user(event.user_id)
-    group_id = event.group_id or user.connect
-    account = user.connecting(group_id)
+    user, account = manager.account(event)
     info = []
     lines = []
-    if DEBUG_MARKING.user_N(user, group_id):
+    if DEBUG_MARKING.N(user, account):
         lines.append(debug_marking)
-    if CLOVERS_MARKING.user_N(user, group_id):
+    if CLOVERS_MARKING.N(user, account):
         lines.append(clovers_marking)
-    if REVOLUTION_MARKING.user_N(user, group_id):
+    if REVOLUTION_MARKING.N(user, account):
         lines.append(revolution_marking)
 
-    info.append(avatar_card(await download_url(user.avatar_url), account.nickname, lines))
+    info.append(
+        avatar_card(
+            await download_url(user.avatar_url),
+            account.name or user.name or user.id,
+            lines,
+        )
+    )
     lines = []
     i = 0
-    for marking_prop in marking_library.data:
-        if count := marking_prop.user_N(user, group_id):
+    for marking_prop in manager.marking_library.values():
+        if count := marking_prop.N(user, account):
             count = min(count, 99)
             lines.append(f"[color][{marking_prop.color}]Lv.{count}{'  'if count < 10 else ' '}{marking_prop.tip}")
             i += 1
             if i == 3:
                 break
-    delta_days = (datetime.today() - account.sign_date).days
-
-    if delta_days == 0:
-        is_sign = ["今日已签到", "green"]
-    else:
-        is_sign = [f"连续{delta_days}天 未签到", "red"]
 
     lines += ["" for _ in range(3 - len(lines))]
-    lines.append(f"金币 {format_number(GOLD.user_N(user, group_id))}")
+    lines.append(f"金币 {format_number(account.bank.get(GOLD.id, 0))}")
     lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
-    lines.append(f"[color][{is_sign[1]}]{is_sign[0]}")
-    dist = [(n, manager.locate_group(group_id).name) for group_id in user.accounts if (n := GOLD.user_N(user, group_id)) > 0]
+    delta_days = (datetime.today() - account.sign_in).days
+
+    if delta_days == 0:
+        lines.append("[color][green]今日已签到")
+    else:
+        lines.append(f"[color][red]连续{delta_days}天 未签到")
+
+    dist = [
+        (n, manager.data.group(group_id).name)
+        for group_id, account_id in user.accounts_map.items()
+        if (n := manager.data.account_dict[account_id].bank.get(GOLD.id, 0)) > 0
+    ]
     info.append(account_card(dist or [(1, "None")], "\n".join(lines)))
-    if data := invest_card(bank_to_data(user.invest, manager.stocks_library.search), "股票信息"):
-        info.append(data)
+    data = invest_data(user.invest)
+    if data:
+        info.append(invest_card(data, "股票信息"))
     return manager.info_card(info, event.user_id)
+
+
+invest_data = lambda bank: [(stock, n) for group_id, n in bank.items() if n != 0 and (stock := manager.group_library[group_id].stock)]
+props_data = lambda bank: [(prop, n) for prop_id, n in bank.items() if n != 0 and (prop := manager.props_library.get(prop_id))]
 
 
 @plugin.handle({"我的道具"}, {"user_id", "group_id", "nickname"})
@@ -304,9 +325,9 @@ async def _(event: Event):
     props.update(group_account.bank)
     if not props:
         return "您的仓库空空如也。"
-    flag = len(props) < 10 or event.single_arg() in {"信息", "介绍", "详情"}
-    data = bank_to_data(props, props_library.search)
-    if flag:
+
+    data = props_data(props)
+    if len(data) < 10 or event.single_arg() in {"信息", "介绍", "详情"}:
         info = bank_card(data)
     else:
         info = [prop_card(data)]
@@ -315,27 +336,27 @@ async def _(event: Event):
 
 @plugin.handle({"群金库"}, {"user_id", "group_id", "permission"})
 async def _(event: Event):
-    if not (args := event.args_parse()):
+    if event.is_private() or not (args := event.args_parse()):
         return
-    command, Nc = args[:2]
+    command, N = args[:2]
     user_id = event.user_id
     group_id = event.group_id
-    group = manager.locate_group(group_id)
+    group = manager.data.group(group_id)
     if command == "查看":
-        bank_data = bank_to_data(group.bank, props_library.search)
-        if len(bank_data) < 6:
-            info = bank_card(bank_data)
+        data = props_data(group.bank)
+        if len(data) < 6:
+            info = bank_card(data)
         else:
-            info = [prop_card(bank_data, "群金库")]
-        invest_data = bank_to_data(group.bank, manager.stocks_library.search)
+            info = [prop_card(data, "群金库")]
+        data = invest_data(group.invest)
         info.append(invest_card(invest_data, "群投资"))
         return manager.info_card(info, user_id)
     sign, name = command[0], command[1:]
-    user = manager.locate_user(user_id)
-    if item := props_library.search(name):
+    user, account = manager.locate_account(user_id, group_id)
+    if item := manager.props_library.get(name):
         bank_in = group.bank
-        bank_out = item.user_bank(user, group_id)
-    elif item := manager.stocks_library.search(name):
+        bank_out = item.locate_bank(user, account)
+    elif (group := manager.group_library.get(name)) and (item := group.stock):
         bank_in = group.invest
         bank_out = user.invest
     else:
@@ -392,28 +413,17 @@ async def _(event: Event):
 # 超管指令
 
 
-@plugin.handle({"获取金币"}, {"user_id", "group_id", "permission"})
-@superuser.decorator
-async def _(event: Event):
-    N = event.args_to_int()
-    user = manager.locate_user(event.user_id)
-    if n := GOLD.deal_with(user, event.group_id, N):
-        return f"获取金币失败，你的金币（{n}）数量不足。"
-    return f"你获得了 {N} 金币"
-
-
-@plugin.handle({"获取道具"}, {"user_id", "group_id", "nickname", "permission"})
+@plugin.handle({"获取"}, {"user_id", "group_id", "nickname", "permission"})
 @superuser.decorator
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
     name, N = args[:2]
-    prop = props_library.search(name)
+    prop = manager.props_library.get(name)
     if not prop:
         return f"没有【{name}】这种道具。"
-    user = manager.locate_user(event.user_id)
-    if n := prop.deal_with(user, event.group_id, N):
-        return f"获取道具失败，你的【{prop.name}】（{n}））数量不足。"
+    if n := prop.deal(prop.locate_bank(*manager.account(event)), N):
+        return f"获取失败，你的【{prop.name}】（{n}））数量不足。"
     return f"你获得了{N}个【{prop.name}】！"
 
 
@@ -428,7 +438,8 @@ async def _():
 @plugin.handle({"执行代码"}, {"permission"})
 @superuser.decorator
 async def _(event: Event):
-    exec(event.raw_event.raw_command[4:])
+    code = event.raw_event.raw_command[4:]
+    exec(code)
 
 
 __plugin__ = plugin

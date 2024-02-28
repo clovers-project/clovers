@@ -28,10 +28,6 @@ def endline(tip: str) -> str:
     return f"----\n[right][color][grey][font][][30]{tip}"
 
 
-def bank_to_data(bank: Bank, locate_item):
-    return [(i, v) for k, v in bank.items() if v != 0 and (i := locate_item(k))]
-
-
 def bank_card(data: list[tuple[Prop, int]]):
     data.sort(key=lambda x: x[0].rare)
 

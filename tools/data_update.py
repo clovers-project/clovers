@@ -197,6 +197,7 @@ for group_id, group in data.group.items():
     group.bank["1111"] = company.bank
     group.extra["revolution_achieve"] = group.Achieve_revolution
     group.extra["revolution_time"] = group.revolution_time
+    group.level = company.level
     if company.invest:
         group.invest = company.invest
         group.intro = company.intro

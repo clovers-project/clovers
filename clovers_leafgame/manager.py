@@ -14,7 +14,7 @@ from clovers_utils.linecard import info_splicing, ImageList
 from clovers_utils.library import Library
 from clovers_leafgame_core.clovers import Event
 from clovers_leafgame_core.data import Bank, Account, User, Group, Account, DataBase
-from .item import Prop, props_library, marking_library
+from .item import Prop, props_library, marking_library, VIP_CARD
 
 RankKey = Callable[[str], int | float]
 
@@ -51,7 +51,7 @@ class Manager:
 
     def info_card(self, info: ImageList, user_id: str, BG_type=None):
         extra = self.data.user(user_id).extra
-        BG_type = BG_type or extra.setdefault("BG_type", "#FFFFFF99")
+        BG_type = BG_type or extra.get("BG_type", "#FFFFFF99")
         BG_PATH = self.BG_PATH / f"{user_id}.png"
         if not BG_PATH.exists():
             BG_PATH = self.BG_PATH / "default.png"
@@ -84,25 +84,35 @@ class Manager:
         account.name = event.nickname
         return user, account
 
-    def locate_bank(self, prop: Prop, user_id: str, group_id: str):
-        user, account = self.locate_account(user_id, group_id)
-        match prop.domain:
-            case 1:
-                return account.bank
-            case _:
-                return user.bank
-
-    def deal(self, prop: Prop, user_id: str, group_id: str, unsettled: int):
-        bank = self.locate_bank(prop, user_id, group_id)
-        return prop.deal(bank, unsettled)
-
-    def prop_number(self, prop: Prop, user_id: str, group_id: str):
-        bank = self.locate_bank(prop, user_id, group_id)
-        return bank.get(prop.id, 0)
-
-    def nickname(self, user_id: str, group_id: str):
-        user, account = self.locate_account(user_id, group_id)
-        return account.name or user.name or user_id
+    def transfer(
+        self,
+        prop: Prop,
+        unsettled: int,
+        sender_id: str,
+        receiver_id: str,
+        group_id: str,
+    ):
+        sender, sender_account = self.locate_account(sender_id, group_id)
+        receiver, receiver_account = self.locate_account(receiver_id, group_id)
+        if prop.domain == 1:
+            sender_bank = sender_account.bank
+            receiver_bank = receiver_account.bank
+        else:
+            sender_bank = sender.bank
+            receiver_bank = receiver.bank
+        sender_name = sender_account.name or sender.name or sender.id
+        if n := prop.deal(sender_bank, -unsettled):
+            return f"数量不足。\n——{sender_name}还有{n}个{prop.name}。"
+        receiver_name = receiver_account.name or receiver.name or receiver.id
+        if sender_account.bank.get(VIP_CARD.id):
+            tax = 0
+            tip = f"『{VIP_CARD.name}』免手续费"
+        else:
+            tax = int(unsettled * 0.02)
+            tip = f"扣除2%手续费：{tax}，实际到账{prop.name}数{unsettled - tax}"
+        prop.deal(receiver_bank, unsettled - tax)
+        prop.deal(self.data.group(group_id).bank, tax)
+        return f"{sender_name} 向 {receiver_name} 赠送{unsettled}个{prop.name}\n{tip}"
 
     def group_wealths(self, group_name: str, prop_id: str) -> list[int]:
         """

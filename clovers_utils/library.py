@@ -16,6 +16,21 @@ class Library[K, V]:
         key = self._index_key.get(index, index)
         self._key_data[key] = data
 
+    def __contains__(self, key):
+        return key in self._key_indices or key in self._index_key
+
+    def __iter__(self):
+        return iter(self._key_data)
+
+    def keys(self):
+        return self._key_data.keys()
+
+    def values(self):
+        return self._key_data.values()
+
+    def items(self):
+        return self._key_data.items()
+
     def set_item(self, key: K, indices: set[K], data: V):
         if old_indices := self._key_indices.get(key):
             for i in old_indices:

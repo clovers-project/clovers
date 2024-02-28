@@ -18,6 +18,31 @@ class Item(BaseModel):
         bank[prop_id] = n + unsettled
 
 
+class User(BaseModel):
+    id: str
+    name: str = None
+    avatar_url: str = None
+    connect: str = None
+    bank: Bank = Bank()
+    invest: Bank = Bank()
+    extra: dict = {}
+    accounts_map: KeyMap = {}
+    """Find account ID from group_id"""
+
+
+class Account(BaseModel):
+    user_id: str
+    group_id: str
+    name: str = None
+    sign_in: datetime = None
+    bank: Bank = Bank()
+    extra: dict = {}
+
+    @property
+    def id(self):
+        return f"{self.user_id}-{self.group_id}"
+
+
 class Prop(Item):
 
     rare: int = None
@@ -53,18 +78,15 @@ class Prop(Item):
         number = int(self.id[3:])
         return rare, domain, flow, number
 
-    # def user_bank(self, user: User, group_id: str):
-    #     match self.domain:
-    #         case 1:
-    #             return user
-    #         case _:
-    #             return user.bank
+    def locate_bank(self, user: User, account: Account):
+        match self.domain:
+            case 1:
+                return account.bank
+            case _:
+                return user.bank
 
-    # def user_N(self, user: User, group_id: str):
-    #     return self.user_bank(user, group_id).get(self.id, 0)
-
-    # def deal_with(self, user: User, group_id: str, unsettled: int):
-    #     return self.deal(self.user_bank(user, group_id), unsettled)
+    def N(self, user: User, account: Account):
+        return self.locate_bank(user, account).get(self.id, 0)
 
 
 class Stock(Item):
@@ -80,22 +102,11 @@ class Stock(Item):
     """全群资产"""
 
 
-class User(BaseModel):
-    id: str
-    name: str = None
-    avatar_url: str = None
-    connect: str = None
-    bank: Bank = Bank()
-    invest: Bank = Bank()
-    extra: dict = {}
-    accounts_map: KeyMap = {}
-    """Find account ID from group_id"""
-
-
 class Group(BaseModel):
     id: str
     name: str = None
     avatar_url: str = None
+    level: int = 1
     stock: Stock = None
     bank: Bank = Bank()
     invest: Bank = Bank()
@@ -106,19 +117,6 @@ class Group(BaseModel):
     @property
     def nickname(self):
         return self.stock.name if self.stock else self.name or self.id
-
-
-class Account(BaseModel):
-    user_id: str
-    group_id: str
-    name: str = None
-    sign_in: datetime = None
-    bank: Bank = Bank()
-    extra: dict = {}
-
-    @property
-    def id(self):
-        return f"{self.user_id}-{self.group_id}"
 
 
 class DataBase(BaseModel):
