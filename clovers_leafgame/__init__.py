@@ -171,15 +171,15 @@ async def _(event: Event):
     if xfer < 0:
         xfer = xfer_out(xfer_record["limit"], xfer_record["record"], -xfer)
         if not xfer:
-            return f"{group.name} 转出金币已到达限制：{xfer_record['limit']}"
+            return f"本群转出金币已到达限制：{xfer_record['limit']}"
         if n := GOLD.deal(account.bank, -xfer):
-            return f"数量不足。\n——你在{group.name}还有{n}枚金币。"
+            return f"数量不足。\n——你在本群还有{n}枚金币。"
         STD_GOLD.deal(user.bank, int(xfer * group.level))
         xfer_record["record"] -= xfer
     else:
         xfer = xfer_in(xfer_record["limit"], xfer_record["record"], xfer)
         if not xfer:
-            return f"{group.name} 转入金币已到达限制：{xfer_record['limit']}"
+            return f"本群转入金币已到达限制：{xfer_record['limit']}"
         if n := STD_GOLD.deal(user.bank, -xfer):
             return f"数量不足。\n——你还有{n}枚标准金币。"
         xfer = int(xfer / group.level)
@@ -219,21 +219,21 @@ async def _(event: Event):
     record_out = group_out.extra.setdefault("xfers", {"record": 0, "limit": 0})
     sender_xfer = xfer_out(record_out["limit"], record_out["record"], xfer)
     if not sender_xfer:
-        return f"{group_out.name} 转出金币已到达限制：{record_out['limit']}"
+        return f"{group_out.nickname} 转出金币已到达限制：{record_out['limit']}"
     record_in = group_in.extra.setdefault("xfers", {"record": 0, "limit": 0})
     receiver_xfer = xfer_in(record_in["limit"], record_in["record"], int(ExRate * sender_xfer))
     if not receiver_xfer:
-        return f"{group_in.name} 转入金币已到达限制：{record_in['limit']}"
+        return f"{group_in.nickname} 转入金币已到达限制：{record_in['limit']}"
     sender_xfer = math.ceil(receiver_xfer / ExRate)
     if n := GOLD.deal(sender_bank, -sender_xfer):
         return f"数量不足。\n——你还有{n}枚金币。"
     GOLD.deal(receiver_bank, receiver_xfer)
     record_out["record"] -= sender_xfer
     record_in["record"] += receiver_xfer
-    return f"{group_out.name}向{group_in.name}转移{sender_xfer} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {receiver_xfer}"
+    return f"{group_out.nickname}向{group_in.nickname}转移{sender_xfer} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {receiver_xfer}"
 
 
-@plugin.handle({"我的"}, {"user_id", "group_id"})
+@plugin.handle({"查询我的"}, {"user_id", "group_id"})
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
@@ -313,10 +313,6 @@ async def _(event: Event):
     return manager.info_card(info, event.user_id)
 
 
-invest_data = lambda bank: [(stock, n) for group_id, n in bank.items() if n != 0 and (stock := manager.group_library[group_id].stock)]
-props_data = lambda bank: [(prop, n) for prop_id, n in bank.items() if n != 0 and (prop := manager.props_library.get(prop_id))]
-
-
 @plugin.handle({"我的道具"}, {"user_id", "group_id", "nickname"})
 async def _(event: Event):
     user, group_account = manager.account(event)
@@ -349,8 +345,9 @@ async def _(event: Event):
         else:
             info = [prop_card(data, "群金库")]
         data = invest_data(group.invest)
-        info.append(invest_card(invest_data, "群投资"))
-        return manager.info_card(info, user_id)
+        if data:
+            info.append(invest_card(data, "群投资"))
+        return manager.info_card(info, user_id) if info else "群金库是空的"
     sign, name = command[0], command[1:]
     user, account = manager.locate_account(user_id, group_id)
     if item := manager.props_library.get(name):

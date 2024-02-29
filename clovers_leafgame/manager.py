@@ -133,7 +133,8 @@ class Manager:
                 invest[group_id] = 0
                 continue
             stock = group.stock
-            i += stock.stock_value * n / stock.issuance
+            if stock.issuance > 0:
+                i += stock.stock_value * n / stock.issuance
         return int(i)
 
     @typing_extensions.deprecated("The `group_search` method is deprecated; use `group_library.get` instead.", category=None)

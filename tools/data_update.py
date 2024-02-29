@@ -115,6 +115,7 @@ class Group(BaseModel):
     id: str = None
     group_id: str = None
     namelist: set = set()
+    name: str = None
     revolution_time: float = 0.0
     """存入extra"""
     Achieve_revolution: dict[str, int] = {}
