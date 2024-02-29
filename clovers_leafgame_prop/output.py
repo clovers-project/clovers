@@ -1,4 +1,4 @@
-from clovers_leafgame_core.linecard import linecard
+from clovers_utils.linecard import linecard
 from clovers_leafgame.output import font_manager, endline
 import numpy as np
 

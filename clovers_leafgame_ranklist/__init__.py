@@ -2,7 +2,6 @@ import re
 import asyncio
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame_core.clovers import Event
-from clovers_leafgame.item import library
 from clovers_utils.tools import download_url
 from .output import draw_rank
 

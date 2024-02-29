@@ -2,25 +2,26 @@ import random
 import os
 import json
 from pathlib import Path
-from clovers_leafgame_core.data import Prop
-from clovers_leafgame.item import library, AIR
+from clovers_leafgame.item import Prop, AIR
+from clovers_leafgame.main import manager
 
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
-
 with open(library_file, "r", encoding="utf8") as f:
-    library.update(Prop(id=k, **v) for k, v in json.load(f).items())
+    for k, v in json.load(f).items():
+        prop = Prop(id=k, **v)
+        manager.props_library.set_item(prop.id, [prop.name], prop)
 
 pool = {
-    rare: [library.search(name).id for name in name_list]
+    rare: [manager.props_library[name].id for name in name_list]
     for rare, name_list in {
         3: ["优质空气", "四叶草标记", "挑战徽章", "设置许可证", "初级元素"],
-        4: ["高级空气", "铂金会员卡"],
+        4: ["高级空气", "铂金会员卡", "钻石会员卡"],
         5: ["特级空气", "进口空气", "10%结算补贴", "10%额外奖励", "神秘天平", "幸运硬币"],
         6: ["纯净空气", "钻石", "道具兑换券", "超级幸运硬币", "重开券"],
     }.items()
 }
-AIR_PACK = library.search("空气礼包")
-RED_PACK = library.search("随机红包")
+AIR_PACK = manager.props_library["空气礼包"]
+RED_PACK = manager.props_library["随机红包"]
 
 
 def gacha() -> str:

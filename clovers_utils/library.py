@@ -55,8 +55,9 @@ class Library[K, V]:
             return
         raise KeyError(index)
 
-    def update(self, data):
-        return self._key_data.update(data)
+    def update(self, data: "Library[K, V]"):
+        for key, indices in data._key_indices.items():
+            self.set_item(key, indices, data[key])
 
     def get(self, index: K, default: V = None):
         if key := self._index_key.get(index):

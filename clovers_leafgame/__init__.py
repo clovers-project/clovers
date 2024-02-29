@@ -11,7 +11,6 @@ from .item import (
     Prop,
     GOLD,
     STD_GOLD,
-    VIP_CARD,
     LICENSE,
     CLOVERS_MARKING,
     REVOLUTION_MARKING,
@@ -430,13 +429,6 @@ async def _(event: Event):
 async def _():
     manager.save()
     print("游戏数据已保存！")
-
-
-@plugin.handle({"执行代码"}, {"permission"})
-@superuser.decorator
-async def _(event: Event):
-    code = event.raw_event.raw_command[4:]
-    exec(code)
 
 
 __plugin__ = plugin

@@ -30,7 +30,6 @@ from clovers_utils.library import Library
 
 props_library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 props_library: Library[str, Prop] = Library()
-props_library = Library()
 with open(props_library_file, "r", encoding="utf8") as f:
     for k, v in json.load(f).items():
         prop = Prop(id=k, **v)
@@ -45,6 +44,7 @@ CLOVERS_MARKING = props_library["四叶草标记"]
 REVOLUTION_MARKING = props_library["路灯挂件标记"]
 DEBUG_MARKING = props_library["Debug奖章"]
 PROP_FOR_TEST = props_library["测试金库"]
+
 marking_library: Library[str, Prop] = Library()
 marking_library.set_item(PROP_FOR_TEST.id, [PROP_FOR_TEST.name], PROP_FOR_TEST)
 marking_library.set_item(AIR.id, [AIR.name], AIR)
