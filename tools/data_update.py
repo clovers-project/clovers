@@ -68,6 +68,7 @@ class User(BaseModel):
     bank: Bank = Bank()
     invest: Bank = Bank()
     extra: dict = {}
+    accounts_map: dict = {}
 
 
 class Company(BaseModel):
@@ -129,6 +130,7 @@ class Group(BaseModel):
     intro: Union[str, None] = None
     """群介绍"""
     extra: dict = {}
+    accounts_map: dict = {}
 
 
 class DataBase(BaseModel):
@@ -188,7 +190,10 @@ for user_id, user in data.user.items():
         user.extra["lose_achieve"] = user.Achieve_lose
         group_account.group_id = group_id
         group_account.user_id = user_id
-        data.account_dict[f"{user_id}-{group_id}"] = group_account
+        account_id = f"{user_id}-{group_id}"
+        user.accounts_map[group_id] = account_id
+        data.group[group_id].accounts_map[user_id] = account_id
+        data.account_dict[account_id] = group_account
     user.name = user.nickname
     user.bank = {recode(k): v for k, v in user.props.items()}
     user.invest = Bank(invest)
@@ -198,15 +203,14 @@ for group_id, group in data.group.items():
     group.bank["1111"] = company.bank
     group.extra["revolution_achieve"] = group.Achieve_revolution
     group.extra["revolution_time"] = group.revolution_time
-    group.level = company.level
-    if company.invest:
-        group.invest = company.invest
-        group.intro = company.intro
-        group.stock = Stock()
-        group.stock.id = group.group_id
-        group.stock.name = company.company_name
-        group.stock.time = company.time
-        group.stock.issuance = company.issuance
+    group.level = company.level or 1
+    group.invest = company.invest
+    group.intro = company.intro
+    group.stock = Stock()
+    group.stock.id = group.group_id
+    group.stock.name = company.company_name
+    group.stock.time = company.time
+    group.stock.issuance = company.issuance
 
 data.group_dict = data.group
 data.user_dict = data.user

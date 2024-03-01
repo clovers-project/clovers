@@ -35,7 +35,6 @@ class Config(BaseModel):
 config_key = __package__
 config = Config.parse_obj(clovers_config.get(config_key, {}))
 clovers_config[config_key] = config.dict()
-clovers_config.save()
 
 plugins_path = Path(config.plugins_path)
 plugins_path.mkdir(exist_ok=True, parents=True)

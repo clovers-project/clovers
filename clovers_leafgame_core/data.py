@@ -107,7 +107,7 @@ class Group(BaseModel):
     name: str = None
     avatar_url: str = None
     level: int = 1
-    stock: Stock = None
+    stock: Stock = Stock()
     bank: Bank = Bank()
     invest: Bank = Bank()
     extra: dict = {}

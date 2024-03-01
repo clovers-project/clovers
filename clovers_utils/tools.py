@@ -10,7 +10,7 @@ async def download_url(url: str):
                 resp = await client.get(url, timeout=20)
                 resp.raise_for_status()
                 return resp.content
-            except Exception:
+            except httpx.HTTPStatusError:
                 await asyncio.sleep(3)
     return None
 

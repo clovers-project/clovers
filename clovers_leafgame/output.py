@@ -7,10 +7,10 @@ from PIL.Image import Image as IMG
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
-from clovers_leafgame_core.data import Bank, Prop, Stock
-from clovers_utils.linecard import FontManager, linecard, info_splicing
+from clovers_leafgame_core.data import Prop, Stock
+from clovers_utils.linecard import FontManager, linecard
 from clovers_utils.tools import format_number
-from .main import config, manager
+from .main import config
 
 main_path = config.main_path
 
@@ -68,9 +68,11 @@ def prop_card(data: list[tuple[Prop, int]], tip: str = None):
 
 def invest_card(data: list[tuple[Stock, int]], tip: str = None):
     def result(stock: Stock, n: int):
+        issuance = stock.issuance
+        unit = format_number(stock.floating / issuance) if issuance else "未发行"
         return (
             f"[pixel][20]{stock.name}\n"
-            f"[pixel][20]结算 [nowrap]\n[color][green]{format_number(stock.floating / stock.issuance)}[nowrap]\n"
+            f"[pixel][20]结算 [nowrap]\n[color][green]{unit}[nowrap]\n"
             f"[pixel][400]数量 [nowrap]\n[color][green]{n}"
         )
 

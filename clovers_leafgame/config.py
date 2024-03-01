@@ -9,18 +9,8 @@ class Config(BaseModel):
     main_path: str = str(Path("LiteGames").absolute())
     # 每日签到的范围
     sign_gold: tuple[int, int] = (200, 500)
-    # 每日补贴的范围
-    security_gold: tuple[int, int] = (100, 300)
-    # 重置签到的范围
-    revolt_gold: tuple[int, int] = (1000, 2000)
-    # 重置冷却时间，设置为0禁用发起重置
-    revolt_cd: int = 28800
-    # 重置的基尼系数
-    revolt_gini: float = 0.68
     # 最大赌注
     max_bet_gold: int = 2000
-    # 最大赌注
-    company_public_gold: int = 20000
     # 默认赌注
     bet_gold: int = 200
     # 标记字符串
