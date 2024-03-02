@@ -117,8 +117,8 @@ class Manager:
         """
         group = self.group_library.get(group_name)
         if not group:
-            return 0
-        wealths = [self.data.account(account_id).bank.get(prop_id, 0) for account_id in group.accounts_map]
+            return []
+        wealths = [self.data.account_dict[account_id].bank.get(prop_id, 0) for account_id in group.accounts_map]
         wealths.append(group.bank.get(prop_id, 0))
         return wealths
 

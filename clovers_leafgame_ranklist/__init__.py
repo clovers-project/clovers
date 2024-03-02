@@ -1,4 +1,5 @@
 import re
+import heapq
 import asyncio
 from collections import Counter
 from clovers_leafgame.main import plugin, manager
@@ -84,7 +85,7 @@ async def _(event: Event):
         ranklist = group_ranklist(title, group_id)
     if not ranklist:
         return f"无数据，无法进行{title}排行"
-    ranklist.sort(key=lambda x: x[1], reverse=True)
+    ranklist = heapq.nlargest(20, ranklist, key=lambda x: x[1])
     nickname_data = []
     rank_data = []
     task_list = []

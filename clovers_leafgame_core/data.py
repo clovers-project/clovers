@@ -17,6 +17,10 @@ class Item(BaseModel):
             return n or -1
         bank[prop_id] = n + unsettled
 
+    def force_deal(self, bank: Bank, unsettled: int):
+        prop_id = self.id
+        bank[prop_id] = bank.get(prop_id, 0) + unsettled
+
 
 class User(BaseModel):
     id: str
