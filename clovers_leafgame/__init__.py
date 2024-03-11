@@ -20,6 +20,7 @@ from .output import (
     account_card,
 )
 from .main import plugin, config, manager
+from .leafgame import *
 
 sign_gold = config.sign_gold
 clovers_marking = config.clovers_marking
@@ -286,6 +287,7 @@ async def _():
 
 
 __plugin__ = plugin
+
 
 """
 恶魔轮盘：
