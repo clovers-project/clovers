@@ -104,6 +104,8 @@ class Stock(Item):
     """固定资产"""
     stock_value: int = 0
     """全群资产"""
+    exchange: dict[str, tuple[int, float]] = {}
+    """交易信息"""
 
 
 class Group(BaseModel):

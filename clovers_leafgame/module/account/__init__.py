@@ -20,9 +20,9 @@ from clovers_leafgame.output import (
     avatar_card,
     account_card,
 )
+
 from clovers_core.config import config as clovers_config
 from .config import Config
-
 
 config = Config.parse_obj(clovers_config.get(__package__, {}))
 
@@ -48,17 +48,16 @@ async def _(event: Event):
     if BG_type:
         if BG_type in {"高斯模糊", "模糊"}:
             user.extra["BG_type"] = "GAUSS"
-            log.append("背景蒙版类型设置为：高斯模糊")
         elif BG_type in {"无", "透明"}:
-            log.append("背景蒙版类型设置为：透明")
             user.extra["BG_type"] = "NONE"
-        elif BG_type.startswith("#"):
-            log.append(f"背景蒙版类型设置为：{BG_type}")
+        else:
             try:
                 ImageColor.getcolor(BG_type, "RGB")
                 user.extra["BG_type"] = BG_type
             except ValueError:
-                log.append("设置失败")
+                BG_type = "ValueError"
+                pass
+        log.append("背景蒙版类型设置为：{BG_type}}")
 
     if url_list := event.raw_event.kwargs["image_list"]:
         image = await download_url(url_list[0])
@@ -288,29 +287,3 @@ async def _(event: Event):
 async def _():
     manager.save()
     print("游戏数据已保存！")
-
-
-__plugin__ = plugin
-
-
-"""
-恶魔轮盘：
-
-一把只有一发空仓的左轮枪。你可以对自己开一枪，如果你足够幸运躲过一劫，那么你的名下所有账户的金币与股票净值都将翻10倍。
-如果你不幸中弹,你将会在这个世界上消失。
-
-绯红迷雾之书：
-
-把你的个人数据回溯到到任意时间节点。
-可回溯的时间节点有多少取决于服务器备份设置
-    --机器人bug研究中心
-
-手中的左轮没有消失，你的眼前出现了一张纸条。
-为了庆祝你活了下来,我们还要送你一份礼物。
-你手中的左轮已经重新装好了子弹。
-你可以把它扔在仓库里。
-但是如果你想继续开枪的话，那就来吧。
-                            ——小月儿
-*你获得了 【恶魔轮盘】*1
-
-"""

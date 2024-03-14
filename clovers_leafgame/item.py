@@ -1,6 +1,4 @@
 """
-
-
 小游戏框架基础道具实例
     AIR:空气
     GOLD:金币
@@ -11,7 +9,7 @@
 import os
 import json
 from pathlib import Path
-from clovers_leafgame_core.data import Prop
+from .core.data import Prop
 from clovers_utils.library import Library
 
 # def user_bank(self, user: User, group_id: str):

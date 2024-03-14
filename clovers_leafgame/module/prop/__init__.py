@@ -1,26 +1,17 @@
 import re
 from collections import Counter
 from collections.abc import Callable, Coroutine
-from clovers_leafgame.main import plugin, manager
-from clovers_leafgame_core.clovers import Event, to_me
-from clovers_leafgame_core.data import Prop
 from clovers_utils.tools import to_int
-
-from clovers_leafgame.item import GOLD
-from .library import gacha, AIR_PACK, RED_PACK
-
+from clovers_leafgame.core.clovers import Event, to_me
+from clovers_leafgame.main import plugin, manager
+from clovers_leafgame.item import Prop, GOLD
 from clovers_leafgame.output import prop_card
 from .output import report_card
+from .library import gacha, AIR_PACK, RED_PACK
 
 from clovers_core.config import config as clovers_config
-from .config import Config
 
-
-config_key = __package__
-config = Config.parse_obj(clovers_config.get(config_key, {}))
-clovers_config[config_key] = config.dict()
-
-gacha_gold = config.gacha_gold
+gacha_gold = clovers_config.get(__package__, {}).get("gacha_gold", 50)
 
 
 @plugin.handle(r"^.+连抽?卡?|单抽", {"user_id", "group_id", "nickname", "to_me"})
@@ -38,28 +29,22 @@ async def _(event: Event):
     if n := GOLD.deal(account.bank, -gold):
         return f"{N}连抽卡需要{gold}金币，你的金币：{n}。"
 
-    prop_data: dict[int, list[tuple[Prop, int]]] = {0: [], 1: [], 2: []}
+    prop_data: list[list[tuple[Prop, int]]] = [[], [], []]
     report_data = {"prop_star": 0, "prop_n": 0, "air_star": 0, "air_n": 0}
-    # for prop_id, n in Counter(gacha() for _ in range(N)).items():
-    for prop_id, n in Counter("5001" for _ in range(N)).items():
+    for prop_id, n in Counter(gacha() for _ in range(N)).items():
         prop = manager.props_library[prop_id]
         prop_data[prop.domain].append((prop, n))
         if prop.domain == 0:
             star_key = "air_star"
             n_key = "air_n"
         else:
-            prop.deal(prop.locate_bank(user, account), n)
             star_key = "prop_star"
             n_key = "prop_n"
-
+            prop.deal(prop.locate_bank(user, account), n)
         report_data[star_key] += prop.rare * n
         report_data[n_key] += n
     if N < 10:
-        info = ["你获得了"]
-        info += [f"({prop.rare}☆){prop.name}:{n}个" for prop, n in prop_data[0]]
-        info += [f"({prop.rare}☆){prop.name}:{n}个" for prop, n in prop_data[1]]
-        info += [f"({prop.rare}☆){prop.name}:{n}个" for prop, n in prop_data[2]]
-        return "\n".join(info)
+        return "你获得了" + "\n".join(f"({prop.rare}☆){prop.name}:{n}个" for seg in prop_data for prop, n in seg)
     else:
         info = [report_card(account.name, **report_data)]
         if report_data["prop_n"] == 0:

@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from clovers_utils.linecard import info_splicing, ImageList
 from clovers_utils.library import Library
-from clovers_leafgame_core.clovers import Event
-from clovers_leafgame_core.data import Bank, Account, User, Group, Account, DataBase
+from .core.clovers import Event
+from .core.data import Bank, Account, User, Group, Account, DataBase
 from .item import Prop, props_library, marking_library, VIP_CARD
 
 

@@ -1,4 +1,4 @@
-from main import plugin as __plugin__
+from .main import plugin as __plugin__
 from .module import *
 
 
