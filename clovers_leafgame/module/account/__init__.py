@@ -3,24 +3,28 @@ from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
 from clovers_apscheduler import scheduler
-from clovers_leafgame_core.clovers import Event, to_me, superuser, at
 from clovers_utils.tools import download_url, format_number
-from .item import (
+from clovers_leafgame.core.clovers import Event, to_me, superuser, at
+from clovers_leafgame.main import plugin, manager
+from clovers_leafgame.item import (
     GOLD,
     LICENSE,
     CLOVERS_MARKING,
     REVOLUTION_MARKING,
     DEBUG_MARKING,
 )
-from .output import (
+from clovers_leafgame.output import (
     bank_card,
     prop_card,
     invest_card,
     avatar_card,
     account_card,
 )
-from .main import plugin, config, manager
-from .module import *
+from clovers_core.config import config as clovers_config
+from .config import Config
+
+
+config = Config.parse_obj(clovers_config.get(__package__, {}))
 
 sign_gold = config.sign_gold
 clovers_marking = config.clovers_marking

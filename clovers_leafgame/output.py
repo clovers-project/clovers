@@ -6,15 +6,15 @@ import matplotlib.pyplot as plt
 from clovers_leafgame_core.data import Prop, Stock
 from clovers_utils.linecard import FontManager, linecard
 from clovers_utils.tools import format_number
+from main import config
 
-font_manager: FontManager = None
+fontname = config.fontname
+fallback = config.fallback_fonts
 
+font_manager = FontManager(fontname, fallback, (30, 40, 60))
 
-def init(font_name: str, fallback: list[str]):
-    global font_manager
-    font_manager = FontManager(font_name, fallback, (30, 40, 60))
-    plt.rcParams["font.family"] = font_name
-    plt.rcParams["font.sans-serif"] = fallback
+plt.rcParams["font.family"] = fontname
+plt.rcParams["font.sans-serif"] = fallback
 
 
 def endline(tip: str) -> str:
