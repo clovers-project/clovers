@@ -49,5 +49,4 @@ def report_card(
         f"[pixel][450]空气平均☆ {round(air_star/(air_n or 1),3)}\n"
         f"数据来源：{nickname}"
     )
-    title.append(endline("抽卡报告"))
-    return linecard("\n".join(title), font_manager, 40, width=880)
+    return linecard("\n".join(title) + endline("抽卡报告"), font_manager, 40, width=880)

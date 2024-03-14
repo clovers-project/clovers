@@ -1,31 +1,24 @@
 import numpy as np
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from PIL.ImageFont import FreeTypeFont
-from PIL.Image import Image as IMG
-
+from PIL import Image, ImageDraw
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 
 from clovers_leafgame_core.data import Prop, Stock
 from clovers_utils.linecard import FontManager, linecard
 from clovers_utils.tools import format_number
-from .main import config
 
-main_path = config.main_path
+font_manager: FontManager = None
 
-font_manager = FontManager(
-    config.fontname,
-    config.fallback_fonts,
-    (30, 40, 60),
-)
 
-plt.rcParams["font.family"] = font_manager.font_name
-plt.rcParams["font.sans-serif"] = font_manager.fallback
+def init(font_name: str, fallback: list[str]):
+    global font_manager
+    font_manager = FontManager(font_name, fallback, (30, 40, 60))
+    plt.rcParams["font.family"] = font_name
+    plt.rcParams["font.sans-serif"] = fallback
 
 
 def endline(tip: str) -> str:
-    return f"----\n[right][color][grey][font][][30]{tip}"
+    return f"\n----\n[right][color][grey][font][][30]{tip}"
 
 
 def bank_card(data: list[tuple[Prop, int]]):
@@ -62,7 +55,7 @@ def prop_card(data: list[tuple[Prop, int]], tip: str = None):
 
     info = "\n".join(result(*args) for args in data)
     if tip:
-        info += "\n" + endline(tip)
+        info += endline(tip)
     return linecard(info, font_manager, 40, spacing=1.5, width=880)
 
 
@@ -78,7 +71,7 @@ def invest_card(data: list[tuple[Stock, int]], tip: str = None):
 
     info = "\n".join(result(*args) for args in data)
     if tip:
-        info += "\n" + endline(tip)
+        info += endline(tip)
     return linecard(info, font_manager, 40, width=880)
 
 
@@ -141,5 +134,5 @@ def account_card(dist: list[tuple[int, str]], info: str, colors=["#6699CC", "#66
 
     statistics = Image.open(output)
     canvas.paste(statistics, (880 - statistics.size[0], 0))
-    linecard(info + "\n" + endline("账户信息"), font_manager, 40, width=880, height=400, canvas=canvas)
+    linecard(info + endline("账户信息"), font_manager, 40, width=880, height=400, canvas=canvas)
     return canvas

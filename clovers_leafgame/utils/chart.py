@@ -9,13 +9,7 @@ from collections import Counter
 
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
-import seaborn as sns
 import numpy as np
-
-import re
-from re import Pattern
-
-from ..core.utils import download_url
 
 
 def alchemy_info(alchemy: dict, nickname: str, avatar: bytes):
