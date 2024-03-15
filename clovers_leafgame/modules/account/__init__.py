@@ -14,6 +14,8 @@ from clovers_leafgame.item import (
     DEBUG_MARKING,
 )
 from clovers_leafgame.output import (
+    text_to_image,
+    endline,
     candlestick,
     bank_card,
     prop_card,
@@ -262,82 +264,41 @@ async def _(event: Event):
     return f"你在群金库{sign}了{N}个{item.name}"
 
 
-async def group_info(stock: Stock, avatar_url: str, members_n: int, record: list[tuple[float, float]]):
+@plugin.handle({"群资料卡"}, {"user_id", "group_id", "nickname"})
+async def _(event: Event):
     """
     群资料卡
-        nickname: 名称
-        avatar_url: 头像路径
-        members_n: 成员数
-        record: 股票价格记录, seg: 时间，价格
     """
-    info = []
-    # 加载群信息
-    group = manager.data.group(group_id)
+    user, group_account = manager.account(event)
+    group = manager.data.group(group_account.group_id)
     info = []
     lines = [
-        f"注册成员 {members_n}",
-        f"发行时间 {datetime.fromtimestamp(t).strftime('%Y 年 %m 月 %d 日')if (t :=group.stock.time) else '未发行'}",
+        f"{datetime.fromtimestamp(t).strftime('%Y年%m月%d日')if (t :=group.stock.time) else '未发行'}",
+        f"等级 Lv.{group.level}",
+        f"成员 {len(group.accounts_map)}",
     ]
-    info.append(avatar_card(await download_url(group.avatar_url), nickname, lines))
-    if record:
-        info.append(candlestick((9.5, 3), 12, record))
+    info.append(avatar_card(await download_url(group.avatar_url), group.nickname, lines))
+    if ranklist := group.extra.get("revolution_achieve"):
+        ranklist = list(ranklist.items())
+        ranklist.sort(key=lambda x: x[1], reverse=True)
 
+        def result(user_id, n):
+            account_id = group.accounts_map.get(user_id)
+            if account_id and (account := manager.data.account_dict.get(account_id)):
+                nickname = nickname if len(nickname := account.name) < 7 else nickname[:6] + ".."
+            else:
+                nickname = "已注销"
+            return f"{nickname}[nowrap]\n[right]{n}次"
+
+        info.append(text_to_image("\n".join(result(*seg) for seg in ranklist[:10]) + endline("路灯挂件榜")))
+    if record := group.extra.get("stock_record"):
+        info.append(candlestick((9.5, 3), 12, record))
     if data := props_data(group.bank):
         info.append(prop_card(data, "群金库"))
     if data := invest_data(group.invest):
         info.append(invest_card(data, "群投资"))
-    # 加载公司信息
-    if company_name:
-        # 注册信息
-        msg = f"公司等级 {company.level}\n" f"成立时间 {datetime.datetime.fromtimestamp(company.time).strftime('%Y 年 %m 月 %d 日')}\n"
-        info.append(linecard(msg + stock_profile(company), width=880, endline="注册信息"))
-        # 蜡烛图
-        ohlc = await Manager.candlestick(group_id)
-        if ohlc:
-            info.append(ohlc)
-        # 资产分布
-        invist = Counter(company.invest)
-        for inner_user_id in group.namelist:
-            invist += Counter(Manager.locate_user_at(inner_user_id, group_id)[1].invest)
-        dist = []
-        for inner_company_id, n in invist.items():
-            inner_company = Manager.locate_group(inner_company_id).company
-            inner_company_name = inner_company.company_name or f"（{str(inner_company_id)[-4:]}）"
-            unit = max(inner_company.float_gold / inner_company.issuance, 0)
-            dist.append([unit * n, inner_company_name])
 
-        if dist:
-            info.append(group_info_account(company, dist))
-
-        ranklist = [(inner_user_id, exchange) for inner_user_id, exchange in company.exchange.items() if exchange.n > 0]
-        if ranklist:
-            ranklist.sort(key=lambda x: x[1].quote)
-
-            def result(inner_user_id, exchange):
-                nickname = Manager.get_user(inner_user_id).nickname
-                nickname = nickname if len(nickname) < 7 else nickname[:6] + ".."
-                return f"[pixel][20]{nickname}[nowrap]\n[pixel][300]单价 {exchange.quote}[nowrap]\n[pixel][600]数量 {exchange.n}\n"
-
-            msg = "".join(result(inner_user_id, exchange) for inner_user_id, exchange in ranklist[:10])
-            info.append(linecard(msg, width=880, font_size=40, endline="市场详情"))
-
-        msg = company.intro
-        if msg:
-            info.append(linecard(msg + "\n", width=880, font_size=40, endline="公司介绍"))
-
-    # 路灯挂件
-    ranklist = list(group.Achieve_revolution.items())
-    if ranklist:
-        ranklist.sort(key=lambda x: x[1], reverse=True)
-
-        def result(inner_user_id, n):
-            user, group_account = Manager.locate_user_at(inner_user_id, group_id)
-            return f"{group_account.nickname or user.nickname}[nowrap]\n[right]{n}次\n"
-
-        msg = "".join(result(inner_user_id, n) for inner_user_id, n in ranklist[:10])
-        info.insert(min(len(info), 2), linecard(msg, width=880, endline="路灯挂件"))
-
-    return info_splicing(info, Manager.BG_path(bg_id), 10)
+    return manager.info_card(info, group_account.user_id)
 
 
 # 超管指令

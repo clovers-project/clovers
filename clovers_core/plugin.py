@@ -1,4 +1,4 @@
-import sys
+import os
 import importlib
 import traceback
 import re
@@ -134,7 +134,7 @@ class Plugin:
 
 
 class PluginLoader:
-    def __init__(self, plugins_path: Path, plugins_list: list) -> None:
+    def __init__(self, plugins_path: Path = None, plugins_list: list = None) -> None:
         self.plugins_path: Path = plugins_path
         self.plugins_list: list = plugins_list
 
@@ -144,19 +144,17 @@ class PluginLoader:
         try:
             module = importlib.import_module(name)
             return getattr(module, "__plugin__", None)
-        except ImportError as e:
+        except ImportError:
             traceback.print_exc()
 
     def plugins_from_path(self):
-        plugins_raw_path = str(self.plugins_path)
-        sys.path.insert(0, plugins_raw_path)
+        plugins_path = ".".join(self.plugins_path.relative_to(Path()).parts)
         plugins = []
         for x in self.plugins_path.iterdir():
             name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
             if name.startswith("_"):
                 continue
-            plugins.append(self.load(name))
-        sys.path.remove(plugins_raw_path)
+            plugins.append(self.load(f"{plugins_path}.{name}"))
         return [plugin for plugin in plugins if plugin]
 
     def plugins_from_list(self):

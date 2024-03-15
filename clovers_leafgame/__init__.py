@@ -1,5 +1,11 @@
 from .main import plugin as __plugin__
-from .module import *
+import os
+from pathlib import Path
+from clovers_core.plugin import PluginLoader
+
+for x in Path(os.path.join(os.path.dirname(__file__)), "modules").iterdir():
+    name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
+    PluginLoader.load(f"{__package__}.modules.{name}")
 
 
 """

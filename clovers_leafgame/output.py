@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw
 from .core.data import Prop, Stock
 from clovers_utils.linecard import FontManager, linecard
 from clovers_utils.tools import format_number
-from main import config
+from .main import config
 
 fontname = config.fontname
 fallback = config.fallback_fonts
@@ -87,8 +87,9 @@ ImageDraw.Draw(AVATAR_MASK).ellipse(((0, 0), (260, 260)), fill="black")
 def avatar_card(avatar: bytes, nickname: str, lines: list[tuple[str, str]]):
     font = font_manager.font(40)
     canvas = Image.new("RGBA", (880, 300))
-    avatar = Image.open(BytesIO(avatar)).resize((260, 260))
-    canvas.paste(avatar, (20, 20), AVATAR_MASK)
+    if avatar:
+        avatar = Image.open(BytesIO(avatar)).resize((260, 260))
+        canvas.paste(avatar, (20, 20), AVATAR_MASK)
     draw = ImageDraw.Draw(canvas)
     draw.text((300, 40), f"{nickname}", fill=(0, 0, 0), font=font)
     draw.line(((300, 120), (860, 120)), fill="gray", width=4)
@@ -103,26 +104,24 @@ def avatar_card(avatar: bytes, nickname: str, lines: list[tuple[str, str]]):
     return canvas
 
 
-def candlestick(figsize: tuple[float, float], length: int, history: list) -> BytesIO:
+def candlestick(figsize: tuple[float, float], length: int, history: list[tuple[float, float]]) -> BytesIO:
     """
     生成股价K线图
         figsize:图片尺寸
         length:OHLC采样长度
         history:历史数据
-        title:标题
     """
-    T, buy, sell = zip(*history)
-    l = len(T)
-    T = [T[i : i + length] for i in range(0, l, length)]
-    buy = [buy[i : i + length] for i in range(0, l, length)]
-    sell = [sell[i : i + length] for i in range(0, l, length)]
+    t, price = zip(*history)
+    l = len(t)
+    t = [t[i : i + length] for i in range(0, l, length)]
+    price = [price[i : i + length] for i in range(0, l, length)]
     D, O, H, L, C = [], [], [], [], []
-    for i in range(len(sell)):
+    for i in range(len(price)):
         D.append(datetime.fromtimestamp(T[i][0]))
-        O.append(sell[i][0])
-        H.append(max(sell[i]))
-        L.append(min(sell[i]))
-        C.append(sell[i][-1])
+        O.append(price[i][0])
+        H.append(max(price[i]))
+        L.append(min(price[i]))
+        C.append(price[i][-1])
     data = pd.DataFrame({"date": D, "open": O, "high": H, "low": L, "close": C})
     data = data.set_index("date")
     style = mpf.make_mpf_style(
