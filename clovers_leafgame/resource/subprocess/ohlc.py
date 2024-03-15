@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 
 
-def market_candlestick(figsize: Tuple[int, int], length: int, history: list, savefig):
+def candlestick(figsize: Tuple[int, int], length: int, history: list, savefig):
     """
     生成股价K线图
         figsize:图片尺寸
@@ -21,7 +21,6 @@ def market_candlestick(figsize: Tuple[int, int], length: int, history: list, sav
     T, buy, sell = zip(*history)
     l = len(T)
     T = [T[i : i + length] for i in range(0, l, length)]
-    buy = [buy[i : i + length] for i in range(0, l, length)]
     sell = [sell[i : i + length] for i in range(0, l, length)]
     D, O, H, L, C = [], [], [], [], []
     for i in range(len(sell)):

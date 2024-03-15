@@ -40,6 +40,10 @@ class Event:
         return self.raw_event.kwargs["avatar"]
 
     @property
+    def group_avatar(self) -> str:
+        return self.raw_event.kwargs["group_avatar"]
+
+    @property
     def group_info(self) -> list:
         return self.raw_event.kwargs["group_info"]
 

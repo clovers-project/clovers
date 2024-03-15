@@ -1,4 +1,7 @@
 import matplotlib.pyplot as plt
+import mplfinance as mpf
+import pandas as pd
+import datetime
 from io import BytesIO
 from PIL import Image, ImageDraw
 from .core.data import Prop, Stock
@@ -98,3 +101,47 @@ def avatar_card(avatar: bytes, nickname: str, lines: list[tuple[str, str]]):
             x += 40
 
     return canvas
+
+
+def candlestick(figsize: tuple[float, float], length: int, history: list) -> BytesIO:
+    """
+    生成股价K线图
+        figsize:图片尺寸
+        length:OHLC采样长度
+        history:历史数据
+        title:标题
+    """
+    T, buy, sell = zip(*history)
+    l = len(T)
+    T = [T[i : i + length] for i in range(0, l, length)]
+    buy = [buy[i : i + length] for i in range(0, l, length)]
+    sell = [sell[i : i + length] for i in range(0, l, length)]
+    D, O, H, L, C = [], [], [], [], []
+    for i in range(len(sell)):
+        D.append(datetime.fromtimestamp(T[i][0]))
+        O.append(sell[i][0])
+        H.append(max(sell[i]))
+        L.append(min(sell[i]))
+        C.append(sell[i][-1])
+    data = pd.DataFrame({"date": D, "open": O, "high": H, "low": L, "close": C})
+    data = data.set_index("date")
+    style = mpf.make_mpf_style(
+        base_mpf_style="charles",
+        marketcolors=mpf.make_marketcolors(up="#006340", down="#a02128", edge="none"),
+        y_on_right=False,
+        facecolor="#FFFFFF99",
+        figcolor="none",
+    )
+    output = BytesIO()
+    mpf.plot(
+        data,
+        type="candlestick",
+        xlabel="",
+        ylabel="",
+        datetime_format="%H:%M",
+        tight_layout=True,
+        style=style,
+        figsize=figsize,
+        savefig=output,
+    )
+    return output

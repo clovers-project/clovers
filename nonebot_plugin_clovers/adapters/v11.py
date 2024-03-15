@@ -10,6 +10,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.adapters.onebot.v11 import (
     Bot,
     MessageEvent,
+    GroupMessageEvent,
     Message,
     MessageSegment,
     GROUP_ADMIN,
@@ -67,6 +68,12 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
     @method.kwarg("avatar")
     async def _(event: MessageEvent) -> BytesIO:
         return f"https://q1.qlogo.cn/g?b=qq&nk={event.user_id}&s=640"
+
+    @method.kwarg("group_avatar")
+    async def _(event: MessageEvent) -> BytesIO:
+        if isinstance(event, GroupMessageEvent):
+            return f"https://p.qlogo.cn/gh/{event.group_id}/{event.group_id}/640"
+        return None
 
     @method.kwarg("image_list")
     async def _(event: MessageEvent):

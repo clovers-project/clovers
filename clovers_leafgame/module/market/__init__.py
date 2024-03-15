@@ -62,12 +62,13 @@ async def _(event: Event):
     return f"{group_out.nickname}向{group_in.nickname}转移{xfer} 金币\n汇率 {round(ExRate,2)}\n实际到账金额 {receipt}"
 
 
-@plugin.handle({"市场注册", "公司注册", "注册公司"}, {"group_id", "to_me", "permission"})
+@plugin.handle({"市场注册", "公司注册", "注册公司"}, {"group_id", "to_me", "permission", "group_avatar"})
 @to_me.decorator
 @group_admin.decorator
 async def _(event: Event):
     group_id = event.group_id
     group = manager.data.group(group_id)
+    group.avatar_url = event.group_avatar
     stock = group.stock
     if stock and stock.name:
         return f"本群已在市场注册，注册名：{stock.name}"

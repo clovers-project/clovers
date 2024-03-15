@@ -45,16 +45,30 @@ def account_card(dist: list[tuple[int, str]], info: str, colors=["#6699CC", "#66
     return canvas
 
 
-async def group_info(group_id):
+async def group_info(stock: Stock, avatar_url: str, members_n: int, record: list[tuple[float, float]]):
     """
     群资料卡
+        nickname: 名称
+        avatar_url: 头像路径
+        members_n: 成员数
+        record: 股票价格记录, seg: 时间，价格
     """
     info = []
     # 加载群信息
-    group = Manager.locate_group(group_id)
-    company = group.company
-    company_name = group.company.company_name
-    info.append(group_info_head(company_name or "未注册", group_id, len(group.namelist)))
+    group = manager.data.group(group_id)
+    info = []
+    lines = [
+        f"注册成员 {members_n}",
+        f"发行时间 {datetime.fromtimestamp(t).strftime('%Y 年 %m 月 %d 日')if (t :=group.stock.time) else '未发行'}",
+    ]
+    info.append(avatar_card(await download_url(group.avatar_url), nickname, lines))
+    if record:
+        info.append(candlestick((9.5, 3), 12, record))
+
+    if data := props_data(group.bank):
+        info.append(prop_card(data, "群金库"))
+    if data := invest_data(group.invest):
+        info.append(invest_card(data, "群投资"))
     # 加载公司信息
     if company_name:
         # 注册信息

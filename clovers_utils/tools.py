@@ -12,6 +12,8 @@ async def download_url(url: str):
                 return resp.content
             except httpx.HTTPStatusError:
                 await asyncio.sleep(3)
+            except:
+                return None
     return None
 
 
