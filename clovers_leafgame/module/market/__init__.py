@@ -5,7 +5,7 @@ from clovers_utils.tools import item_name_rule, gini_coef, format_number
 from clovers_leafgame.core.clovers import Event, to_me, group_admin
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import GOLD, LICENSE
-
+from clovers_leafgame.output import text_to_image, endline
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -158,27 +158,27 @@ async def _(event: Event):
     stock.force_deal(user.bank, actual_buy)
     stock.floating += value
     stock.stock_value = stock_value + value
-    return (
-        f"{stock.name}\n——————————\n"
-        f"数量：{actual_buy}\n"
-        f"单价：{round(value/actual_buy,2)}\n"
-        f"总计：{round(value,2)}（{actual_gold}）\n"
-        f"——————————\n{tip}"
+    info = text_to_image(
+        f"{stock.name}\n----"
+        f"\n数量：{actual_buy}"
+        f"\n单价：{round(value/actual_buy,2)}"
+        f"\n总计：{round(value,2)}（{actual_gold}）" + endline(tip)
     )
+    return manager.info_card([info], user.id)
 
 
-@plugin.handle({"出售", "卖出", "结算"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"出售", "卖出", "结算"}, {"user_id"})
 async def _(event: Event):
-    user, group_account = manager.account(event)
+    user = manager.data.user(event.user_id)
     stock_name, n, quote = event.args_parse()
     stock_group = manager.group_library.get(stock_name)
     if not stock_group:
         return f"没有 {stock_name} 的注册信息"
-
+    stock_name = stock_group.nickname
     stock_id = stock_group.id
     my_stock = user.invest.get(stock_id, 0)
     if my_stock < n:
-        return f"你的账户中没有足够的股票（{my_stock}）。"
+        return f"你的账户中没有足够的{stock_name}（{my_stock}）。"
     user_id = user.id
     exchange = stock_group.stock.exchange
     if n < 1:
@@ -187,38 +187,12 @@ async def _(event: Event):
             return "交易信息已注销。"
         else:
             return "交易信息无效。"
-
     if not quote:
-        return "请输入你的出售价格"
-    group_gold = Manager.group_wealths(company_id, company.level)
-    float_gold = company.float_gold
-    SI = company.issuance
+        quote = 0.0
+    exchange[user_id] = (n, quote)
     if user_id in exchange:
-        tips = "交易信息已修改。"
+        tip = "交易信息已修改。"
     else:
-        tips = "交易信息发布成功！"
-    exchange[user_id] = ExchangeInfo(group_id=group_account.group_id, quote=quote, n=n)
-    # 自动结算交易市场上的股票
-    value = 0.0
-    inner_settle = 0
-    for _ in range(n):
-        unit = float_gold / SI
-        if unit < quote:
-            break
-        value += quote
-        float_gold -= quote
-        inner_settle += 1
-
-    if inner_settle > 0:
-        # 结算股票
-        company.Buyback(group_account, inner_settle)
-        # 结算金币
-        my_gold_level = Manager.locate_group(group_account.group_id).company
-        gold = int(value / my_gold_level)
-        user.gold += gold
-        group_account.gold += gold
-        company.gold -= value
-        company.float_gold = float_gold
-    company.group_gold = group_gold
-
-    return f"{company.company_name}\n" "——————————\n" f"报价：{quote}\n" f"数量：{n}\n" "——————————\n" + tips
+        tip = "交易信息发布成功！"
+    info = text_to_image(f"{stock_name}\n----\n报价：{quote}\n数量：{n}" + endline(tip))
+    return manager.info_card([info], user.id)

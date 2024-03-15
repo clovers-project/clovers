@@ -1,6 +1,5 @@
-from clovers_utils.linecard import linecard
-from clovers_leafgame.output import font_manager, endline
 import numpy as np
+from clovers_leafgame.output import text_to_image
 
 curve_fit = {
     1: lambda x: 0.339438628551138 * np.log(2.7606559801569316e-13 * x) + -0.0012286453324789554 * x + 9.310675305999386,
@@ -49,4 +48,4 @@ def report_card(
         f"[pixel][450]空气平均☆ {round(air_star/(air_n or 1),3)}\n"
         f"数据来源：{nickname}"
     )
-    return linecard("\n".join(title) + endline("抽卡报告"), font_manager, 40, width=880)
+    return text_to_image("\n".join(title) + endline("抽卡报告"))

@@ -59,7 +59,7 @@ class Event:
         N = args[1]
         if number := to_int(N):
             N = number
-        elif number := to_int(N):
+        elif number := to_int(name):
             name = N
             N = number
         else:

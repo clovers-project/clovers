@@ -1,9 +1,7 @@
-import numpy as np
+import matplotlib.pyplot as plt
 from io import BytesIO
 from PIL import Image, ImageDraw
-import matplotlib.pyplot as plt
-
-from clovers_leafgame_core.data import Prop, Stock
+from .core.data import Prop, Stock
 from clovers_utils.linecard import FontManager, linecard
 from clovers_utils.tools import format_number
 from main import config
@@ -15,6 +13,10 @@ font_manager = FontManager(fontname, fallback, (30, 40, 60))
 
 plt.rcParams["font.family"] = fontname
 plt.rcParams["font.sans-serif"] = fallback
+
+
+def text_to_image(text: str, font_size=40, width=880, **kwargs):
+    return linecard(text, font_manager, font_size, width, **kwargs)
 
 
 def endline(tip: str) -> str:
@@ -95,44 +97,4 @@ def avatar_card(avatar: bytes, nickname: str, lines: list[tuple[str, str]]):
             draw.text((x, 140 + n * 50), char, fill="gray", font=font)
             x += 40
 
-    return canvas
-
-
-def account_card(dist: list[tuple[int, str]], info: str, colors=["#6699CC", "#66CCFF", "#669999", "#66CCCC", "#669966", "#66CC99"]):
-    canvas = Image.new("RGBA", (880, 400))
-    dist.sort(key=lambda x: x[0], reverse=True)
-    labels = []
-    x = []
-    sum_gold = 0
-    for N, (gold, group_name) in enumerate(dist):
-        if N < 5 and gold > 0.01 * sum_gold:
-            x.append(gold)
-            labels.append(group_name)
-            sum_gold += gold
-        else:
-            labels.append("其他")
-            x.append(sum(seg[0] for seg in dist[N:]))
-            break
-    N += 1
-    output = BytesIO()
-
-    plt.figure(figsize=(6.6, 3.4))
-    plt.pie(
-        np.array(x),
-        labels=labels[0:N],
-        autopct="%1.1f%%",
-        colors=colors[0:N],
-        wedgeprops={"width": 0.38, "edgecolor": "none"},
-        textprops={"fontsize": 20},
-        pctdistance=0.81,
-        labeldistance=1.05,
-    )
-    plt.axis("equal")
-    plt.subplots_adjust(top=0.95, bottom=0.05, left=0.32, hspace=0, wspace=0)
-    plt.savefig(output, format="png", dpi=100, transparent=True)
-    plt.close()
-
-    statistics = Image.open(output)
-    canvas.paste(statistics, (880 - statistics.size[0], 0))
-    linecard(info + endline("账户信息"), font_manager, 40, width=880, height=400, canvas=canvas)
     return canvas
