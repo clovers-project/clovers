@@ -1,11 +1,13 @@
 import time
 import math
 import random
+from io import BytesIO
 from clovers_utils.tools import item_name_rule, gini_coef, format_number
 from clovers_leafgame.core.clovers import Event, to_me, group_admin
+from clovers_leafgame.core.data import Stock, Group
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import GOLD, LICENSE
-from clovers_leafgame.output import text_to_image, endline
+from clovers_leafgame.output import text_to_image, endline, invest_card
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -159,13 +161,16 @@ async def _(event: Event):
     stock.force_deal(user.bank, actual_buy)
     stock.floating += value
     stock.stock_value = stock_value + value
-    info = text_to_image(
+    output = BytesIO()
+    text_to_image(
         f"{stock.name}\n----"
         f"\n数量：{actual_buy}"
         f"\n单价：{round(value/actual_buy,2)}"
-        f"\n总计：{round(value,2)}（{actual_gold}）" + endline(tip)
-    )
-    return manager.info_card([info], user.id)
+        f"\n总计：{round(value,2)}（{actual_gold}）" + endline(tip),
+        width=440,
+        bg_color="white",
+    ).save(output, format="png")
+    return output
 
 
 @plugin.handle({"出售", "卖出", "结算"}, {"user_id"})
@@ -195,5 +200,90 @@ async def _(event: Event):
         tip = "交易信息已修改。"
     else:
         tip = "交易信息发布成功！"
-    info = text_to_image(f"{stock_name}\n----\n报价：{quote}\n数量：{n}" + endline(tip))
-    return manager.info_card([info], user.id)
+    output = BytesIO()
+    text_to_image(f"{stock_name}\n----\n报价：{quote}\n数量：{n}" + endline(tip), width=440, bg_color="white").save(output, format="png")
+    return output
+
+
+@plugin.handle({"市场信息"}, {"user_id", "group_id"})
+async def _(event: Event):
+    group_ids = manager.group_library._key_indices.keys()
+    groups = (manager.group_library[group_id] for group_id in group_ids)
+    data = [(group.stock, group.invest.get(group.stock.id, 0)) for group in groups]
+    if not data:
+        return "市场为空"
+    data.sort(key=lambda x: x[0].stock_value, reverse=True)
+    return manager.info_card([invest_card(data)], event.user_id)
+
+
+def stock_update(stock: Stock):
+    company_id = company.company_id
+    # 更新全群金币数
+    group_gold = company.group_gold = Manager.group_wealths(company_id, company.level)
+    # 固定资产回归值 = 全群金币数 + 股票融资
+    SI = company.issuance
+    line = group_gold * (2 - company.stock / SI)
+    # 公司金币数回归到固定资产回归值
+    gold = company.gold
+    gold += (line - gold) / 96
+    company.gold = gold
+    if gold > 0.0:
+        # 股票价格变化 = 趋势性影响（正态分布） + 随机性影响（平均分布）
+        float_gold = company.float_gold
+        float_gold += float_gold * random.gauss(0, 0.03) + gold * random.uniform(-0.1, 0.1)
+        # 股票价格向债务价值回归
+        deviation = gold - float_gold
+        float_gold += 0.1 * deviation * abs(deviation / gold)
+        # Nan检查
+        float_gold = group_gold if math.isnan(float_gold) else float_gold
+        # 自动结算交易市场上的股票
+        for user_id, exchange in company.exchange.items():
+            if not (user := Manager.get_user(user_id)):
+                exchange.n = 0
+                continue
+            if not (group_account := user.group_accounts.get(exchange.group_id)):
+                exchange.n = 0
+                continue
+
+            quote = exchange.quote
+            value = 0.0
+            inner_settle = 0
+            for _ in range(exchange.n):
+                unit = float_gold / SI
+                if unit < quote:
+                    break
+                value += quote
+                float_gold -= quote
+                inner_settle += 1
+
+            if not inner_settle:
+                continue
+            # 结算股票
+            company.Buyback(group_account, inner_settle)
+            # 结算金币
+            gold = int(value / Manager.locate_group(exchange.group_id).company.level)
+            user.gold += gold
+            group_account.gold += gold
+            company.gold -= value
+        # 清理无效交易信息
+        company.exchange = {user_id: exchange for user_id, exchange in company.exchange.items() if exchange.n > 0}
+    else:
+        float_gold = 0.0
+    # 更新浮动价格
+    company.float_gold = float_gold
+    # 记录价格历史
+    Manager.market_history.record(company_id, (time.time(), group_gold / SI, float_gold / SI))
+
+
+def update():
+    """
+    刷新市场
+    """
+    log = []
+    company_ids = set([company_index[company_id] for company_id in company_index])
+    for company_id in company_ids:
+        company = Manager.locate_group(company_id).company
+        company_update(company)
+        log.append(f"{company.company_name} 更新成功！")
+
+    return "\n".join(log)

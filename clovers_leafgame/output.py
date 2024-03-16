@@ -70,8 +70,9 @@ def invest_card(data: list[tuple[Stock, int]], tip: str = None):
         unit = format_number(stock.floating / issuance) if issuance else "未发行"
         return (
             f"[pixel][20]{stock.name}\n"
-            f"[pixel][20]结算 [nowrap]\n[color][green]{unit}[nowrap]\n"
-            f"[pixel][400]数量 [nowrap]\n[color][green]{n}"
+            f"[pixel][20]价格 [nowrap]\n[color][green]{unit}[nowrap]\n"
+            f"[pixel][340]数量 [nowrap]\n[color][green]{n}[nowrap]\n"
+            f'[pixel][680]趋势 [nowrap]\n[color]{"[yellow]None" if not stock.floating else f"[green]{rate}" if (rate:=round(stock.stock_value/stock.floating,3)) > 0 else f"[red]{rate}"}'
         )
 
     info = "\n".join(result(*args) for args in data)

@@ -269,8 +269,10 @@ async def _(event: Event):
     """
     群资料卡
     """
-    user, group_account = manager.account(event)
-    group = manager.data.group(group_account.group_id)
+    group = manager.group_library.get(event.single_arg())
+    if not group:
+        user, group_account = manager.account(event)
+        group = manager.data.group(group_account.group_id)
     info = []
     lines = [
         f"{datetime.fromtimestamp(t).strftime('%Y年%m月%d日')if (t :=group.stock.time) else '未发行'}",
@@ -298,7 +300,7 @@ async def _(event: Event):
     if data := invest_data(group.invest):
         info.append(invest_card(data, "群投资"))
 
-    return manager.info_card(info, group_account.user_id)
+    return manager.info_card(info, event.user_id)
 
 
 # 超管指令
