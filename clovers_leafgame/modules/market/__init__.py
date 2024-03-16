@@ -2,12 +2,14 @@ import time
 import math
 import random
 from io import BytesIO
+from collections import Counter
+from clovers_apscheduler import scheduler
 from clovers_utils.tools import item_name_rule, gini_coef, format_number
-from clovers_leafgame.core.clovers import Event, to_me, group_admin
+from clovers_leafgame.core.clovers import Event, to_me, group_admin, superuser
 from clovers_leafgame.core.data import Stock, Group
 from clovers_leafgame.main import plugin, manager
-from clovers_leafgame.item import GOLD, LICENSE
-from clovers_leafgame.output import text_to_image, endline, invest_card
+from clovers_leafgame.item import GOLD, LICENSE, STD_GOLD
+from clovers_leafgame.output import text_to_image, endline, invest_card, prop_card
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -92,11 +94,11 @@ async def _(event: Event):
     level = group.level = (sum(ra.values()) if (ra := group.extra.get("revolution_achieve")) else 0) + 1
     issuance = 20000 * level
     group.invest[group_id] = issuance - stock.issuance
-    group.bank[GOLD.id] = group.bank.get(GOLD.id, 0) + company_public_gold
+    group.bank[GOLD.id] = group.bank.get(GOLD.id, 0)
     stock.issuance = issuance
-    stock.fixed = stock.floating = stock.stock_value = (stock_value + company_public_gold) * level
+    stock.floating = stock.value = (stock_value) * level
     manager.group_library.set_item(group.id, {stock_name}, group)
-    return f"{stock.name}发行成功，发行价格为{format_number(stock.stock_value/ 20000)}金币"
+    return f"{stock.name}发行成功，发行价格为{format_number(stock.value/ 20000)}金币"
 
 
 @plugin.handle({"公司重命名"}, {"user_id", "group_id", "to_me", "permission"})
@@ -160,7 +162,7 @@ async def _(event: Event):
     stock.force_deal(group.bank, -actual_buy)
     stock.force_deal(user.bank, actual_buy)
     stock.floating += value
-    stock.stock_value = stock_value + value
+    stock.value = stock_value + value
     output = BytesIO()
     text_to_image(
         f"{stock.name}\n----"
@@ -195,13 +197,17 @@ async def _(event: Event):
             return "交易信息无效。"
     if not quote:
         quote = 0.0
-    exchange[user_id] = (n, quote)
     if user_id in exchange:
         tip = "交易信息已修改。"
     else:
         tip = "交易信息发布成功！"
+    exchange[user_id] = (n, quote)
     output = BytesIO()
-    text_to_image(f"{stock_name}\n----\n报价：{quote}\n数量：{n}" + endline(tip), width=440, bg_color="white").save(output, format="png")
+    text_to_image(
+        f"{stock_name}\n----\n报价：{quote or '抛售'}\n数量：{n}" + endline(tip),
+        width=440,
+        bg_color="white",
+    ).save(output, format="png")
     return output
 
 
@@ -212,78 +218,122 @@ async def _(event: Event):
     data = [(group.stock, group.invest.get(group.stock.id, 0)) for group in groups]
     if not data:
         return "市场为空"
-    data.sort(key=lambda x: x[0].stock_value, reverse=True)
+    data.sort(key=lambda x: x[0].value, reverse=True)
     return manager.info_card([invest_card(data)], event.user_id)
 
 
-def stock_update(stock: Stock):
-    company_id = company.company_id
-    # 更新全群金币数
-    group_gold = company.group_gold = Manager.group_wealths(company_id, company.level)
-    # 固定资产回归值 = 全群金币数 + 股票融资
-    SI = company.issuance
-    line = group_gold * (2 - company.stock / SI)
-    # 公司金币数回归到固定资产回归值
-    gold = company.gold
-    gold += (line - gold) / 96
-    company.gold = gold
-    if gold > 0.0:
-        # 股票价格变化 = 趋势性影响（正态分布） + 随机性影响（平均分布）
-        float_gold = company.float_gold
-        float_gold += float_gold * random.gauss(0, 0.03) + gold * random.uniform(-0.1, 0.1)
-        # 股票价格向债务价值回归
-        deviation = gold - float_gold
-        float_gold += 0.1 * deviation * abs(deviation / gold)
-        # Nan检查
-        float_gold = group_gold if math.isnan(float_gold) else float_gold
-        # 自动结算交易市场上的股票
-        for user_id, exchange in company.exchange.items():
-            if not (user := Manager.get_user(user_id)):
-                exchange.n = 0
-                continue
-            if not (group_account := user.group_accounts.get(exchange.group_id)):
-                exchange.n = 0
-                continue
-
-            quote = exchange.quote
-            value = 0.0
-            inner_settle = 0
-            for _ in range(exchange.n):
-                unit = float_gold / SI
-                if unit < quote:
-                    break
-                value += quote
-                float_gold -= quote
-                inner_settle += 1
-
-            if not inner_settle:
-                continue
-            # 结算股票
-            company.Buyback(group_account, inner_settle)
-            # 结算金币
-            gold = int(value / Manager.locate_group(exchange.group_id).company.level)
-            user.gold += gold
-            group_account.gold += gold
-            company.gold -= value
-        # 清理无效交易信息
-        company.exchange = {user_id: exchange for user_id, exchange in company.exchange.items() if exchange.n > 0}
+@plugin.handle({"继承公司账户", "继承群账户"}, {"user_id", "permission"})
+@superuser.decorator
+async def _(event: Event):
+    args = event.raw_event.args
+    if len(args) != 3:
+        return
+    arrow = args[1]
+    if arrow == "->":
+        deceased = args[0]
+        heir = args[2]
+    elif arrow == "<-":
+        heir = args[0]
+        deceased = args[2]
     else:
-        float_gold = 0.0
-    # 更新浮动价格
-    company.float_gold = float_gold
-    # 记录价格历史
-    Manager.market_history.record(company_id, (time.time(), group_gold / SI, float_gold / SI))
+        return "请输入:被继承群 -> 继承群"
+    deceased_group = manager.group_library.get(deceased)
+    if not deceased_group:
+        return f"被继承群:{deceased}不存在"
+    heir_group = manager.group_library.get(heir)
+    if not heir_group:
+        return f"继承群:{heir}不存在"
+    if deceased_group is heir_group:
+        return "无法继承自身"
+    ExRate = deceased_group.level / heir_group.level
+    # 继承群金库
+    invest_group = Counter(deceased_group.invest)
+    heir_group.invest = dict(Counter(heir_group.invest) + invest_group)
+    bank_group = Counter({k: int(v * ExRate) if manager.props_library[k].domain == 1 else v for k, v in deceased_group.bank.items()})
+    heir_group.bank = dict(Counter(heir_group.bank) + bank_group)
+    # 继承群员账户
+    all_bank_private = Counter()
+    for deceased_user_id, deceased_account_id in deceased_group.accounts_map.items():
+        deceased_account = manager.data.account_dict[deceased_account_id]
+        bank = Counter({k: int(v * ExRate) for k, v in deceased_account.bank.items()})
+        if deceased_user_id in heir_group.accounts_map:
+            all_bank_private += bank
+            heir_account_id = heir_group.accounts_map[deceased_user_id]
+            heir_account = manager.data.account_dict[heir_account_id]
+            heir_account.bank = dict(Counter(heir_account.bank) + bank)
+        else:
+            bank_group += bank
+            heir_group.bank = dict(Counter(heir_group.bank) + bank)
+    manager.data.cancel_group(deceased_group.id)
+    info = []
+    info.append(invest_card([(manager.group_library[k].stock, v) for k, v in invest_group.items()]), "群投资继承")
+    info.append(prop_card([(manager.props_library[k], v) for k, v in bank_group.items()], "群金库继承"))
+    info.append(prop_card([(manager.props_library[k], v) for k, v in all_bank_private.items()], "个人总继承"))
+    return manager.info_card(info, event.user_id)
 
 
-def update():
-    """
-    刷新市场
-    """
-    log = []
-    company_ids = set([company_index[company_id] for company_id in company_index])
-    for company_id in company_ids:
-        company = Manager.locate_group(company_id).company
-        company_update(company)
-        log.append(f"{company.company_name} 更新成功！")
+@plugin.handle({"刷新市场"}, {"permission"})
+@superuser.decorator
+@scheduler.scheduled_job("cron", minute="*/5", misfire_grace_time=120)
+async def _():
+    def stock_update(group: Group):
+        stock = group.stock
+        level = group.level
+        # 资产更新
+        wealths = manager.group_wealths(group.id, GOLD.id)
+        stock_value = stock.value = sum(wealths) * level
+        floating = stock.floating
+        if not floating or math.isnan(floating):
+            stock.floating = stock_value
+            return f"{stock.name} 已初始化"
+        # 股票价格变化：趋势性影响（正态分布），随机性影响（平均分布），向债务价值回归
+        floating += floating * random.gauss(0, 0.03)
+        floating += stock_value * random.uniform(-0.1, 0.1)
+        floating += (stock_value - floating) * 0.05
+        # 股票浮动收入
+        group.bank[GOLD.id] = int(wealths[-1] * floating / stock.floating)
+        # 结算交易市场上的股票
+        issuance = stock.issuance
+        std_value = 0
+        for user_id, exchange in stock.exchange.items():
+            user = manager.data.user(user_id)
+            n, quote = exchange
+            value = 0.0
+            settle = 0
+            if quote:
+                for _ in range(n):
+                    unit = floating / issuance
+                    if unit < quote:
+                        break
+                    value += quote
+                    floating -= quote
+                    settle += 1
+            else:
+                for _ in range(n):
+                    unit = max(floating / issuance, 0.0)
+                    value += unit
+                    floating -= unit
+                settle = n
+            if settle == 0:
+                continue
+            stock.exchange[user_id] = (n - settle, quote)
+            stock.force_deal(user.invest, -settle)
+            stock.force_deal(group.invest, settle)
+            value = int(value)
+            STD_GOLD.force_deal(user.bank, value)
+            std_value += value
+        GOLD.force_deal(group.bank, -int(std_value / level))
+        stock.exchange = {user_id: exchange for user_id, exchange in stock.exchange.items() if exchange[0] > 0}
+        # 更新浮动价格
+        stock.floating = floating
+        # 记录价格历史
+        if not (stock_record := group.extra.get("stock_record")):
+            stock_record = [(0.0, 0.0) for _ in range(720)]
+        stock_record.append((time.time(), floating / issuance))
+        stock_record = stock_record[-720:]
+        group.extra["stock_record"] = stock_record
+        return f"{stock.name} 更新成功！"
 
+    groups = [group for group in manager.data.group_dict.values() if group.stock.name and group.stock.issuance]
+    log = [stock_update(group) for group in groups]
     return "\n".join(log)

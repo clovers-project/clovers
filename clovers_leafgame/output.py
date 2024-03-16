@@ -67,12 +67,14 @@ def prop_card(data: list[tuple[Prop, int]], tip: str = None):
 def invest_card(data: list[tuple[Stock, int]], tip: str = None):
     def result(stock: Stock, n: int):
         issuance = stock.issuance
-        unit = format_number(stock.floating / issuance) if issuance else "未发行"
+        buy = format_number(max(stock.floating, stock.value) / issuance) if issuance else "未发行"
+        sell = format_number(stock.floating / issuance) if issuance else "未发行"
         return (
             f"[pixel][20]{stock.name}\n"
-            f"[pixel][20]价格 [nowrap]\n[color][green]{unit}[nowrap]\n"
-            f"[pixel][340]数量 [nowrap]\n[color][green]{n}[nowrap]\n"
-            f'[pixel][680]趋势 [nowrap]\n[color]{"[yellow]None" if not stock.floating else f"[green]{rate}" if (rate:=round(stock.stock_value/stock.floating,3)) > 0 else f"[red]{rate}"}'
+            f"[pixel][20]购买 [nowrap]\n[color][{'red' if buy > sell else 'green'}]{buy}[nowrap]\n"
+            f"[pixel][400]结算 [nowrap]\n[color][green]{sell}[nowrap]\n"
+            f"[pixel][20]数量 [nowrap]\n[color][{'green' if n else 'red'}]{n}[nowrap]\n"
+            f'[pixel][400]趋势 [nowrap]\n[color]{"[yellow]None" if not stock.floating else f"[green]{rate}" if (rate:=round(stock.value/stock.floating,3)) > 0 else f"[red]{rate}"}'
         )
 
     info = "\n".join(result(*args) for args in data)
@@ -118,7 +120,7 @@ def candlestick(figsize: tuple[float, float], length: int, history: list[tuple[f
     price = [price[i : i + length] for i in range(0, l, length)]
     D, O, H, L, C = [], [], [], [], []
     for i in range(len(price)):
-        D.append(datetime.fromtimestamp(T[i][0]))
+        D.append(datetime.fromtimestamp(t[i][0]))
         O.append(price[i][0])
         H.append(max(price[i]))
         L.append(min(price[i]))

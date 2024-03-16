@@ -100,9 +100,7 @@ class Stock(Item):
     """注册时间"""
     floating: int = 0
     """浮动资产"""
-    fixed: int = 0
-    """固定资产"""
-    stock_value: int = 0
+    value: int = 0
     """全群资产"""
     exchange: dict[str, tuple[int, float]] = {}
     """交易信息"""
