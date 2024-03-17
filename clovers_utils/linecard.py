@@ -91,7 +91,7 @@ def linecard(
     spacing: float = 1.2,
     bg_color: str = None,
     autowrap: bool = False,
-    canvas=None,
+    canvas: IMG = None,
 ) -> IMG:
     """
     指定宽度单行文字
@@ -285,7 +285,7 @@ def info_splicing(
     def blurBG(canvas: IMG, image: IMG):
         box = (20, height, 900, height + image.size[1])
         region = canvas.crop(box)
-        blurred_region = region.filter(ImageFilter.GaussianBlur(radius=10))
+        blurred_region = region.filter(ImageFilter.GaussianBlur(radius=4))
         canvas.paste(blurred_region, box)
         canvas.paste(image, (20, height), mask=image)
 

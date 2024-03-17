@@ -23,8 +23,10 @@ class Manager:
     def __init__(self, main_path: Path) -> None:
         self.main_path = Path(main_path)
         self.DATA_PATH = self.main_path / "russian_data.json"
-        self.BG_PATH = Path(main_path) / "BG_image"
+        self.BG_PATH = self.main_path / "BG_image"
         self.BG_PATH.mkdir(exist_ok=True, parents=True)
+        self.backup_path = self.main_path / "backup"
+        self.backup_path.mkdir(exist_ok=True, parents=True)
         self.props_library = props_library
         self.marking_library = marking_library
         self.group_library: Library[str, Group] = Library()
@@ -45,6 +47,25 @@ class Manager:
                 self.group_library.set_item(group.id, {stock_name}, group)
             else:
                 self.group_library[group.id] = group
+
+    def backup(self):
+        now = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
+        date_today, now_time = now.split()
+        backup_today = self.backup_path / date_today
+        if not backup_today.exists():
+            backup_today.mkdir()
+        self.save()
+        file = backup_today / f"russian_data {now_time}.json"
+        file.write_text(self.data.json(indent=4))
+
+    def clean_backup(self, delta: int | float):
+        folders = [f for f in self.backup_path.iterdir() if f.is_dir()]
+        info = []
+        for folder in folders:
+            if datetime.now().timestamp() - folder.stat().st_birthtime > delta:
+                folder.unlink(True)
+                info.append(f"备份 {folder} 已删除！")
+        return "\n".join(info)
 
     def info_card(self, info: ImageList, user_id: str, BG_type=None):
         extra = self.data.user(user_id).extra
@@ -118,7 +139,7 @@ class Manager:
         group = self.group_library.get(group_name)
         if not group:
             return []
-        wealths = [self.data.account_dict[account_id].bank.get(prop_id, 0) for account_id in group.accounts_map]
+        wealths = [self.data.account_dict[account_id].bank.get(prop_id, 0) for account_id in group.accounts_map.values()]
         wealths.append(group.bank.get(prop_id, 0))
         return wealths
 

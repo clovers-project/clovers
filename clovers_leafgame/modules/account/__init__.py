@@ -2,6 +2,7 @@ import random
 from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
+from collections import Counter
 from clovers_apscheduler import scheduler
 from clovers_utils.tools import download_url, format_number
 from clovers_leafgame.core.clovers import Event, to_me, superuser, at
@@ -21,8 +22,8 @@ from clovers_leafgame.output import (
     prop_card,
     invest_card,
     avatar_card,
+    dist_card,
 )
-from .output import account_card
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -52,6 +53,9 @@ async def _(event: Event):
             user.extra["BG_type"] = "GAUSS"
         elif BG_type in {"无", "透明"}:
             user.extra["BG_type"] = "NONE"
+        elif BG_type == "默认":
+            if "BG_type" in user.extra:
+                del user.extra["BG_type"]
         else:
             try:
                 ImageColor.getcolor(BG_type, "RGB")
@@ -59,7 +63,7 @@ async def _(event: Event):
             except ValueError:
                 BG_type = "ValueError"
                 pass
-        log.append("背景蒙版类型设置为：{BG_type}}")
+        log.append(f"背景蒙版类型设置为：{BG_type}")
 
     if url_list := event.raw_event.kwargs["image_list"]:
         image = await download_url(url_list[0])
@@ -171,31 +175,33 @@ async def _(event: Event):
         )
     )
     lines = []
-    i = 0
     for marking_prop in manager.marking_library.values():
         if count := marking_prop.N(user, account):
-            count = min(count, 99)
-            lines.append(f"[color][{marking_prop.color}]Lv.{count}{'  'if count < 10 else ' '}{marking_prop.tip}")
-            i += 1
-            if i == 3:
-                break
-
-    lines += ["" for _ in range(3 - len(lines))]
-    lines.append(f"金币 {format_number(account.bank.get(GOLD.id, 0))}")
-    lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
-    delta_days = (datetime.today() - account.sign_in).days
-
+            lines.append(f"[color][{marking_prop.color}]Lv.{min(count, 99)}[nowrap][passport]\n[pixel][160]{marking_prop.tip}")
+    if lines:
+        info.append(text_to_image("\n".join(lines)))
+    lines = []
+    dist = []
+    sum_std_n = 0
+    for group_id, account_id in user.accounts_map.items():
+        group = manager.data.group(group_id)
+        std_n = manager.data.account_dict[account_id].bank.get(GOLD.id, 0) * group.level
+        if std_n > 0:
+            dist.append((std_n, group.nickname))
+        sum_std_n += std_n
+    else:
+        dist = dist or [(1, "None")]
+    if account.sign_in is None:
+        delta_days = 1
+    else:
+        delta_days = (datetime.today() - account.sign_in).days
     if delta_days == 0:
         lines.append("[color][green]今日已签到")
     else:
         lines.append(f"[color][red]连续{delta_days}天 未签到")
-
-    dist = [
-        (n, manager.data.group(group_id).name)
-        for group_id, account_id in user.accounts_map.items()
-        if (n := manager.data.account_dict[account_id].bank.get(GOLD.id, 0)) > 0
-    ]
-    info.append(account_card(dist or [(1, "None")], "\n".join(lines)))
+    lines.append(f"金币 {format_number(sum_std_n)}")
+    lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
+    info.append(text_to_image("\n".join(lines), 30, canvas=dist_card(dist)))
     data = invest_data(user.invest)
     if data:
         info.append(invest_card(data, "股票信息"))
@@ -276,7 +282,7 @@ async def _(event: Event):
     info = []
     lines = [
         f"{datetime.fromtimestamp(t).strftime('%Y年%m月%d日')if (t :=group.stock.time) else '未发行'}",
-        f"等级 Lv.{group.level}",
+        f"等级 {group.level}",
         f"成员 {len(group.accounts_map)}",
     ]
     info.append(avatar_card(await download_url(group.avatar_url), group.nickname, lines))
@@ -304,8 +310,6 @@ async def _(event: Event):
 
 
 # 超管指令
-
-
 @plugin.handle({"获取"}, {"user_id", "group_id", "nickname", "permission"})
 @superuser.decorator
 async def _(event: Event):
@@ -318,11 +322,3 @@ async def _(event: Event):
     if n := prop.deal(prop.locate_bank(*manager.account(event)), N):
         return f"获取失败，你的【{prop.name}】（{n}））数量不足。"
     return f"你获得了{N}个【{prop.name}】！"
-
-
-@plugin.handle({"保存游戏"}, {"permission"})
-@superuser.decorator
-@scheduler.scheduled_job("cron", minute="*/10", misfire_grace_time=120)
-async def _():
-    manager.save()
-    print("游戏数据已保存！")

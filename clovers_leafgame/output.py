@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import pandas as pd
-import datetime
+import numpy as np
+from datetime import datetime
 from io import BytesIO
 from PIL import Image, ImageDraw
 from .core.data import Prop, Stock
@@ -71,10 +72,9 @@ def invest_card(data: list[tuple[Stock, int]], tip: str = None):
         sell = format_number(stock.floating / issuance) if issuance else "未发行"
         return (
             f"[pixel][20]{stock.name}\n"
-            f"[pixel][20]购买 [nowrap]\n[color][{'red' if buy > sell else 'green'}]{buy}[nowrap]\n"
-            f"[pixel][400]结算 [nowrap]\n[color][green]{sell}[nowrap]\n"
             f"[pixel][20]数量 [nowrap]\n[color][{'green' if n else 'red'}]{n}[nowrap]\n"
-            f'[pixel][400]趋势 [nowrap]\n[color]{"[yellow]None" if not stock.floating else f"[green]{rate}" if (rate:=round(stock.value/stock.floating,3)) > 0 else f"[red]{rate}"}'
+            f"[pixel][280]购买 [nowrap]\n[color][{'red' if buy > sell else 'green'}]{buy}[nowrap]\n"
+            f"[pixel][580]结算 [nowrap]\n[color][green]{sell}[nowrap]\n"
         )
 
     info = "\n".join(result(*args) for args in data)
@@ -146,4 +146,55 @@ def candlestick(figsize: tuple[float, float], length: int, history: list[tuple[f
         figsize=figsize,
         savefig=output,
     )
-    return output
+    return Image.open(output)
+
+
+def dist_card(
+    dist: list[tuple[int, str]],
+    colors=[
+        "#351c75",
+        "#0b5394",
+        "#1155cc",
+        "#134f5c",
+        "#38761d",
+        "#bf9000",
+        "#b45f06",
+        "#990000",
+        "#741b47",
+    ],
+):
+    dist.sort(key=lambda x: x[0], reverse=True)
+    labels = []
+    x = []
+    sum_value = sum(d[0] for d in dist)
+    limit = 0.01 * sum_value
+    for n, (value, name) in enumerate(dist):
+        if n < 8 and value > limit:
+            x.append(value)
+            labels.append(name)
+        else:
+            labels.append("其他")
+            x.append(sum(seg[0] for seg in dist[n:]))
+            break
+    n += 1
+    output = BytesIO()
+
+    plt.figure(figsize=(6.6, 3.4))
+    plt.pie(
+        np.array(x),
+        labels=[""] * n,
+        autopct=lambda pct: "" if pct < 1 else f"{pct:.1f}%",
+        colors=colors[0:n],
+        wedgeprops={"edgecolor": "none"},
+        textprops={"fontsize": 15},
+        pctdistance=1.2,
+        explode=[0, 0.1, 0.19, 0.27, 0.34, 0.40, 0.45, 0.49, 0.52][0:n],
+    )
+    plt.legend(labels, loc=(-0.6, 0), frameon=False)
+    plt.axis("equal")
+    plt.subplots_adjust(top=0.95, bottom=0.05, left=0.4, hspace=0, wspace=0)
+    plt.savefig(output, format="png", dpi=100, transparent=True)
+    plt.close()
+    canvas = Image.new("RGBA", (880, 340))
+    canvas.paste(Image.open(output), (220, 0))
+    return canvas

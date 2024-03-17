@@ -26,11 +26,11 @@ async def _(event: Event):
     user, account = manager.account(event)
     user.avatar_url = event.avatar
     extra = account.extra
-    if extra.setdefault("revolution", False):
+    if not extra.setdefault("revolution", True):
         return "你没有待领取的金币"
     N = random.randint(*revolt_gold)
     GOLD.deal(account.bank, N)
-    extra["revolution"] = True
+    extra["revolution"] = False
     return f"这是你重置后获得的金币！你获得了 {N} 金币"
 
 
@@ -239,10 +239,10 @@ async def _(event: Event):
         return "请输入:被继承群 -> 继承群"
     deceased_group = manager.group_library.get(deceased)
     if not deceased_group:
-        return f"被继承群:{deceased}不存在"
+        return f"被继承群:{deceased} 不存在"
     heir_group = manager.group_library.get(heir)
     if not heir_group:
-        return f"继承群:{heir}不存在"
+        return f"继承群:{heir} 不存在"
     if deceased_group is heir_group:
         return "无法继承自身"
     ExRate = deceased_group.level / heir_group.level
@@ -264,9 +264,10 @@ async def _(event: Event):
         else:
             bank_group += bank
             heir_group.bank = dict(Counter(heir_group.bank) + bank)
+    del manager.group_library[deceased_group.id]
     manager.data.cancel_group(deceased_group.id)
     info = []
-    info.append(invest_card([(manager.group_library[k].stock, v) for k, v in invest_group.items()]), "群投资继承")
+    info.append(invest_card([(manager.group_library[k].stock, v) for k, v in invest_group.items()], "群投资继承"))
     info.append(prop_card([(manager.props_library[k], v) for k, v in bank_group.items()], "群金库继承"))
     info.append(prop_card([(manager.props_library[k], v) for k, v in all_bank_private.items()], "个人总继承"))
     return manager.info_card(info, event.user_id)
@@ -284,7 +285,7 @@ async def _():
         stock_value = stock.value = sum(wealths) * level
         floating = stock.floating
         if not floating or math.isnan(floating):
-            stock.floating = stock_value
+            stock.floating = float(stock_value)
             return f"{stock.name} 已初始化"
         # 股票价格变化：趋势性影响（正态分布），随机性影响（平均分布），向债务价值回归
         floating += floating * random.gauss(0, 0.03)
@@ -336,4 +337,4 @@ async def _():
 
     groups = [group for group in manager.data.group_dict.values() if group.stock.name and group.stock.issuance]
     log = [stock_update(group) for group in groups]
-    return "\n".join(log)
+    print("\n".join(log))

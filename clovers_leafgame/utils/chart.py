@@ -255,7 +255,7 @@ def group_info_account(company: Company, dist):
         pctdistance=1.2,
         explode=explode[0:N],
     )
-    plt.legend(labels, loc=(-0.6, 0), frameon=False)
+    plt.legend(labels, loc="lower left", frameon=False)
     plt.subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0, wspace=0.6)
     plt.savefig(output, format="png", dpi=100, transparent=True)
     plt.close()
