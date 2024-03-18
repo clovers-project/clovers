@@ -38,6 +38,9 @@ class Handle:
         return await self.func(event)
 
 
+PluginCommands = str | set[str] | re.Pattern | None
+
+
 class Plugin:
     NO_BUILD = lambda x: x
 
@@ -51,7 +54,7 @@ class Plugin:
         self.handles: dict[int, Handle] = {}
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
-        self.temp_handles: dict[float, Handle] = {}
+        self.temp_handles: dict[str, tuple[float, Handle]] = {}
         self.startup_tasklist: list[Coroutine] = []
         self.shutdown_tasklist: list[Coroutine] = []
         self.build_event: Callable = build_event
@@ -64,37 +67,52 @@ class Plugin:
 
         return wrapper
 
+    def commands_register(self, commands: PluginCommands, key: str):
+        if not commands:
+            self.command_dict.setdefault("", set()).add(key)
+        elif isinstance(commands, set):
+            for command in commands:
+                self.command_dict.setdefault(command, set()).add(key)
+        elif isinstance(commands, str):
+            self.regex_dict.setdefault(re.compile(commands), set()).add(key)
+        elif isinstance(commands, re.Pattern):
+            self.regex_dict.setdefault(commands, set()).add(key)
+        else:
+            raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
+
     def handle(
         self,
-        commands: str | set[str] | re.Pattern,
+        commands: PluginCommands,
         extra_args: list[str] | set[str] | tuple[str] = None,
     ):
         def decorator(func: Callable[..., Coroutine]):
             key = len(self.handles)
-            if isinstance(commands, set):
-                for command in commands:
-                    self.command_dict.setdefault(command, set()).add(key)
-            elif isinstance(commands, str):
-                self.regex_dict.setdefault(re.compile(commands), set()).add(key)
-            elif isinstance(commands, re.Pattern):
-                self.regex_dict.setdefault(commands, set()).add(key)
-            else:
-                raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
-
+            self.commands_register(commands, key)
             handle = Handle(extra_args)
             handle.func = self.handle_warpper(func)
             self.handles[key] = handle
 
         return decorator
 
-    def temp_handle(self, extra_args: list[str] | set[str] | tuple[str] = None, timeout: float | int = 60.0):
+    def temp_handle(
+        self,
+        key: str,
+        extra_args: list[str] | set[str] | tuple[str] = None,
+        timeout: float | int = 60.0,
+    ):
 
         def decorator(func: Callable[..., Coroutine]):
-            key = time.time() + timeout
+
+            def delete():
+                del self.temp_handles[key]
+
+            async def wrapper(event: Event):
+                if result := await func(self.build_event(event), delete):
+                    return self.build_result(result)
+
             handle = Handle(extra_args)
-            handle.func = self.handle_warpper(func)
-            self.temp_handles[key] = handle
-            return key
+            handle.func = wrapper
+            self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
 
