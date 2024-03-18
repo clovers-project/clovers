@@ -69,6 +69,7 @@ class Adapter:
             resp = plugin(command)
             for handle_id, event in resp.items():
                 task_list.append(self.response_task(method, plugin.handles[handle_id], event, extra))
+
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
     async def startup(self):

@@ -1,4 +1,4 @@
-import os
+import time
 import importlib
 import traceback
 import re
@@ -51,7 +51,7 @@ class Plugin:
         self.handles: dict[int, Handle] = {}
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
-        self.got_dict: dict = {}
+        self.trigger_dict: dict[str, tuple[Handle, float]] = {}
         self.startup_tasklist: list[Coroutine] = []
         self.shutdown_tasklist: list[Coroutine] = []
         self.build_event: Callable = build_event
@@ -125,6 +125,28 @@ class Plugin:
                 event = Event(command)
                 kv.update({key: event for key in keys})
         return kv
+
+    def trigger(
+        self,
+        key: str,
+        extra_args: list[str] | set[str] | tuple[str] = None,
+    ):
+        """
+        注册指令触发事件
+        """
+
+        def decorator(func: Callable[..., Coroutine]):
+            handle = Handle(extra_args)
+            handle.extra_args.append("trigger_key")
+
+            async def wrapper(event: Event) -> Result:
+                if result := await func(self.build_event(event)):
+                    return self.build_result(result)
+
+            handle.func = wrapper
+            self.trigger_dict[key] = (handle, time.time() + 60)
+
+        return decorator
 
     def __call__(self, command: str) -> dict[int, Event]:
         kv = {}
