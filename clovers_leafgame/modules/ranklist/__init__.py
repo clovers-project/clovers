@@ -31,11 +31,11 @@ def all_ranklist(title: str):
     if prop.domain == 1:
 
         def std_value(prop_id: str, group_id: str, account_id: str):
-            return manager.data.account_dict[account_id].bank.get(prop_id, 0) * manager.data.group(group_id).level
+            return manager.data.account_dict[account_id].bank[prop_id] * manager.data.group(group_id).level
 
         value = lambda prop_id: sum(std_value(prop_id, group_id, account_id) for group_id, account_id in user.accounts_map.items())
     else:
-        value = lambda prop_id: user.bank.get(prop_id, 0)
+        value = lambda prop_id: user.bank[prop_id]
     for user_id in manager.data.user_dict.keys():
         user = manager.data.user(user_id)
         ranklist.append((user.name or user_id, value(prop.id), user.avatar_url))

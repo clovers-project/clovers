@@ -28,10 +28,39 @@ async def _(event: Event):
     extra = account.extra
     if not extra.setdefault("revolution", True):
         return "你没有待领取的金币"
-    N = random.randint(*revolt_gold)
-    GOLD.deal(account.bank, N)
+    n = random.randint(*revolt_gold)
+    GOLD.deal(account.bank, n)
     extra["revolution"] = False
-    return f"这是你重置后获得的金币！你获得了 {N} 金币"
+    return f"这是你重置后获得的金币！你获得了 {n} 金币"
+
+
+@plugin.handle({"金币转入"}, {"user_id", "group_id", "nickname"})
+async def _(event: Event):
+    n = event.args_to_int()
+    if n == 0:
+        return
+    user, account = manager.account(event)
+    level = manager.data.group(event.group_id).level
+    if n > 0:
+        n_out = n * level
+        if n_out > user.bank[STD_GOLD.id]:
+            n_out = user.bank[STD_GOLD.id]
+            n_in = int(user.bank[STD_GOLD.id] / level)
+        else:
+            n_in = n
+        user.bank[STD_GOLD.id] -= n_out
+        account.bank[GOLD.id] += n_in
+        return f"你成功将{n_out}枚标准金币兑换为{n_in}枚金币"
+    else:
+        n_out = n
+        if n_out > account.bank[GOLD.id]:
+            n_out = account.bank[GOLD.id]
+            n_in = account.bank[GOLD.id] * level
+        else:
+            n_in = n * level
+        user.bank[STD_GOLD.id] += n_in
+        account.bank[GOLD.id] -= n_out
+        return f"你成功将{n_out}枚金币兑换为{n_in}枚标准金币"
 
 
 @plugin.handle({"金币转移"}, {"user_id", "group_id"})
@@ -48,7 +77,7 @@ async def _(event: Event):
     group_out = manager.data.group(event.group_id or user.connect)
     if not (sender_account_id := user.accounts_map.get(group_out.id)):
         return "你在本群没有帐户"
-    if (n := group_out.bank.get(GOLD.id, 0)) < company_public_gold:
+    if (n := group_out.bank[GOLD.id]) < company_public_gold:
         return f"本群金币过少（{n}<{company_public_gold}），无法完成结算"
     bank_out = manager.data.account_dict[sender_account_id].bank
     bank_in = manager.data.account_dict[receiver_account_id].bank
@@ -94,7 +123,6 @@ async def _(event: Event):
     level = group.level = (sum(ra.values()) if (ra := group.extra.get("revolution_achieve")) else 0) + 1
     issuance = 20000 * level
     group.invest[group_id] = issuance - stock.issuance
-    group.bank[GOLD.id] = group.bank.get(GOLD.id, 0)
     stock.issuance = issuance
     stock.floating = stock.value = (stock_value) * level
     manager.group_library.set_item(group.id, {stock_name}, group)
@@ -131,20 +159,25 @@ async def _(event: Event):
     if not stock_group:
         return f"没有 {stock_name} 的注册信息"
     stock = stock_group.stock
-    buy = min(stock_group.invest.get(stock.id, 0), buy)
+    buy = min(stock_group.invest[stock.id], buy)
     if buy < 1:
         return "已售空，请等待结算。"
     group = manager.group_library.get(stock_name)
-    if (n := group.bank.get(GOLD.id, 0)) < company_public_gold:
+    if (n := group.bank[GOLD.id]) < company_public_gold:
         return f"本群金币过少（{n}<{company_public_gold}），无法完成结算"
-    stock_value = sum(manager.group_wealths(stock.id, GOLD.id)) * stock_group.level
+    level = stock_group.level
+    stock_value = sum(manager.group_wealths(stock.id, GOLD.id)) * level + group.bank[STD_GOLD.id]
     user, account = manager.account(event)
-    my_STD_GOLD = account.bank.get(GOLD.id, 0) * group.level
+    GOLD.deal(account.bank, int(user.bank[STD_GOLD.id] / level))
+    user.bank[STD_GOLD.id] = 0
+    my_STD_GOLD = account.bank[GOLD.id] * group.level
     issuance = stock.issuance
     value = 0.0
     actual_buy = 0
-    unit = max(stock.floating, stock_value) / issuance
+    floating = stock.floating
+    limit = limit or float("inf")
     for _ in range(buy):
+        unit = max(floating, stock_value) / issuance
         if unit > limit:
             tip = f"价格超过限制（{limit}）。"
             break
@@ -152,16 +185,17 @@ async def _(event: Event):
         if value > my_STD_GOLD:
             tip = f"你的金币不足（{my_STD_GOLD}）。"
             break
-        unit += value / issuance
+        floating += unit
         actual_buy += 1
     else:
         tip = "交易成功！"
+
     actual_gold = math.ceil(value / group.level)
-    GOLD.force_deal(account.bank, -actual_gold)
-    GOLD.force_deal(group.bank, math.ceil(value / stock_group.level))
-    stock.force_deal(group.bank, -actual_buy)
-    stock.force_deal(user.bank, actual_buy)
-    stock.floating += value
+    account.bank[GOLD.id] -= actual_gold
+    group.bank[GOLD.id] += math.ceil(value / stock_group.level)
+    stock.force_deal(group.invest, -actual_buy)
+    stock.force_deal(user.invest, actual_buy)
+    stock.floating = floating
     stock.value = stock_value + value
     output = BytesIO()
     text_to_image(
@@ -184,7 +218,7 @@ async def _(event: Event):
         return f"没有 {stock_name} 的注册信息"
     stock_name = stock_group.nickname
     stock_id = stock_group.id
-    my_stock = user.invest.get(stock_id, 0)
+    my_stock = user.invest[stock_id]
     if my_stock < n:
         return f"你的账户中没有足够的{stock_name}（{my_stock}）。"
     user_id = user.id
@@ -215,7 +249,7 @@ async def _(event: Event):
 async def _(event: Event):
     group_ids = manager.group_library._key_indices.keys()
     groups = (manager.group_library[group_id] for group_id in group_ids)
-    data = [(group.stock, group.invest.get(group.stock.id, 0)) for group in groups]
+    data = [(group.stock, group.invest[group.stock.id]) for group in groups]
     if not data:
         return "市场为空"
     data.sort(key=lambda x: x[0].value, reverse=True)
@@ -282,7 +316,7 @@ async def _():
         level = group.level
         # 资产更新
         wealths = manager.group_wealths(group.id, GOLD.id)
-        stock_value = stock.value = sum(wealths) * level
+        stock_value = stock.value = sum(wealths) * level + group.bank[STD_GOLD.id]
         floating = stock.floating
         if not floating or math.isnan(floating):
             stock.floating = float(stock_value)
@@ -322,6 +356,7 @@ async def _():
             stock.force_deal(group.invest, settle)
             value = int(value)
             STD_GOLD.force_deal(user.bank, value)
+            user.message.append(f"你在交易市场的{n}份{stock.name} 已出售{settle}份，总计收入{value}标准金币。")
             std_value += value
         GOLD.force_deal(group.bank, -int(std_value / level))
         stock.exchange = {user_id: exchange for user_id, exchange in stock.exchange.items() if exchange[0] > 0}

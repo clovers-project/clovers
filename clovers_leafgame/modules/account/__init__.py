@@ -3,9 +3,8 @@ from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
 from collections import Counter
-from clovers_apscheduler import scheduler
 from clovers_utils.tools import download_url, format_number
-from clovers_leafgame.core.clovers import Event, to_me, superuser, at
+from clovers_leafgame.core.clovers import Event, to_me, superuser, at_list
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import (
     GOLD,
@@ -91,14 +90,14 @@ async def _(event: Event):
     today = datetime.today()
     if account.sign_in and (today - account.sign_in).days == 0:
         return "你已经签过到了哦"
-    N = random.randint(*sign_gold)
+    n = random.randint(*sign_gold)
     account.sign_in = today
-    GOLD.deal(account.bank, N)
-    return random.choice(["祝你好运~", "可别花光了哦~"]) + f"\n你获得了 {N} 金币"
+    GOLD.deal(account.bank, n)
+    return random.choice(["祝你好运~", "可别花光了哦~"]) + f"\n你获得了 {n} 金币"
 
 
 @plugin.handle({"发红包"}, {"user_id", "group_id", "at", "permission"})
-@at.decorator
+@at_list.decorator
 async def _(event: Event):
     unsettled = event.args_to_int()
     sender_id = event.user_id
@@ -112,7 +111,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"送道具"}, {"user_id", "group_id", "at", "permission"})
-@at.decorator
+@at_list.decorator
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
@@ -136,12 +135,12 @@ async def _(event: Event):
     user_id = event.user_id
     user = manager.data.user(user_id)
     if prop.domain != 1:
-        return f"你还有 {user.bank.get(prop.id,0)} 个{prop.name}"
+        return f"你还有 {user.bank[prop.id]} 个{prop.name}"
     if event.is_private():
         info = []
         for group_id, account_id in user.accounts_map.items():
             account = manager.data.account_dict[account_id]
-            info.append(f"【{manager.data.group(group_id).nickname}】{prop.name} {account.bank.get(prop.id,0)}个")
+            info.append(f"【{manager.data.group(group_id).nickname}】{prop.name} {account.bank[prop.id]}个")
         if info:
             return "你的账户:\n" + "\n".join(info)
         else:
@@ -152,7 +151,7 @@ async def _(event: Event):
         account = manager.data.account_dict[account_id]
     else:
         account = manager.new_account(user_id, group_id)
-    return f"你还有 {account.bank.get(prop.id,0)} 个{prop.name}"
+    return f"你还有 {account.bank[prop.id]} 个{prop.name}"
 
 
 @plugin.handle({"我的信息", "我的资料卡"}, {"user_id", "group_id", "nickname"})
@@ -185,35 +184,39 @@ async def _(event: Event):
     sum_std_n = 0
     for group_id, account_id in user.accounts_map.items():
         group = manager.data.group(group_id)
-        std_n = manager.data.account_dict[account_id].bank.get(GOLD.id, 0) * group.level
+        std_n = manager.data.account_dict[account_id].bank[GOLD.id] * group.level
         if std_n > 0:
             dist.append((std_n, group.nickname))
         sum_std_n += std_n
     else:
         dist = dist or [(1, "None")]
-    if account.sign_in is None:
-        delta_days = 1
-    else:
-        delta_days = (datetime.today() - account.sign_in).days
-    if delta_days == 0:
-        lines.append("[color][green]今日已签到")
-    else:
-        lines.append(f"[color][red]连续{delta_days}天 未签到")
     lines.append(f"金币 {format_number(sum_std_n)}")
     lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
     info.append(text_to_image("\n".join(lines), 30, canvas=dist_card(dist)))
     data = invest_data(user.invest)
     if data:
         info.append(invest_card(data, "股票信息"))
+    lines = []
+    if account.sign_in is None:
+        delta_days = 1
+    else:
+        delta_days = (datetime.today() - account.sign_in).days
+    if delta_days == 0:
+        lines.append("[color][green]本群今日已签到")
+    else:
+        lines.append(f"[color][red]本群连续{delta_days}天 未签到")
+    lines += user.message
+    info.append(text_to_image("\n".join(lines) + endline("Message"), 40, autowrap=True))
+    user.message.clear()
     return manager.info_card(info, event.user_id)
 
 
 @plugin.handle({"我的道具"}, {"user_id", "group_id", "nickname"})
 async def _(event: Event):
-    user, group_account = manager.account(event)
-    props = {}
-    props.update(user.bank)
-    props.update(group_account.bank)
+    user, account = manager.account(event)
+    props = Counter()
+    props += user.bank
+    props += account.bank
     if not props:
         return "您的仓库空空如也。"
 
@@ -223,6 +226,15 @@ async def _(event: Event):
     else:
         info = [prop_card(data)]
     return manager.info_card(info, event.user_id)
+
+
+@plugin.handle({"股票查询", "投资查询"}, {"user_id", "group_id", "nickname"})
+async def _(event: Event):
+    user, account = manager.account(event)
+    data = invest_data(user.invest)
+    if data:
+        return manager.info_card([invest_card(data, f"股票信息:{account.name}")], event.user_id)
+    return "您的仓库空空如也。"
 
 
 @plugin.handle({"群金库"}, {"user_id", "group_id", "permission"})
@@ -305,7 +317,9 @@ async def _(event: Event):
         info.append(prop_card(data, "群金库"))
     if data := invest_data(group.invest):
         info.append(invest_card(data, "群投资"))
-
+    if group.message:
+        info.append(text_to_image("\n".join(group.message) + endline("Message"), 40, autowrap=True))
+        group.message.clear()
     return manager.info_card(info, event.user_id)
 
 
@@ -322,3 +336,41 @@ async def _(event: Event):
     if n := prop.deal(prop.locate_bank(*manager.account(event)), N):
         return f"获取失败，你的【{prop.name}】（{n}））数量不足。"
     return f"你获得了{N}个【{prop.name}】！"
+
+
+@plugin.handle({"冻结资产"}, {"user_id", "group_id", "permission", "at"})
+@at_list.decorator
+@superuser.decorator
+async def _(event: Event):
+    user_id = event.user_id
+    group_id = event.group_id
+    user, account = manager.locate_account(event.at[0], group_id)
+    confirm = "".join(str(random.randint(0, 9)) for _ in range(4))
+
+    @plugin.temp_handle(f"{confirm} {user_id} {group_id}", {"user_id", "group_id", "permission"})
+    async def _(temp_event: Event, finish) -> str:
+        if temp_event.user_id != user_id or temp_event.group_id != group_id:
+            return
+        finish()
+        if temp_event.raw_event.raw_command != confirm:
+            return "【冻结】已取消。"
+        bank = Counter()
+        bank += user.bank
+        user.bank.clear()
+        accounts_map = user.accounts_map.copy()
+        for _group_id, account_id in accounts_map.items():
+            account = manager.data.account_dict[account_id]
+            level = manager.data.group(_group_id).level
+            bank += {k: v * level for k, v in account.bank.items()}
+            manager.data.cancel_account(account_id)
+        info = []
+        if data := [(prop, v) for k, v in bank.items() if (prop := manager.props_library.get(k))]:
+            info.append(prop_card(data, "已删除道具"))
+        if data := [(group.stock, v) for k, v in user.invest.items() if (group := manager.group_library.get(k))]:
+            info.append(invest_card(data, "已删除股票"))
+        user.invest.clear()
+        if info:
+            return ["冻结完成", manager.info_card(info, user_id)]
+        return "冻结完成,目标没有任何资产"
+
+    return f"您即将冻结 {account.name}（{user.id}），请输入{confirm}来确认。"

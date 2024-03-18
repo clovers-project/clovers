@@ -1,5 +1,5 @@
 import numpy as np
-from clovers_leafgame.output import text_to_image
+from clovers_leafgame.output import text_to_image, endline
 
 curve_fit = {
     1: lambda x: 0.339438628551138 * np.log(2.7606559801569316e-13 * x) + -0.0012286453324789554 * x + 9.310675305999386,

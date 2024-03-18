@@ -18,9 +18,9 @@ def verification():
     for user_id, user in user_dict.items():
         user.id = user_id
         # 清理未持有的道具
-        user.bank = {k: v for k, v in user.bank.items() if v > 0 and k in props_library}
+        user.bank = Counter({k: v for k, v in user.bank.items() if v > 0 and k in props_library})
         # 删除无效及未持有的股票
-        invest = user.invest = {k: v for k, v in user.invest.items() if k in group_dict and v > 0}
+        invest = user.invest = Counter({k: v for k, v in user.invest.items() if k in group_dict and v > 0})
         # 股票数检查
         stock_check += Counter(invest)
         for group_id, accounts_id in user.accounts_map.items():
@@ -28,13 +28,12 @@ def verification():
             account.user_id = user_id
             account.group_id = group_id
             # 清理未持有的道具
-            account.bank = {k: v for k, v in account.bank.items() if v > 0 and k in props_library}
+            account.bank = Counter({k: v for k, v in account.bank.items() if v > 0 and k in props_library})
             group_dict[group_id].accounts_map[user_id] = accounts_id
-    # 检查group_data
+    # 检查 group_dict
     for group in group_dict.values():
-        # 删除无效及未持有的股票
-        group.invest = {k: v for k, v in group.invest.items() if k in group_dict and v > 0}
-        stock_check += Counter(group.invest)
+        group.invest = Counter({k: v for k, v in group.invest.items() if k in group_dict and v > 0})
+        group.bank = Counter({k: v for k, v in group.bank.items() if v > 0 and k in props_library and v > 0})
 
     for group_id, group in group_dict.items():
         # 修正公司等级
@@ -70,15 +69,17 @@ async def _():
 @superuser.decorator
 @scheduler.scheduled_job("cron", hour=0, misfire_grace_time=120)
 async def _():
-    verification()
     revolution_today = datetime.today().weekday() in {4, 5, 6}
     for user in manager.data.user_dict.values():
-        user.bank = {k: min(v - 1) if prop.flow == 1 else v for k, v in user.bank.items() if (prop := manager.props_library.get(k))}
+        bank = {k: (v - 1) if prop.flow == 1 else v for k, v in user.bank.items() if (prop := manager.props_library.get(k))}
+        user.bank = Counter(bank)
     for account in manager.data.account_dict.values():
         # 周末刷新重置签到
         account.extra["revolution"] = revolution_today
         # 群内道具有效期 - 1天
-        account.bank = {k: min(v - 1) if prop.flow == 1 else v for k, v in account.bank.items() if (prop := manager.props_library.get(k))}
+        bank = {k: (v - 1) if prop.flow == 1 else v for k, v in account.bank.items() if (prop := manager.props_library.get(k))}
+        account.bank = Counter(bank)
+    verification()
     print("每日签到已刷新")
 
 

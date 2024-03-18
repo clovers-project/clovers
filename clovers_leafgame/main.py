@@ -8,12 +8,18 @@ from .config import Config
 config = Config.parse_obj(clovers_config.get(__package__, {}))
 """主配置类"""
 
-plugin = Plugin(
-    build_event=lambda event: Event(event),
-    build_result=lambda result: (
-        Result("text", result) if isinstance(result, str) else Result("image", result) if isinstance(result, BytesIO) else result
-    ),
-)
+
+def build_result(result):
+    if isinstance(result, str):
+        return Result("text", result)
+    if isinstance(result, BytesIO):
+        return Result("image", result)
+    if isinstance(result, list):
+        return Result("list", [build_result(seg) for seg in result])
+    return result
+
+
+plugin = Plugin(build_event=lambda event: Event(event), build_result=build_result)
 """小游戏插件实例"""
 
 manager = Manager(config.main_path)

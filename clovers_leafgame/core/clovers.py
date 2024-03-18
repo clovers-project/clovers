@@ -49,8 +49,10 @@ class Event:
 
     def args_to_int(self):
         if args := self.raw_event.args:
-            n = to_int(args[0])
-        return n or 0
+            n = to_int(args[0]) or 0
+        else:
+            n = 0
+        return n
 
     def args_parse(self):
         args = self.raw_event.args
@@ -140,4 +142,4 @@ class Check:
 to_me = Check(to_me=True)
 superuser = Check(superuser=True)
 group_admin = Check(group_admin=True)
-at = Check(at=True)
+at_list = Check(at=True)

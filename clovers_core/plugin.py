@@ -98,16 +98,16 @@ class Plugin:
         self,
         key: str,
         extra_args: list[str] | set[str] | tuple[str] = None,
-        timeout: float | int = 60.0,
+        timeout: float | int = 30.0,
     ):
 
         def decorator(func: Callable[..., Coroutine]):
 
-            def delete():
+            def finish():
                 del self.temp_handles[key]
 
             async def wrapper(event: Event):
-                if result := await func(self.build_event(event), delete):
+                if result := await func(self.build_event(event), finish):
                     return self.build_result(result)
 
             handle = Handle(extra_args)
@@ -128,10 +128,11 @@ class Plugin:
 
         return func
 
-    def command_check(self, command: str) -> dict[int, Event]:
-        kv = {}
-        if not (command_list := command.strip().split()):
-            return kv
+    def __call__(self, command: str) -> dict[int, Event]:
+        if not command:
+            return
+        data = {}
+        command_list = command.strip().split()
         command_start = command_list[0]
         for cmd, keys in self.command_dict.items():
             if not command_start.startswith(cmd):
@@ -142,23 +143,23 @@ class Plugin:
                 command_list[0] = command_list[0][len(cmd) :]
                 args = command_list
             event = Event(command, args)
-            kv.update({key: event for key in keys})
+            data.update({key: event for key in keys})
 
-        return kv
-
-    def regex_check(self, command: str) -> dict[int, Event]:
-        kv = {}
         for pattern, keys in self.regex_dict.items():
             if re.match(pattern, command):
                 event = Event(command)
-                kv.update({key: event for key in keys})
-        return kv
+                data.update({key: event for key in keys})
 
-    def __call__(self, command: str) -> dict[int, Event]:
-        kv = {}
-        kv.update(self.command_check(command))
-        kv.update(self.regex_check(command))
-        return kv
+        return data
+
+    def temp_check(self) -> bool:
+        if not self.temp_handles:
+            return False
+        now = time.time()
+        self.temp_handles = {k: v for k, v in self.temp_handles.items() if v[0] > now}
+        if not self.temp_handles:
+            return False
+        return True
 
 
 class PluginLoader:

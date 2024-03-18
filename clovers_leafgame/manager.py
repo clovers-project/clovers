@@ -9,10 +9,11 @@ import typing_extensions
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+from collections import Counter
 from clovers_utils.linecard import info_splicing, ImageList
 from clovers_utils.library import Library
 from .core.clovers import Event
-from .core.data import Bank, Account, User, Group, Account, DataBase
+from .core.data import Account, User, Group, Account, DataBase
 from .item import Prop, props_library, marking_library, VIP_CARD
 
 
@@ -122,7 +123,7 @@ class Manager:
         if n := prop.deal(sender_bank, -unsettled):
             return f"数量不足。\n——{sender_name}还有{n}个{prop.name}。"
         receiver_name = receiver_account.name or receiver.name or receiver.id
-        if sender_account.bank.get(VIP_CARD.id):
+        if sender_account.bank[VIP_CARD.id]:
             tax = 0
             tip = f"『{VIP_CARD.name}』免手续费"
         else:
@@ -139,11 +140,11 @@ class Manager:
         group = self.group_library.get(group_name)
         if not group:
             return []
-        wealths = [self.data.account_dict[account_id].bank.get(prop_id, 0) for account_id in group.accounts_map.values()]
-        wealths.append(group.bank.get(prop_id, 0))
+        wealths = [self.data.account_dict[account_id].bank[prop_id] for account_id in group.accounts_map.values()]
+        wealths.append(group.bank[prop_id])
         return wealths
 
-    def stock_value(self, invest: Bank):
+    def stock_value(self, invest: Counter[str]):
         i = 0.0
         for group_id, n in invest.items():
             group = self.data.group_dict.get(group_id)

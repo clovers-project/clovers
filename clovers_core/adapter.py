@@ -66,10 +66,12 @@ class Adapter:
         method = self.methods[adapter]
         task_list = []
         for plugin in self.plugins:
-            resp = plugin(command)
-            for handle_id, event in resp.items():
-                task_list.append(self.response_task(method, plugin.handles[handle_id], event, extra))
-
+            if data := plugin(command):
+                task_list += [self.response_task(method, plugin.handles[key], event, extra) for key, event in data.items()]
+            if not plugin.temp_check():
+                continue
+            event = Event(command)
+            task_list += [self.response_task(method, handle, event, extra) for _, handle in plugin.temp_handles.values()]
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
     async def startup(self):

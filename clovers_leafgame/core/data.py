@@ -1,25 +1,23 @@
 from datetime import datetime
 from pydantic import BaseModel
+from collections import Counter
 
 KeyMap = dict[str, str]
-
-Bank = dict[str, int]
 
 
 class Item(BaseModel):
     id: str = None
     name: str = None
 
-    def deal(self, bank: Bank, unsettled: int):
+    def deal(self, bank: Counter[str], unsettled: int):
         prop_id = self.id
-        n = bank.get(prop_id, 0)
+        n = bank[prop_id]
         if unsettled < 0 and n < (-unsettled):
             return n or -1
-        bank[prop_id] = n + unsettled
+        bank[prop_id] += unsettled
 
-    def force_deal(self, bank: Bank, unsettled: int):
-        prop_id = self.id
-        bank[prop_id] = bank.get(prop_id, 0) + unsettled
+    def force_deal(self, bank: Counter[str], unsettled: int):
+        bank[self.id] += unsettled
 
 
 class User(BaseModel):
@@ -27,11 +25,12 @@ class User(BaseModel):
     name: str = None
     avatar_url: str = None
     connect: str = None
-    bank: Bank = Bank()
-    invest: Bank = Bank()
+    bank: Counter[str] = Counter()
+    invest: Counter[str] = Counter()
     extra: dict = {}
     accounts_map: KeyMap = {}
     """Find account ID from group_id"""
+    message: list[str] = []
 
 
 class Account(BaseModel):
@@ -39,7 +38,7 @@ class Account(BaseModel):
     group_id: str
     name: str = None
     sign_in: datetime = None
-    bank: Bank = Bank()
+    bank: Counter[str] = Counter()
     extra: dict = {}
 
     @property
@@ -90,7 +89,7 @@ class Prop(Item):
                 return user.bank
 
     def N(self, user: User, account: Account):
-        return self.locate_bank(user, account).get(self.id, 0)
+        return self.locate_bank(user, account)[self.id]
 
 
 class Stock(Item):
@@ -112,11 +111,12 @@ class Group(BaseModel):
     avatar_url: str = None
     level: int = 1
     stock: Stock = Stock()
-    bank: Bank = Bank()
-    invest: Bank = Bank()
+    bank: Counter[str] = Counter()
+    invest: Counter[str] = Counter()
     extra: dict = {}
     accounts_map: KeyMap = {}
     """Find account ID from user_id"""
+    message: list[str] = []
 
     @property
     def nickname(self):
@@ -154,9 +154,9 @@ class DataBase(BaseModel):
         account = self.account_dict.get(account_id)
         if not account:
             return
-        del self.account_dict[account_id]
         user_id = account.user_id
         group_id = account.group_id
+        del self.account_dict[account_id]
         try:
             del self.user_dict[user_id].accounts_map[group_id]
         except Exception as e:
