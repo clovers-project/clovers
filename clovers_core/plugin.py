@@ -51,11 +51,18 @@ class Plugin:
         self.handles: dict[int, Handle] = {}
         self.command_dict: dict[str, set[int]] = {}
         self.regex_dict: dict[re.Pattern, set[int]] = {}
-        self.trigger_dict: dict[str, tuple[Handle, float]] = {}
+        self.temp_handles: dict[float, Handle] = {}
         self.startup_tasklist: list[Coroutine] = []
         self.shutdown_tasklist: list[Coroutine] = []
         self.build_event: Callable = build_event
         self.build_result: Callable = build_result
+
+    def handle_warpper(self, func: Callable[..., Coroutine]):
+        async def wrapper(event: Event):
+            if result := await func(self.build_event(event)):
+                return self.build_result(result)
+
+        return wrapper
 
     def handle(
         self,
@@ -75,13 +82,19 @@ class Plugin:
                 raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
 
             handle = Handle(extra_args)
-
-            async def wrapper(event: Event) -> Result:
-                if result := await func(self.build_event(event)):
-                    return self.build_result(result)
-
-            handle.func = wrapper
+            handle.func = self.handle_warpper(func)
             self.handles[key] = handle
+
+        return decorator
+
+    def temp_handle(self, extra_args: list[str] | set[str] | tuple[str] = None, timeout: float | int = 60.0):
+
+        def decorator(func: Callable[..., Coroutine]):
+            key = time.time() + timeout
+            handle = Handle(extra_args)
+            handle.func = self.handle_warpper(func)
+            self.temp_handles[key] = handle
+            return key
 
         return decorator
 
@@ -95,10 +108,7 @@ class Plugin:
         """注册一个结束任务"""
         self.shutdown_tasklist.append(func())
 
-        async def wrapper(*args):
-            return await func()
-
-        return wrapper
+        return func
 
     def command_check(self, command: str) -> dict[int, Event]:
         kv = {}
@@ -125,28 +135,6 @@ class Plugin:
                 event = Event(command)
                 kv.update({key: event for key in keys})
         return kv
-
-    def trigger(
-        self,
-        key: str,
-        extra_args: list[str] | set[str] | tuple[str] = None,
-    ):
-        """
-        注册指令触发事件
-        """
-
-        def decorator(func: Callable[..., Coroutine]):
-            handle = Handle(extra_args)
-            handle.extra_args.append("trigger_key")
-
-            async def wrapper(event: Event) -> Result:
-                if result := await func(self.build_event(event)):
-                    return self.build_result(result)
-
-            handle.func = wrapper
-            self.trigger_dict[key] = (handle, time.time() + 60)
-
-        return decorator
 
     def __call__(self, command: str) -> dict[int, Event]:
         kv = {}
