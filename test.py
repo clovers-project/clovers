@@ -1,6 +1,7 @@
 from collections import Counter
+import time
+from datetime import datetime
 
-bank = Counter({"a": 0})
-print("a" in bank)
-print(bank["b"])
-print("b" in bank)
+t = time.time()
+tstr = time.strftime("%H:%M", time.localtime(t))
+print(tstr)

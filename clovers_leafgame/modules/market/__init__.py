@@ -1,5 +1,4 @@
 import time
-from datetime import datetime
 import math
 import random
 from io import BytesIO
@@ -331,7 +330,8 @@ async def _():
         # 结算交易市场上的股票
         issuance = stock.issuance
         std_value = 0
-        now = datetime.now().strftime("%H:%M")
+        now_time = time.time()
+        clock = time.strftime("%H:%M", time.localtime(now_time))
         for user_id, exchange in stock.exchange.items():
             user = manager.data.user(user_id)
             n, quote = exchange
@@ -359,7 +359,7 @@ async def _():
             value = int(value)
             STD_GOLD.force_deal(user.bank, value)
             user.message.append(
-                f"【交易市场 {now}】收入{value}标准金币。\n{stock.name}已出售{settle}/{n}，报价{quote or format_number(value/settle)}。"
+                f"【交易市场 {clock}】收入{value}标准金币。\n{stock.name}已出售{settle}/{n}，报价{quote or format_number(value/settle)}。"
             )
             std_value += value
         GOLD.force_deal(group.bank, -int(std_value / level))
@@ -369,7 +369,7 @@ async def _():
         # 记录价格历史
         if not (stock_record := group.extra.get("stock_record")):
             stock_record = [(0.0, 0.0) for _ in range(720)]
-        stock_record.append((time.time(), floating / issuance))
+        stock_record.append((now_time, floating / issuance))
         stock_record = stock_record[-720:]
         group.extra["stock_record"] = stock_record
         return f"{stock.name} 更新成功！"
