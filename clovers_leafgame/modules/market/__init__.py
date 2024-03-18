@@ -6,7 +6,7 @@ from collections import Counter
 from clovers_apscheduler import scheduler
 from clovers_utils.tools import item_name_rule, gini_coef, format_number
 from clovers_leafgame.core.clovers import Event, to_me, group_admin, superuser
-from clovers_leafgame.core.data import Stock, Group
+from clovers_leafgame.core.data import Group
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import GOLD, LICENSE, STD_GOLD
 from clovers_leafgame.output import text_to_image, endline, invest_card, prop_card
@@ -238,7 +238,7 @@ async def _(event: Event):
     exchange[user_id] = (n, quote)
     output = BytesIO()
     text_to_image(
-        f"{stock_name}\n----\n报价：{quote or '抛售'}\n数量：{n}" + endline(tip),
+        f"{stock_name}\n----\n报价：{quote or '自动出售'}\n数量：{n}" + endline(tip),
         width=440,
         bg_color="white",
     ).save(output, format="png")
@@ -356,7 +356,9 @@ async def _():
             stock.force_deal(group.invest, settle)
             value = int(value)
             STD_GOLD.force_deal(user.bank, value)
-            user.message.append(f"你在交易市场的{n}份{stock.name} 已出售{settle}份，总计收入{value}标准金币。")
+            user.message.append(
+                f"【交易市场信息】收入{value}标准金币。\n{stock.name}已出售{settle}/{n}，报价{quote or format_number(value/settle)}。"
+            )
             std_value += value
         GOLD.force_deal(group.bank, -int(std_value / level))
         stock.exchange = {user_id: exchange for user_id, exchange in stock.exchange.items() if exchange[0] > 0}

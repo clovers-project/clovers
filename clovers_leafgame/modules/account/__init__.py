@@ -8,6 +8,7 @@ from clovers_leafgame.core.clovers import Event, to_me, superuser, at_list
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import (
     GOLD,
+    STD_GOLD,
     LICENSE,
     CLOVERS_MARKING,
     REVOLUTION_MARKING,
@@ -180,19 +181,17 @@ async def _(event: Event):
     if lines:
         info.append(text_to_image("\n".join(lines)))
     lines = []
-    dist = []
-    sum_std_n = 0
+    sum_std_n = user.bank[STD_GOLD.id]
+    dist = [(sum_std_n, "个人账户")]
     for group_id, account_id in user.accounts_map.items():
         group = manager.data.group(group_id)
         std_n = manager.data.account_dict[account_id].bank[GOLD.id] * group.level
         if std_n > 0:
             dist.append((std_n, group.nickname))
         sum_std_n += std_n
-    else:
-        dist = dist or [(1, "None")]
-    lines.append(f"金币 {format_number(sum_std_n)}")
-    lines.append(f"股票 {format_number(manager.stock_value(user.invest))}")
-    info.append(text_to_image("\n".join(lines), 30, canvas=dist_card(dist)))
+    lines.append(f"[color][#FFCC33]金币 {format_number(sum_std_n)}")
+    lines.append(f"[color][#0066CC]股票 {format_number(manager.stock_value(user.invest))}")
+    info.append(text_to_image("\n".join(lines), 40, canvas=dist_card(dist)))
     data = invest_data(user.invest)
     if data:
         info.append(invest_card(data, "股票信息"))
