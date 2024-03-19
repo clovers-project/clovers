@@ -20,7 +20,7 @@ def verification():
         # 清理未持有的道具
         user.bank = Counter({k: v for k, v in user.bank.items() if v > 0 and k in props_library})
         # 删除无效及未持有的股票
-        invest = user.invest = Counter({k: v for k, v in user.invest.items() if k in group_dict and v > 0})
+        invest = user.invest = Counter({k: v for k, v in user.invest.items() if k in group_dict and v})
         # 股票数检查
         stock_check += Counter(invest)
         for group_id, accounts_id in user.accounts_map.items():
@@ -31,22 +31,21 @@ def verification():
             account.bank = Counter({k: v for k, v in account.bank.items() if v > 0 and k in props_library})
             group_dict[group_id].accounts_map[user_id] = accounts_id
     # 检查 group_dict
-    for group in group_dict.values():
-        group.invest = Counter({k: v for k, v in group.invest.items() if k in group_dict and v > 0})
-        group.bank = Counter({k: v for k, v in group.bank.items() if v > 0 and k in props_library and v > 0})
-
     for group_id, group in group_dict.items():
+        # 清理未持有的道具
+        group.bank = Counter({k: v for k, v in group.bank.items() if v > 0 and k in props_library})
+        # 删除无效及未持有的股票
+        group.invest = Counter({k: v for k, v in group.invest.items() if k in group_dict and v})
         # 修正公司等级
         group.level = sum(group.extra.setdefault("revolution_achieve", {}).values()) + 1
+        stock = group.stock
+        if not stock:
+            continue
         # 修正股票库存
-        group.stock.id = group_id
+        stock.id = group_id
         issuance = 20000 * group.level
-        group.stock.issuance = issuance
+        stock.issuance = issuance
         group.invest[group_id] = issuance - stock_check[group_id]
-        # 修正交易市场
-        group.stock.exchange = {
-            user_id: exchange for user_id, exchange in group.stock.exchange.items() if exchange[0] > 0 and user_id in user_dict
-        }
 
 
 # 数据验证

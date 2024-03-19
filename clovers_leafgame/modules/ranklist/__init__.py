@@ -55,10 +55,9 @@ def group_ranklist(title: str, group_id: str):
     return ranklist
 
 
-@plugin.handle(r"^.+排行.*", {"user_id", "group_id"})
+@plugin.handle(r"^(.+)排行(.*)", {"user_id", "group_id"})
 async def _(event: Event):
-    cmd_match = re.search(r"(.+)排行(.*)", event.raw_event.raw_command.strip())
-    title = cmd_match.group(1)
+    title = event.args[0]
     if title.startswith("路灯挂件"):
         counter = Counter()
         for group in manager.data.group_dict.values():
@@ -77,7 +76,7 @@ async def _(event: Event):
     elif title.endswith("总"):
         ranklist = all_ranklist(title[:-1])
     else:
-        group_name = cmd_match.group(2) or event.group_id or manager.locate_user(event.user_id).connect
+        group_name = event.args[1] or event.group_id or manager.data.user(event.user_id).connect
         group = manager.group_library.get(group_name)
         group_id = group.id if group else None
         if not group_id:

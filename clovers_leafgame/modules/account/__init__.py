@@ -65,7 +65,7 @@ async def _(event: Event):
                 pass
         log.append(f"背景蒙版类型设置为：{BG_type}")
 
-    if url_list := event.raw_event.kwargs["image_list"]:
+    if url_list := event.image_list:
         image = await download_url(url_list[0])
         if not image:
             log.append("图片下载失败")
@@ -130,9 +130,9 @@ async def _(event: Event):
     return manager.transfer(prop, unsettled, sender_id, receiver_id, event.group_id)
 
 
-@plugin.handle(r".+查询$", {"user_id", "group_id"})
+@plugin.handle(r"(.+)查询$", {"user_id", "group_id"})
 async def _(event: Event):
-    prop = manager.props_library.get(event.raw_event.raw_command[:-2])
+    prop = manager.props_library.get(event.args[0])
     if not prop:
         return
     user_id = event.user_id
@@ -207,7 +207,7 @@ async def _(event: Event):
     else:
         lines.append(f"[color][red]本群连续{delta_days}天 未签到")
     lines += user.message
-    info.append(text_to_image("\n".join(lines) + endline("Message"), 40, autowrap=True))
+    info.append(text_to_image("\n".join(lines) + endline("Message"), 30, autowrap=True))
     user.message.clear()
     return manager.info_card(info, event.user_id)
 
@@ -327,7 +327,7 @@ async def _(event: Event):
     if data := invest_data(group.invest):
         info.append(invest_card(data, "群投资"))
     if group.message:
-        info.append(text_to_image("\n".join(group.message) + endline("Message"), 40, autowrap=True))
+        info.append(text_to_image("\n".join(group.message) + endline("Message"), 30, autowrap=True))
         group.message.clear()
     return manager.info_card(info, event.user_id)
 
@@ -361,7 +361,7 @@ async def _(event: Event):
         if temp_event.user_id != user_id or temp_event.group_id != group_id:
             return
         finish()
-        if temp_event.raw_event.raw_command != confirm:
+        if temp_event.raw_command != confirm:
             return "【冻结】已取消。"
         bank = Counter()
         bank += user.bank

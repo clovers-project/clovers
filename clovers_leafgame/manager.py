@@ -13,7 +13,7 @@ from collections import Counter
 from clovers_utils.linecard import info_splicing, ImageList
 from clovers_utils.library import Library
 from .core.clovers import Event
-from .core.data import Account, User, Group, Account, DataBase
+from .core.data import Account, Group, Account, DataBase
 from .item import Prop, props_library, marking_library, VIP_CARD
 
 

@@ -5,81 +5,93 @@ from clovers_utils.tools import to_int
 
 
 class Event:
-    def __init__(self, raw_event: CloversEvent):
-        self.raw_event: CloversEvent = raw_event
+    def __init__(self, event: CloversEvent):
+        self.event: CloversEvent = event
+
+    @property
+    def raw_command(self):
+        return self.event.raw_command
+
+    @property
+    def args(self):
+        return self.event.args
 
     @property
     def user_id(self) -> str:
-        return self.raw_event.kwargs["user_id"]
+        return self.event.kwargs["user_id"]
 
     @property
     def group_id(self) -> str:
-        return self.raw_event.kwargs["group_id"]
+        return self.event.kwargs["group_id"]
 
     @property
     def nickname(self) -> str:
-        return self.raw_event.kwargs["nickname"]
+        return self.event.kwargs["nickname"]
 
     @property
     def permission(self) -> int:
-        return self.raw_event.kwargs["permission"]
+        return self.event.kwargs["permission"]
 
     @property
     def to_me(self) -> bool:
-        return self.raw_event.kwargs["to_me"]
+        return self.event.kwargs["to_me"]
 
     @property
     def at(self) -> list:
-        return self.raw_event.kwargs["at"]
+        return self.event.kwargs["at"]
 
     def is_private(self) -> bool:
         return self.group_id is None
 
     @property
     def avatar(self) -> str:
-        return self.raw_event.kwargs["avatar"]
+        return self.event.kwargs["avatar"]
+
+    @property
+    def image_list(self) -> list[str]:
+        return self.event.kwargs["image_list"]
 
     @property
     def group_avatar(self) -> str:
-        return self.raw_event.kwargs["group_avatar"]
+        return self.event.kwargs["group_avatar"]
 
     @property
     def group_info(self) -> list:
-        return self.raw_event.kwargs["group_info"]
+        return self.event.kwargs["group_info"]
 
     def args_to_int(self):
-        if args := self.raw_event.args:
+        if args := self.args:
             n = to_int(args[0]) or 0
         else:
             n = 0
         return n
 
-    def args_parse(self):
-        args = self.raw_event.args
+    def args_parse(self) -> tuple[str, int, float] | None:
+        args = self.args
         if not args:
             return
-        L = len(args)
-        if L == 1:
-            return args[0], 1, None
+        l = len(args)
+        if l == 1:
+            return args[0], 1, 0
         name = args[0]
-        N = args[1]
-        if number := to_int(N):
-            N = number
+        n = args[1]
+        if number := to_int(n):
+            n = number
         elif number := to_int(name):
-            name = N
-            N = number
+            name = n
+            n = number
         else:
-            N = 1
-        limit = None
-        if L > 2:
+            n = 1
+        f = 0
+        if l > 2:
             try:
-                limit = float(args[2])
+                f = float(args[2])
             except:
                 pass
-        return name, N, limit
+        return name, n, f
 
     def single_arg(self):
-        if args := self.raw_event.args:
+        if args := self.args:
             return args[0]
 
 
@@ -105,7 +117,7 @@ class Check:
         self.at: bool = at
         self.check: list[Callable[[Event], bool]] = []
 
-    def decorator(self, func: Callable[[Event], Coroutine]):
+    def decorator(self, func: Callable[..., Coroutine]):
         if self.superuser:
             self.check.append(lambda event: event.permission > 2)
         elif self.group_owner:
@@ -120,15 +132,7 @@ class Check:
         if len(self.check) == 1:
             check = self.check[0]
         else:
-
-            def check_all(event: Event):
-                for check in self.check:
-                    if not check(event):
-                        return False
-                return True
-
-            check = check_all
-
+            check = lambda event: any(check(event) for check in self.check)
         wrapper = kwfilter(func)
 
         async def checker(event: Event):

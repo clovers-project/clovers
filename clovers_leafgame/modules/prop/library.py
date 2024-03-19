@@ -8,7 +8,7 @@ from clovers_leafgame.main import manager
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 with open(library_file, "r", encoding="utf8") as f:
     for k, v in json.load(f).items():
-        prop = Prop(id=k, **v)
+        prop = Prop(k, **v)
         manager.props_library.set_item(prop.id, [prop.name], prop)
 
 pool = {

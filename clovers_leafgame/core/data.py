@@ -16,9 +16,6 @@ class Item(BaseModel):
             return n or -1
         bank[prop_id] += unsettled
 
-    def force_deal(self, bank: Counter[str], unsettled: int):
-        bank[self.id] += unsettled
-
 
 class User(BaseModel):
     id: str
@@ -31,6 +28,10 @@ class User(BaseModel):
     accounts_map: KeyMap = {}
     """Find account ID from group_id"""
     message: list[str] = []
+
+    def add_message(self, message: str):
+        self.message.append(message)
+        self.message = self.message[-30:]
 
 
 class Account(BaseModel):
@@ -69,7 +70,7 @@ class Prop(Item):
     tip: str = ""
 
     def __init__(self, id: str, **data) -> None:
-        data.update({"rare": int(id[0]), "domain": int(id[1]), "flow": int(id[2]), "number": int(id[3:])})
+        data.update({"id": id, "rare": int(id[0]), "domain": int(id[1]), "flow": int(id[2]), "number": int(id[3:])})
         super().__init__(**data)
 
     def locate_bank(self, user: User, account: Account):
@@ -84,11 +85,11 @@ class Prop(Item):
 
 
 class Stock(Item):
-    value: int
+    value: int = 0
     """全群资产"""
-    floating: int
+    floating: float = 0
     """浮动资产"""
-    issuance: int
+    issuance: int = 0
     """股票发行量"""
     time: float
     """注册时间"""

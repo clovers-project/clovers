@@ -3,7 +3,7 @@ import importlib
 import traceback
 import re
 from pathlib import Path
-from collections.abc import Callable, Coroutine, Iterable
+from collections.abc import Callable, Coroutine, Iterable, Sequence
 
 
 class PluginError(Exception):
@@ -21,7 +21,7 @@ class Event:
     def __init__(
         self,
         raw_command: str,
-        args: list[str] = [],
+        args: Sequence[str],
     ):
         self.raw_command = raw_command
         self.args = args
@@ -146,8 +146,8 @@ class Plugin:
             data.update({key: event for key in keys})
 
         for pattern, keys in self.regex_dict.items():
-            if re.match(pattern, command):
-                event = Event(command)
+            if args := re.match(pattern, command):
+                event = Event(command, args.groups())
                 data.update({key: event for key in keys})
 
         return data

@@ -160,26 +160,25 @@ async def _(event: Event):
         return
     stock_name, buy, limit = args
     stock_group = manager.group_library.get(stock_name)
-    if not stock_group:
+    if not stock_group or not (stock := stock_group.stock):
         return f"没有 {stock_name} 的注册信息"
-    stock = stock_group.stock
     buy = min(stock_group.invest[stock.id], buy)
     if buy < 1:
         return "已售空，请等待结算。"
-    group = manager.group_library.get(stock_name)
-    if (n := group.bank[GOLD.id]) < company_public_gold:
+    if (n := stock_group.bank[GOLD.id]) < company_public_gold:
         return f"本群金币过少（{n}<{company_public_gold}），无法完成结算"
-    level = stock_group.level
-    stock_value = sum(manager.group_wealths(stock.id, GOLD.id)) * level + group.bank[STD_GOLD.id]
+    stock_level = stock_group.level
+    stock_value = sum(manager.group_wealths(stock.id, GOLD.id)) * stock_level + stock_group.bank[STD_GOLD.id]
     user, account = manager.account(event)
-    GOLD.deal(account.bank, int(user.bank[STD_GOLD.id] / level))
-    user.bank[STD_GOLD.id] = 0
-    my_STD_GOLD = account.bank[GOLD.id] * group.level
+    group = manager.data.group(account.group_id)
+    level = group.level
+    account_STD_GOLD = account.bank[GOLD.id] * level
+    my_STD_GOLD = user.bank[STD_GOLD.id] + account_STD_GOLD
     issuance = stock.issuance
-    value = 0.0
-    actual_buy = 0
     floating = stock.floating
     limit = limit or float("inf")
+    value = 0.0
+    _buy = 0
     for _ in range(buy):
         unit = max(floating, stock_value) / issuance
         if unit > limit:
@@ -187,26 +186,29 @@ async def _(event: Event):
             break
         value += unit
         if value > my_STD_GOLD:
+            value -= unit
             tip = f"你的金币不足（{my_STD_GOLD}）。"
             break
         floating += unit
-        actual_buy += 1
+        _buy += 1
     else:
         tip = "交易成功！"
 
-    actual_gold = math.ceil(value / group.level)
-    account.bank[GOLD.id] -= actual_gold
-    group.bank[GOLD.id] += math.ceil(value / stock_group.level)
-    stock.force_deal(group.invest, -actual_buy)
-    stock.force_deal(user.invest, actual_buy)
+    int_value = math.ceil(value)
+    user.bank[STD_GOLD.id] -= int_value
+    if (n := user.bank[STD_GOLD.id]) < 0:
+        user.bank[STD_GOLD.id] = 0
+        account_STD_GOLD += n
+        account.bank[GOLD.id] = math.ceil(account_STD_GOLD / level)
+        user.add_message(f"购买{_buy}份{stock_name}需要花费{int_value}枚标准金币，其中{-n}枚来自购买群账户，汇率（{level}）")
+    user.invest[stock.id] += _buy
+    stock_group.bank[GOLD.id] += math.ceil(value / stock_level)
+    group.invest[stock.id] -= _buy
     stock.floating = floating
-    stock.value = stock_value + value
+    stock.value = stock_value + int_value
     output = BytesIO()
     text_to_image(
-        f"{stock.name}\n----"
-        f"\n数量：{actual_buy}"
-        f"\n单价：{round(value/actual_buy,2)}"
-        f"\n总计：{round(value,2)}（{actual_gold}）" + endline(tip),
+        f"{stock.name}\n----" f"\n数量：{_buy}" f"\n单价：{round(value/_buy,2)}" f"\n总计：{int_value}" + endline(tip),
         width=440,
         bg_color="white",
     ).save(output, format="png")
@@ -215,31 +217,28 @@ async def _(event: Event):
 
 @plugin.handle({"出售", "卖出", "结算"}, {"user_id"})
 async def _(event: Event):
+    if not (args := event.args_parse()):
+        return
+    stock_name, n, quote = args
     user = manager.data.user(event.user_id)
-    stock_name, n, quote = event.args_parse()
     stock_group = manager.group_library.get(stock_name)
-    if not stock_group:
+    if not stock_group or not (stock := stock_group.stock):
         return f"没有 {stock_name} 的注册信息"
     stock_name = stock_group.nickname
-    stock_id = stock_group.id
-    my_stock = user.invest[stock_id]
-    if my_stock < n:
-        return f"你的账户中没有足够的{stock_name}（{my_stock}）。"
+    my_stock = min(user.invest[stock.id], n)
     user_id = user.id
-    exchange = stock_group.stock.exchange
-    if n < 1:
-        if exchange.get(user_id):
+    exchange = stock.exchange
+    if my_stock < 1:
+        if user_id in exchange:
             del exchange[user_id]
             return "交易信息已注销。"
         else:
             return "交易信息无效。"
-    if not quote:
-        quote = 0.0
     if user_id in exchange:
         tip = "交易信息已修改。"
     else:
         tip = "交易信息发布成功！"
-    exchange[user_id] = (n, quote)
+    exchange[user_id] = (n, quote or 0.0)
     output = BytesIO()
     text_to_image(
         f"{stock_name}\n----\n报价：{quote or '自动出售'}\n数量：{n}" + endline(tip),
@@ -249,11 +248,9 @@ async def _(event: Event):
     return output
 
 
-@plugin.handle({"市场信息"}, {"user_id", "group_id"})
+@plugin.handle({"市场信息"}, {"user_id"})
 async def _(event: Event):
-    group_ids = manager.group_library._key_indices.keys()
-    groups = (manager.group_library[group_id] for group_id in group_ids)
-    data = [(group.stock, group.invest[group.stock.id]) for group in groups]
+    data = [(stock, group.invest[stock.id]) for group in manager.data.group_dict.values() if (stock := group.stock)]
     if not data:
         return "市场为空"
     data.sort(key=lambda x: x[0].value, reverse=True)
@@ -263,7 +260,7 @@ async def _(event: Event):
 @plugin.handle({"继承公司账户", "继承群账户"}, {"user_id", "permission"})
 @superuser.decorator
 async def _(event: Event):
-    args = event.raw_event.args
+    args = event.args
     if len(args) != 3:
         return
     arrow = args[1]
@@ -286,9 +283,9 @@ async def _(event: Event):
     ExRate = deceased_group.level / heir_group.level
     # 继承群金库
     invest_group = Counter(deceased_group.invest)
-    heir_group.invest = dict(Counter(heir_group.invest) + invest_group)
+    heir_group.invest = Counter(heir_group.invest) + invest_group
     bank_group = Counter({k: int(v * ExRate) if manager.props_library[k].domain == 1 else v for k, v in deceased_group.bank.items()})
-    heir_group.bank = dict(Counter(heir_group.bank) + bank_group)
+    heir_group.bank = Counter(heir_group.bank) + bank_group
     # 继承群员账户
     all_bank_private = Counter()
     for deceased_user_id, deceased_account_id in deceased_group.accounts_map.items():
@@ -298,14 +295,14 @@ async def _(event: Event):
             all_bank_private += bank
             heir_account_id = heir_group.accounts_map[deceased_user_id]
             heir_account = manager.data.account_dict[heir_account_id]
-            heir_account.bank = dict(Counter(heir_account.bank) + bank)
+            heir_account.bank = Counter(heir_account.bank) + bank
         else:
             bank_group += bank
-            heir_group.bank = dict(Counter(heir_group.bank) + bank)
+            heir_group.bank = Counter(heir_group.bank) + bank
     del manager.group_library[deceased_group.id]
     manager.data.cancel_group(deceased_group.id)
     info = []
-    info.append(invest_card([(manager.group_library[k].stock, v) for k, v in invest_group.items()], "群投资继承"))
+    info.append(invest_card([(stock, v) for k, v in invest_group.items() if (stock := manager.group_library[k].stock)], "群投资继承"))
     info.append(prop_card([(manager.props_library[k], v) for k, v in bank_group.items()], "群金库继承"))
     info.append(prop_card([(manager.props_library[k], v) for k, v in all_bank_private.items()], "个人总继承"))
     return manager.info_card(info, event.user_id)
@@ -317,6 +314,8 @@ async def _(event: Event):
 async def _():
     def stock_update(group: Group):
         stock = group.stock
+        if not stock:
+            return f"{group.id} 更新失败"
         level = group.level
         # 资产更新
         wealths = manager.group_wealths(group.id, GOLD.id)
@@ -357,16 +356,16 @@ async def _():
                 settle = n
             if settle == 0:
                 continue
-            stock.exchange[user_id] = (n - settle, quote)
-            stock.force_deal(user.invest, -settle)
-            stock.force_deal(group.invest, settle)
-            value = int(value)
-            STD_GOLD.force_deal(user.bank, value)
+            if settle < n:
+                stock.exchange[user_id] = (n - settle, quote)
+            user.invest[stock.id] -= settle
+            group.invest[stock.id] += settle
+            user.bank[STD_GOLD.id] += int(value)
             user.message.append(
                 f"【交易市场 {clock}】收入{value}标准金币。\n{stock.name}已出售{settle}/{n}，报价{quote or format_number(value/settle)}。"
             )
             std_value += value
-        GOLD.force_deal(group.bank, -int(std_value / level))
+        group.bank[GOLD.id] -= int(std_value / level)
         stock.exchange = {user_id: exchange for user_id, exchange in stock.exchange.items() if exchange[0] > 0}
         # 更新浮动价格
         stock.floating = floating
@@ -378,6 +377,5 @@ async def _():
         group.extra["stock_record"] = stock_record
         return f"{stock.name} 更新成功！"
 
-    groups = [group for group in manager.data.group_dict.values() if group.stock.name and group.stock.issuance]
-    log = [stock_update(group) for group in groups]
-    print("\n".join(log))
+    groups = (group for group in manager.data.group_dict.values() if group.stock and group.stock.issuance)
+    print("\n".join(stock_update(group) for group in groups))

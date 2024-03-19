@@ -14,24 +14,21 @@ from clovers_core.config import config as clovers_config
 gacha_gold = clovers_config.get(__package__, {}).get("gacha_gold", 50)
 
 
-@plugin.handle(r"^.+连抽?卡?|单抽", {"user_id", "group_id", "nickname", "to_me"})
+@plugin.handle(r"^(.+)连抽?卡?|单抽", {"user_id", "group_id", "nickname", "to_me"})
 @to_me.decorator
 async def _(event: Event):
-    N = re.search(r"^(.*)连抽?卡?$", event.raw_event.raw_command)
-    if not N:
+    count = event.args_to_int()
+    if not count:
         return
-    N = to_int(N.group(1))
-    if not N:
-        return
-    N = 200 if N > 200 else 1 if N < 1 else N
-    gold = N * gacha_gold
+    count = 200 if count > 200 else 1 if count < 1 else count
+    gold = count * gacha_gold
     user, account = manager.account(event)
     if n := GOLD.deal(account.bank, -gold):
-        return f"{N}连抽卡需要{gold}金币，你的金币：{n}。"
+        return f"{count}连抽卡需要{gold}金币，你的金币：{n}。"
 
     prop_data: list[list[tuple[Prop, int]]] = [[], [], []]
     report_data = {"prop_star": 0, "prop_n": 0, "air_star": 0, "air_n": 0}
-    for prop_id, n in Counter(gacha() for _ in range(N)).items():
+    for prop_id, n in Counter(gacha() for _ in range(count)).items():
         prop = manager.props_library[prop_id]
         prop_data[prop.domain].append((prop, n))
         if prop.domain == 0:
@@ -43,7 +40,7 @@ async def _(event: Event):
             prop.deal(prop.locate_bank(user, account), n)
         report_data[star_key] += prop.rare * n
         report_data[n_key] += n
-    if N < 10:
+    if count < 10:
         return "你获得了" + "\n".join(f"({prop.rare}☆){prop.name}:{n}个" for seg in prop_data for prop, n in seg)
     else:
         info = [report_card(account.name, **report_data)]
@@ -65,17 +62,16 @@ async def _(event: Event):
 from clovers_core.plugin import PluginError
 
 
-def usage(prop_name: str, extra_args: list[str] | set[str] | tuple[str] = None):
+def usage(prop_name: str, extra_args):
     def decorator(func: Callable[..., Coroutine]):
         prop = manager.props_library.get(prop_name)
         if not prop:
             raise PluginError(f"不存在道具{prop_name}，无法注册使用方法。")
 
-        @plugin.handle(f"使用(道具)?\\s*{prop_name}", extra_args)
+        @plugin.handle(f"使用(道具)?\\s*{prop_name}\\s*(\\d*)(.*)", extra_args)
         async def _(event: Event):
-            res = re.search(f"使用(道具)?\\s*{prop_name}\\s*(\\d*)(.*)", event.raw_event.raw_command)
-            count = res.group(2)
-            return await func(prop, event, int(count) if count else 1, res.group(3))
+            _, count, extra = event.args
+            return await func(prop, event, int(count) if count else 1, extra)
 
     return decorator
 

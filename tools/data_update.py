@@ -123,7 +123,7 @@ class Group(BaseModel):
     """存入extra"""
     company: Company = Company()
     """已取消"""
-    stock: Stock = Stock()
+    stock: Stock = None
     level: int = 1
     bank: Bank = Bank()
     invest: Bank = Bank()
@@ -206,11 +206,12 @@ for group_id, group in data.group.items():
     group.level = company.level or 1
     group.invest = company.invest
     group.intro = company.intro
-    group.stock = Stock()
-    group.stock.id = group.group_id
-    group.stock.name = company.company_name
-    group.stock.time = company.time
-    group.stock.issuance = company.issuance
+    if company.company_name:
+        group.stock = Stock()
+        group.stock.id = group.group_id
+        group.stock.name = company.company_name
+        group.stock.time = company.time
+        group.stock.issuance = company.issuance
 
 data.group_dict = data.group
 data.user_dict = data.user

@@ -26,11 +26,11 @@ from clovers_utils.library import Library
 #     return self.deal(self.user_bank(user, group_id), unsettled)
 
 
-props_library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
+props_library_file = Path(os.path.join(os.path.dirname(__file__), "props_library.json"))
 props_library: Library[str, Prop] = Library()
 with open(props_library_file, "r", encoding="utf8") as f:
     for k, v in json.load(f).items():
-        prop = Prop(id=k, **v)
+        prop = Prop(k, **v)
         props_library.set_item(prop.id, [prop.name], prop)
 
 AIR = props_library["空气"]

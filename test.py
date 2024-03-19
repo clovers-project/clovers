@@ -1,9 +1,9 @@
-import timeit
+import re
 
+prop_name = "金币"
+command = "使用道具 金币2"
 
-def main():
-    dist: list[tuple[int, str]] = []
-
-
-execution_time = timeit.timeit(main, number=1000000)
-print("func_1:", execution_time, "seconds")
+res = re.match(f"使用(道具)?\\s*{prop_name}\\s*(\\d*)(.*)", command)
+res = re.match(f"使用道具?\\s*{prop_name}", command)
+if res:
+    print(res.groups())
