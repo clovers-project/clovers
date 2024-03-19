@@ -43,10 +43,10 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
         await main.send(msg)
 
     @method.send("segmented")
-    async def _(message: Callable[[], AsyncGenerator[Result]]):
+    async def _(message: Callable[[], AsyncGenerator[Result, None]]):
         """发送分段信息"""
         async for seg in message():
-            await method.send[seg.send_method](seg.data)
+            await method.send_dict[seg.send_method](seg.data)
 
     @method.kwarg("user_id")
     async def _(event: MessageEvent):
@@ -66,14 +66,14 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
         return event.sender.card or event.sender.nickname
 
     @method.kwarg("avatar")
-    async def _(event: MessageEvent) -> BytesIO:
+    async def _(event: MessageEvent) -> str:
         return f"https://q1.qlogo.cn/g?b=qq&nk={event.user_id}&s=640"
 
     @method.kwarg("group_avatar")
-    async def _(event: MessageEvent) -> BytesIO:
+    async def _(event: MessageEvent) -> str:
         if isinstance(event, GroupMessageEvent):
             return f"https://p.qlogo.cn/gh/{event.group_id}/{event.group_id}/640"
-        return None
+        return ""
 
     @method.kwarg("image_list")
     async def _(event: MessageEvent):
@@ -93,7 +93,7 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
         return 0
 
     @method.kwarg("at")
-    async def _(event: MessageEvent) -> int:
-        return [msg.data["qq"] for msg in event.message if msg.type == "at"]
+    async def _(event: MessageEvent) -> list[str]:
+        return [str(msg.data["qq"]) for msg in event.message if msg.type == "at"]
 
     return method

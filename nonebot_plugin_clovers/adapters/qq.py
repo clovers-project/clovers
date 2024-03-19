@@ -2,7 +2,7 @@ import sys
 
 sys.path.append(r"D:\GIT\clovers_core")
 from io import BytesIO
-from collections.abc import Coroutine
+from collections.abc import Callable, AsyncGenerator
 from clovers_core.adapter import AdapterMethod
 from clovers_core.plugin import Result
 from nonebot.matcher import Matcher
@@ -39,10 +39,10 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
         await main.send(msg)
 
     @method.send("segmented")
-    async def _(message: Coroutine):
+    async def _(message: Callable[[], AsyncGenerator[Result, None]]):
         """发送分段信息"""
         async for seg in message():
-            await method.send[seg.send_method](seg.data)
+            await method.send_dict[seg.send_method](seg.data)
 
     @method.kwarg("user_id")
     async def _(event: MessageEvent):

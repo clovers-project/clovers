@@ -17,7 +17,7 @@ async def download_url(url: str):
     return None
 
 
-def to_int(N) -> int:
+def to_int(N) -> int | None:
     try:
         result = int(N)
     except ValueError:
@@ -52,12 +52,7 @@ def format_number(num) -> str:
         if y:
             return f"{x[:-8]}亿{y}万"
         return f"{x[:-8]}亿"
-    if 1000000000000 <= num:
-        y = int(x[-8:-4])
-        z = round(int(x[:-8]) / 10000, 2)
-        if y:
-            return f"{z}万亿{y}万"
-        return f"{z}万亿"
+    return "{:.2e}".format(num)
 
 
 def item_name_rule(item_name: str):

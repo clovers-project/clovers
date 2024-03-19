@@ -7,7 +7,7 @@ class Config(dict):
     path: Path
 
     @classmethod
-    def load(cls, path: Path):
+    def load(cls, path):
         path = Path(path)
         if path.exists():
             config = cls(toml.load(path))

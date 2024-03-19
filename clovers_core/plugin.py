@@ -3,7 +3,7 @@ import importlib
 import traceback
 import re
 from pathlib import Path
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Iterable
 
 
 class PluginError(Exception):
@@ -31,7 +31,7 @@ class Event:
 class Handle:
     func: Callable[..., Coroutine]
 
-    def __init__(self, extra_args: list[str] | set[str] | tuple[str]):
+    def __init__(self, extra_args: Iterable[str]):
         self.extra_args = extra_args
 
     async def __call__(self, event: Event) -> Result:
@@ -67,7 +67,7 @@ class Plugin:
 
         return wrapper
 
-    def commands_register(self, commands: PluginCommands, key: str):
+    def commands_register(self, commands: PluginCommands, key: int):
         if not commands:
             self.command_dict.setdefault("", set()).add(key)
         elif isinstance(commands, set):
@@ -83,7 +83,7 @@ class Plugin:
     def handle(
         self,
         commands: PluginCommands,
-        extra_args: list[str] | set[str] | tuple[str] = None,
+        extra_args: Iterable[str] = [],
     ):
         def decorator(func: Callable[..., Coroutine]):
             key = len(self.handles)
@@ -97,7 +97,7 @@ class Plugin:
     def temp_handle(
         self,
         key: str,
-        extra_args: list[str] | set[str] | tuple[str] = None,
+        extra_args: Iterable[str] = [],
         timeout: float | int = 30.0,
     ):
 
@@ -128,7 +128,7 @@ class Plugin:
 
         return func
 
-    def __call__(self, command: str) -> dict[int, Event]:
+    def __call__(self, command: str) -> dict[int, Event] | None:
         if not command:
             return
         data = {}
@@ -163,12 +163,12 @@ class Plugin:
 
 
 class PluginLoader:
-    def __init__(self, plugins_path: Path = None, plugins_list: list = None) -> None:
-        self.plugins_path: Path = plugins_path
+    def __init__(self, plugins_path: str | Path = "", plugins_list: list[str] = []) -> None:
+        self.plugins_path: Path = Path(plugins_path)
         self.plugins_list: list = plugins_list
 
     @staticmethod
-    def load(name: str) -> Plugin:
+    def load(name: str) -> Plugin | None:
         print(f"【loading plugin】 {name} ...")
         try:
             module = importlib.import_module(name)
@@ -177,6 +177,8 @@ class PluginLoader:
             traceback.print_exc()
 
     def plugins_from_path(self):
+        if not self.plugins_path:
+            return []
         plugins_path = ".".join(self.plugins_path.relative_to(Path()).parts)
         plugins = []
         for x in self.plugins_path.iterdir():
@@ -187,10 +189,7 @@ class PluginLoader:
         return [plugin for plugin in plugins if plugin]
 
     def plugins_from_list(self):
-        plugins = []
-        for x in self.plugins_list:
-            plugins.append(self.load(x))
-        return [plugin for plugin in plugins if plugin]
+        return [plugin for x in self.plugins_list if (plugin := self.load(x))]
 
     @property
     def plugins(self) -> list[Plugin]:
