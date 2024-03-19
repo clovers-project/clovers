@@ -1,13 +1,18 @@
+from collections.abc import Iterable
+from typing import overload
+
+
 class Library[K, V]:
     """多键字典"""
 
-    def __init__(self, data: list[tuple[K, set[K], V]] = None) -> None:
+    def __init__(self, data: Iterable[tuple[K, Iterable[K], V]] | None = None) -> None:
         self._key_data: dict[K, V] = {}
         self._index_key: dict[K, K] = {}
         self._key_indices: dict[K, set[K]] = {}
-        if data:
-            for key, alias, value in data:
-                self.set_item(key, alias, value)
+        if not data:
+            return
+        for key, alias, value in data:
+            self.set_item(key, alias, value)
 
     def __getitem__(self, index: K) -> V:
         return self._key_data.get(index) or self._key_data[self._index_key[index]]
@@ -31,7 +36,7 @@ class Library[K, V]:
     def items(self):
         return self._key_data.items()
 
-    def set_item(self, key: K, indices: set[K], data: V):
+    def set_item(self, key: K, indices: Iterable[K], data: V):
         if old_indices := self._key_indices.get(key):
             for i in old_indices:
                 del self._index_key[i]
@@ -59,12 +64,13 @@ class Library[K, V]:
         for key, indices in data._key_indices.items():
             self.set_item(key, indices, data[key])
 
-    def get(self, index: K, default: V = None):
+    @overload
+    def get(self, index: K, default):
         if key := self._index_key.get(index):
             return self._key_data[key]
         return self._key_data.get(index, default)
 
-    def setdefault(self, index: K, default: V = None):
+    def setdefault(self, index: K, default: V):
         if key := self._index_key.get(index):
             return self._key_data[key]
         return self._key_data.setdefault(index, default)
