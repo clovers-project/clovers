@@ -6,7 +6,7 @@ from collections import Counter
 from clovers_apscheduler import scheduler
 from clovers_utils.tools import item_name_rule, gini_coef, format_number
 from clovers_leafgame.core.clovers import Event, to_me, group_admin, superuser
-from clovers_leafgame.core.data import Group
+from clovers_leafgame.core.data import Group, Stock
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import GOLD, LICENSE, STD_GOLD
 from clovers_leafgame.output import text_to_image, endline, invest_card, prop_card
@@ -103,9 +103,11 @@ async def _(event: Event):
     group = manager.data.group(group_id)
     group.avatar_url = event.group_avatar
     stock = group.stock
-    if stock and stock.name:
+    if stock:
         return f"本群已在市场注册，注册名：{stock.name}"
     stock_name = event.single_arg()
+    if not stock_name:
+        return "请输入注册名"
     if check := item_name_rule(stock_name):
         return check
     if manager.group_library.get(stock_name):
@@ -117,37 +119,39 @@ async def _(event: Event):
     gini = gini_coef(wealths[:-1])
     if gini > revolt_gini:
         return f"本群基尼系数（{round(gini,3)}）过高，注册失败。"
-    stock.id = group_id
-    stock.name = stock_name
-    stock.time = time.time()
     level = group.level = (sum(ra.values()) if (ra := group.extra.get("revolution_achieve")) else 0) + 1
-    issuance = 20000 * level
-    group.invest[group_id] = issuance - stock.issuance
-    stock.issuance = issuance
-    stock.floating = stock.value = (stock_value) * level
+    stock_value *= level
+    stock = Stock(
+        id=group_id,
+        name=stock_name,
+        value=stock_value,
+        floating=stock_value,
+        issuance=20000 * level,
+        time=time.time(),
+    )
     manager.group_library.set_item(group.id, {stock_name}, group)
     return f"{stock.name}发行成功，发行价格为{format_number(stock.value/ 20000)}金币"
 
 
-@plugin.handle({"公司重命名"}, {"user_id", "group_id", "to_me", "permission"})
+@plugin.handle({"公司重命名"}, {"group_id", "to_me", "permission"})
 @to_me.decorator
 @group_admin.decorator
 async def _(event: Event):
-    stock_name = event.single_arg()
-    group_id = event.group_id
-    group = manager.data.group(group_id)
+    group = manager.data.group(event.group_id)
     stock = group.stock
-    if not stock.name:
+    if not stock:
         return "本群未在市场注册，不可重命名。"
-    user = manager.data.user(event.user_id)
+    stock_name = event.single_arg()
+    if not stock_name:
+        return "请输入注册名"
     if check := item_name_rule(stock_name):
         return check
-    if LICENSE.deal(user.bank, -1):
-        return f"你未持有【{LICENSE.name}】"
-    old_stock_name = stock.name
+    if LICENSE.deal(group.bank, -1):
+        return f"本群仓库缺少【{LICENSE.name}】"
+    old_name = stock.name
     stock.name = stock_name
     manager.group_library.set_item(group.id, {stock_name}, group)
-    return f"【{old_stock_name}】已重命名为【{stock_name}】"
+    return f"【{old_name}】已重命名为【{stock_name}】"
 
 
 @plugin.handle({"购买", "发行购买"}, {"user_id", "group_id", "nickname"})

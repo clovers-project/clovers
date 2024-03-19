@@ -84,14 +84,14 @@ class Prop(Item):
 
 
 class Stock(Item):
-    issuance: int = 0
-    """股票发行量"""
-    time: float = 0
-    """注册时间"""
-    floating: int = 0
-    """浮动资产"""
-    value: int = 0
+    value: int
     """全群资产"""
+    floating: int
+    """浮动资产"""
+    issuance: int
+    """股票发行量"""
+    time: float
+    """注册时间"""
     exchange: dict[str, tuple[int, float]] = {}
     """交易信息"""
 

@@ -87,7 +87,7 @@ AVATAR_MASK = Image.new("RGBA", (260, 260), (255, 255, 255, 0))
 ImageDraw.Draw(AVATAR_MASK).ellipse(((0, 0), (260, 260)), fill="black")
 
 
-def avatar_card(avatar: bytes | None, nickname: str, lines: list[tuple[str, str]]):
+def avatar_card(avatar: bytes | None, nickname: str, lines: list[str]):
     font = font_manager.font(40)
     canvas = Image.new("RGBA", (880, 300))
     if avatar:

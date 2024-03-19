@@ -56,8 +56,6 @@ def format_number(num) -> str:
 
 
 def item_name_rule(item_name: str):
-    if not item_name:
-        return f"名称不能为空"
     if " " in item_name or "\n" in item_name:
         return "名称不能含有空格或回车"
     count = 0

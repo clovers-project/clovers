@@ -288,17 +288,25 @@ async def _(event: Event):
     """
     群资料卡
     """
-    group = manager.group_library.get(event.single_arg())
-    if not group:
+    group_name = event.single_arg()
+    if group_name and (group := manager.group_library.get(group_name)):
+        pass
+    else:
         user, group_account = manager.account(event)
         group = manager.data.group(group_account.group_id)
     info = []
     lines = [
-        f"{datetime.fromtimestamp(t).strftime('%Y年%m月%d日')if (t :=group.stock.time) else '未发行'}",
+        f"{datetime.fromtimestamp(stock.time).strftime('%Y年%m月%d日')if (stock :=group.stock) else '未发行'}",
         f"等级 {group.level}",
         f"成员 {len(group.accounts_map)}",
     ]
-    info.append(avatar_card(await download_url(group.avatar_url), group.nickname, lines))
+    info.append(
+        avatar_card(
+            await download_url(avatar_url) if (avatar_url := group.avatar_url) else None,
+            group.nickname,
+            lines,
+        )
+    )
     if ranklist := group.extra.get("revolution_achieve"):
         ranklist = list(ranklist.items())
         ranklist.sort(key=lambda x: x[1], reverse=True)
@@ -349,7 +357,7 @@ async def _(event: Event):
     confirm = "".join(str(random.randint(0, 9)) for _ in range(4))
 
     @plugin.temp_handle(f"{confirm} {user_id} {group_id}", {"user_id", "group_id", "permission"})
-    async def _(temp_event: Event, finish) -> str:
+    async def _(temp_event: Event, finish):
         if temp_event.user_id != user_id or temp_event.group_id != group_id:
             return
         finish()
@@ -367,7 +375,7 @@ async def _(event: Event):
         info = []
         if data := [(prop, v) for k, v in bank.items() if (prop := manager.props_library.get(k))]:
             info.append(prop_card(data, "已删除道具"))
-        if data := [(group.stock, v) for k, v in user.invest.items() if (group := manager.group_library.get(k))]:
+        if data := [(stock, v) for k, v in user.invest.items() if (group := manager.group_library.get(k)) and (stock := group.stock)]:
             info.append(invest_card(data, "已删除股票"))
         user.invest.clear()
         if info:
