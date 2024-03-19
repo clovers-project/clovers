@@ -21,7 +21,7 @@ class Manager:
     data: DataBase
     main_path: Path
 
-    def __init__(self, main_path: Path) -> None:
+    def __init__(self, main_path: str | Path) -> None:
         self.main_path = Path(main_path)
         self.DATA_PATH = self.main_path / "russian_data.json"
         self.BG_PATH = self.main_path / "BG_image"

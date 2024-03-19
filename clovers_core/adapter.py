@@ -1,6 +1,5 @@
 import asyncio
 from collections.abc import Coroutine, Callable, Awaitable
-
 from .plugin import Plugin, Handle, Event
 from .utils import kwfilter
 
@@ -40,7 +39,7 @@ class Adapter:
         self.plugins: list[Plugin] = []
         self.wait_for: list[Awaitable] = []
 
-    async def response_task(self, method: AdapterMethod, handle: Handle, event: Event, **extra):
+    async def response_task(self, method: AdapterMethod, handle: Handle, event: Event, extra: dict[str, object]):
         kwargs_task = []
         extra_args = []
         for key in handle.extra_args:
@@ -67,11 +66,11 @@ class Adapter:
         task_list = []
         for plugin in self.plugins:
             if data := plugin(command):
-                task_list += [self.response_task(method, plugin.handles[key], event, **extra) for key, event in data.items()]
+                task_list += [self.response_task(method, plugin.handles[key], event, extra) for key, event in data.items()]
             if not plugin.temp_check():
                 continue
             event = Event(command)
-            task_list += [self.response_task(method, handle, event, **extra) for _, handle in plugin.temp_handles.values()]
+            task_list += [self.response_task(method, handle, event, extra) for _, handle in plugin.temp_handles.values()]
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
     async def startup(self):

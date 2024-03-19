@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from collections.abc import Iterable
 from io import BytesIO
 from fontTools.ttLib import TTFont
 
@@ -11,7 +12,7 @@ import matplotlib.font_manager as fm
 
 
 class FontManager:
-    def __init__(self, font_name: str, fallback: list[str], size: tuple[int] = None) -> None:
+    def __init__(self, font_name: str, fallback: list[str], size: Iterable[int] | None = None) -> None:
         self.font_name: str = font_name
         self.fallback: list[str] = fallback
         self.cmap = TTFont(fm.findfont(fm.FontProperties(family=font_name)), fontNumber=0).getBestCmap()

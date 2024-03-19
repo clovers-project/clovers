@@ -48,7 +48,7 @@ def bank_card(data: list[tuple[Prop, int]]):
     return [result(*args) for args in data]
 
 
-def prop_card(data: list[tuple[Prop, int]], tip: str = None):
+def prop_card(data: list[tuple[Prop, int]], tip: str | None = None):
     data.sort(key=lambda x: x[0].rare)
 
     def result(prop: Prop, n: int):
@@ -65,7 +65,7 @@ def prop_card(data: list[tuple[Prop, int]], tip: str = None):
     return linecard(info, font_manager, 40, spacing=1.5, width=880)
 
 
-def invest_card(data: list[tuple[Stock, int]], tip: str = None):
+def invest_card(data: list[tuple[Stock, int]], tip: str | None = None):
     def result(stock: Stock, n: int):
         issuance = stock.issuance
         buy = format_number(max(stock.floating, stock.value) / issuance) if issuance else "未发行"
@@ -91,8 +91,7 @@ def avatar_card(avatar: bytes, nickname: str, lines: list[tuple[str, str]]):
     font = font_manager.font(40)
     canvas = Image.new("RGBA", (880, 300))
     if avatar:
-        avatar = Image.open(BytesIO(avatar)).resize((260, 260))
-        canvas.paste(avatar, (20, 20), AVATAR_MASK)
+        canvas.paste(Image.open(BytesIO(avatar)).resize((260, 260)), (20, 20), AVATAR_MASK)
     draw = ImageDraw.Draw(canvas)
     draw.text((300, 40), f"{nickname}", fill=(0, 0, 0), font=font)
     draw.line(((300, 120), (860, 120)), fill="gray", width=4)
@@ -107,7 +106,7 @@ def avatar_card(avatar: bytes, nickname: str, lines: list[tuple[str, str]]):
     return canvas
 
 
-def candlestick(figsize: tuple[float, float], length: int, history: list[tuple[float, float]]) -> BytesIO:
+def candlestick(figsize: tuple[float, float], length: int, history: list[tuple[float, float]]):
     """
     生成股价K线图
         figsize:图片尺寸
