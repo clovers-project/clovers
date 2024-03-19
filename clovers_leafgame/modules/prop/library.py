@@ -2,8 +2,11 @@ import random
 import os
 import json
 from pathlib import Path
+from collections.abc import Callable, Coroutine
+from clovers_core.plugin import PluginError
+from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.item import Prop, AIR
-from clovers_leafgame.main import manager
+from clovers_leafgame.main import plugin, manager
 
 library_file = Path(os.path.join(os.path.dirname(__file__), "./props_library.json"))
 with open(library_file, "r", encoding="utf8") as f:
@@ -21,7 +24,8 @@ pool = {
     }.items()
 }
 AIR_PACK = manager.props_library["空气礼包"]
-RED_PACK = manager.props_library["随机红包"]
+RED_PACKET = manager.props_library["随机红包"]
+DIAMOND = manager.props_library["钻石"]
 
 
 def gacha() -> str:
@@ -40,3 +44,17 @@ def gacha() -> str:
     if rare_pool := pool.get(rare):
         return random.choice(rare_pool)
     return AIR.id
+
+
+def usage(prop_name: str, extra_args):
+    def decorator(func: Callable[..., Coroutine]):
+        prop = manager.props_library.get(prop_name)
+        if not prop:
+            raise PluginError(f"不存在道具{prop_name}，无法注册使用方法。")
+
+        @plugin.handle(f"使用(道具)?\\s*{prop_name}\\s*(\\d*)(.*)", extra_args)
+        async def _(event: Event):
+            _, count, extra = event.args
+            return await func(prop, event, int(count) if count else 1, extra)
+
+    return decorator

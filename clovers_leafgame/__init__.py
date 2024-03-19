@@ -1,5 +1,4 @@
 from .main import plugin as __plugin__
-import os
 from pathlib import Path
 from clovers_core.plugin import PluginLoader
 

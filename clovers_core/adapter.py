@@ -69,7 +69,7 @@ class Adapter:
                 task_list += [self.response_task(method, plugin.handles[key], event, extra) for key, event in data.items()]
             if not plugin.temp_check():
                 continue
-            event = Event(command)
+            event = Event(command, [])
             task_list += [self.response_task(method, handle, event, extra) for _, handle in plugin.temp_handles.values()]
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
