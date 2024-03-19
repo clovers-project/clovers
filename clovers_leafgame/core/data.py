@@ -6,8 +6,8 @@ KeyMap = dict[str, str]
 
 
 class Item(BaseModel):
-    id: str = None
-    name: str = None
+    id: str
+    name: str
 
     def deal(self, bank: Counter[str], unsettled: int):
         prop_id = self.id
@@ -22,9 +22,9 @@ class Item(BaseModel):
 
 class User(BaseModel):
     id: str
-    name: str = None
-    avatar_url: str = None
-    connect: str = None
+    name: str = ""
+    avatar_url: str = ""
+    connect: str = ""
     bank: Counter[str] = Counter()
     invest: Counter[str] = Counter()
     extra: dict = {}
@@ -36,8 +36,8 @@ class User(BaseModel):
 class Account(BaseModel):
     user_id: str
     group_id: str
-    name: str = None
-    sign_in: datetime = None
+    name: str = ""
+    sign_in: datetime | None = None
     bank: Counter[str] = Counter()
     extra: dict = {}
 
@@ -47,39 +47,30 @@ class Account(BaseModel):
 
 
 class Prop(Item):
-
-    rare: int = None
+    rare: int
     """稀有度"""
-    domain: int = None
+    domain: int
     """
     作用域   
         0:无(空气)
         1:群内
         2:全局
     """
-    flow: int = None
+    flow: int
     """
     道具时效
         0:永久道具
         1:时效道具
     """
-    number: int = None
+    number: int
     """道具编号"""
-    color: str = None
-    intro: str = None
-    tip: str = None
+    color: str = "black"
+    intro: str = ""
+    tip: str = ""
 
-    def __init__(self, **data) -> None:
+    def __init__(self, id: str, **data) -> None:
+        data.update({"rare": int(id[0]), "domain": int(id[1]), "flow": int(id[2]), "number": int(id[3:])})
         super().__init__(**data)
-        if self.id:
-            self.rare, self.domain, self.flow, self.number = self.code_info()
-
-    def code_info(self):
-        rare = int(self.id[0])
-        domain = int(self.id[1])
-        flow = int(self.id[2])
-        number = int(self.id[3:])
-        return rare, domain, flow, number
 
     def locate_bank(self, user: User, account: Account):
         match self.domain:
@@ -95,7 +86,7 @@ class Prop(Item):
 class Stock(Item):
     issuance: int = 0
     """股票发行量"""
-    time: float = None
+    time: float = 0
     """注册时间"""
     floating: int = 0
     """浮动资产"""
@@ -107,10 +98,10 @@ class Stock(Item):
 
 class Group(BaseModel):
     id: str
-    name: str = None
-    avatar_url: str = None
+    name: str | None = None
+    avatar_url: str | None = None
     level: int = 1
-    stock: Stock = Stock()
+    stock: Stock | None = None
     bank: Counter[str] = Counter()
     invest: Counter[str] = Counter()
     extra: dict = {}
