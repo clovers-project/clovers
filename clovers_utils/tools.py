@@ -3,7 +3,7 @@ import numpy as np
 import httpx
 
 
-async def download_url(url: str):
+async def download_url(url: str) -> bytes | None:
     async with httpx.AsyncClient() as client:
         for _ in range(3):
             try:

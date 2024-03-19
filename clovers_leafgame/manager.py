@@ -44,7 +44,7 @@ class Manager:
         else:
             self.data = DataBase()
         for group in self.data.group_dict.values():
-            if stock_name := group.stock.name:
+            if (stock := group.stock) and (stock_name := stock.name):
                 self.group_library.set_item(group.id, {stock_name}, group)
             else:
                 self.group_library[group.id] = group
@@ -145,25 +145,11 @@ class Manager:
         return wealths
 
     def stock_value(self, invest: Counter[str]):
-        i = 0.0
+        value = 0.0
         for group_id, n in invest.items():
             group = self.data.group_dict.get(group_id)
-            if not group or group.stock.name is None:
+            if group and (stock := group.stock) and stock.name and stock.issuance > 0:
+                value += stock.value * n / stock.issuance
+            else:
                 invest[group_id] = 0
-                continue
-            stock = group.stock
-            if stock.issuance > 0:
-                i += stock.value * n / stock.issuance
-        return int(i)
-
-    @typing_extensions.deprecated("The `group_search` method is deprecated; use `group_library.get` instead.", category=None)
-    def group_search(self, group_name: str):
-        return self.group_library.get(group_name)
-
-    @typing_extensions.deprecated("The `locate_group` method is deprecated; use `data.group` instead.", category=None)
-    def locate_group(self, group_id: str) -> Group:
-        return self.data.group(group_id)
-
-    @typing_extensions.deprecated("The `locate_user` method is deprecated; use `data.user` instead.", category=None)
-    def locate_user(self, user_id: str) -> User:
-        return self.data.user(user_id)
+        return int(value)

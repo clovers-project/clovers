@@ -120,6 +120,8 @@ async def _(event: Event):
     prop = manager.props_library.get(prop_name)
     if not prop:
         return f"没有【{prop_name}】这种道具。"
+    sender_id = event.user_id
+    receiver_id = event.at[0]
     if unsettled < 0:
         if event.permission < 2:
             return "你输入了负数，请不要这样做。"
@@ -182,7 +184,7 @@ async def _(event: Event):
         info.append(text_to_image("\n".join(lines)))
     lines = []
     sum_std_n = user.bank[STD_GOLD.id]
-    dist = [(sum_std_n, "个人账户")]
+    dist: list[tuple[int, str]] = [(sum_std_n, "个人账户")]
     for group_id, account_id in user.accounts_map.items():
         group = manager.data.group(group_id)
         std_n = manager.data.account_dict[account_id].bank[GOLD.id] * group.level
