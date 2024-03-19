@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from typing import overload
 
 
 class Library[K, V]:
@@ -25,7 +24,7 @@ class Library[K, V]:
         return key in self._key_indices or key in self._index_key
 
     def __iter__(self):
-        return iter(self._key_data)
+        return iter((key, self._key_indices[key], value) for key, value in self._key_data.items())
 
     def keys(self):
         return self._key_data.keys()
@@ -64,8 +63,7 @@ class Library[K, V]:
         for key, indices in data._key_indices.items():
             self.set_item(key, indices, data[key])
 
-    @overload
-    def get(self, index: K, default):
+    def get(self, index: K, default: V | None = None):
         if key := self._index_key.get(index):
             return self._key_data[key]
         return self._key_data.get(index, default)
