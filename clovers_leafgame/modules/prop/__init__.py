@@ -2,6 +2,7 @@ import random
 from collections import Counter
 from clovers_leafgame.core.clovers import Event, to_me
 from clovers_leafgame.main import plugin, manager
+from clovers_leafgame.manager import Manager
 from clovers_leafgame.item import Prop, GOLD, STD_GOLD
 from .library import usage, gacha, AIR_PACK, RED_PACKET, DIAMOND
 from clovers_leafgame.output import prop_card, bank_card
@@ -104,8 +105,6 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
 
 @usage("随机红包", {"user_id", "group_id", "nickname"})
 async def _(prop: Prop, event: Event, count: int, extra: str):
-    if count < 1:
-        return
     user, account = manager.account(event)
     bank = prop.locate_bank(user, account)
     if n := prop.deal(bank, -count):
@@ -187,8 +186,52 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
             return f"金币不足。你还有{n}枚金币。（需要：{gold}）"
         bank[prop.id] = 0
     else:
+        gold = 0
         bank[prop.id] -= count
 
     target_bank = target_prop.locate_bank(user, account)
     target_bank[target_prop.id] += count
-    return f"你获得了{count}个【{target_prop.name}】！"
+    return f"你获得了{count}个【{target_prop.name}】！（使用金币：{gold}）"
+
+
+@usage("绯红迷雾之书", {"user_id", "group_id", "nickname"})
+async def _(prop: Prop, event: Event, count: int, extra: str):
+    bank = prop.locate_bank(*manager.account(event))
+    if prop.deal(bank, -1):
+        return f"使用失败，你未持有{prop.name}"
+    user_id = event.user_id
+    group_id = event.group_id
+    folders = {f.name: f for f in manager.backup_path.iterdir() if f.is_dir()}
+    tip = "请输入你要回档的日期:\n" + "\n".join(folders.keys())
+
+    @plugin.temp_handle(f"check_date {user_id} {group_id}", {"user_id", "group_id"}, 60)
+    async def _(temp_event: Event, finish):
+        if temp_event.user_id != user_id or temp_event.group_id != group_id:
+            return
+        date = temp_event.raw_command
+        folder = folders.get(date)
+        if not folder:
+            return tip
+        files = {f.stem.split()[1].replace("-", ":"): f for f in folder.iterdir() if f.is_file()}
+        tip2 = "请输入你要回档的时间:\n" + "\n".join(files.keys())
+
+        @plugin.temp_handle(f"check_time {user_id} {group_id}", {"user_id", "group_id", "permission"}, 60)
+        async def _(temp2_event: Event, finish2):
+            if temp_event.user_id != user_id or temp_event.group_id != group_id:
+                return
+            clock = temp2_event.raw_command
+            file = files.get(clock)
+            if not file:
+                return tip2
+            manager.data.cancel_user(user_id)
+            old_data = manager.data.load(file)
+            user = manager.data.user_dict[user_id] = old_data.user(user_id)
+            for account_id in user.accounts_map.values():
+                manager.data.register(old_data.account_dict[account_id])
+            finish2()
+            return f"你已经回档到{date}-{clock}"
+
+        finish()
+        return tip2
+
+    return tip

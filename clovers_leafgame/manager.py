@@ -38,11 +38,7 @@ class Manager:
             f.write(self.data.json(indent=4))
 
     def load(self):
-        if self.DATA_PATH.exists():
-            with open(self.DATA_PATH, "r", encoding="utf8") as f:
-                self.data = DataBase.parse_obj(json.load(f))
-        else:
-            self.data = DataBase()
+        self.data = DataBase.load(self.DATA_PATH)
         for group in self.data.group_dict.values():
             if (stock := group.stock) and (stock_name := stock.name):
                 self.group_library.set_item(group.id, {stock_name}, group)

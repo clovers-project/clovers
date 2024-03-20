@@ -1,4 +1,6 @@
+import json
 from datetime import datetime
+from pathlib import Path
 from pydantic import BaseModel
 from collections import Counter
 
@@ -119,6 +121,15 @@ class DataBase(BaseModel):
     user_dict: dict[str, User] = {}
     group_dict: dict[str, Group] = {}
     account_dict: dict[str, Account] = {}
+
+    @classmethod
+    def load(cls, file: Path) -> "DataBase":
+        if file.exists():
+            with open(file, "r", encoding="utf8") as f:
+                data = cls.parse_obj(json.load(f))
+        else:
+            data = cls()
+        return data
 
     def register(self, account: Account):
         """注册个人账户"""
