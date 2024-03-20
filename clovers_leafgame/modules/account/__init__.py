@@ -257,6 +257,8 @@ async def _(event: Event):
             info.append(invest_card(data, "群投资"))
         return manager.info_card(info, user_id) if info else "群金库是空的"
     sign, name = command[0], command[1:]
+    if not name:
+        pass
     user, account = manager.locate_account(user_id, group_id)
     if item := manager.props_library.get(name):
         bank_in = group.bank
@@ -270,7 +272,6 @@ async def _(event: Event):
     if sign == "取":
         if not event.permission:
             return f"你的权限不足。"
-        N = -N
         bank_out, bank_in = bank_in, bank_out
         sender = "群金库"
     elif sign == "存":

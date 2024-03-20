@@ -173,7 +173,7 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
         target_prop = manager.props_library.get(prop_name)
         if not target_prop:
             return f"不存在道具【{prop_name}】"
-        if target_prop.rare == 0:
+        if target_prop.rare < 3:
             return f"无法兑换【{target_prop.name}】"
     else:
         target_prop = prop
@@ -203,23 +203,25 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
     group_id = event.group_id
     folders = {f.name: f for f in manager.backup_path.iterdir() if f.is_dir()}
     tip = "请输入你要回档的日期:\n" + "\n".join(folders.keys())
+    key = f"{user_id} {group_id}"
 
-    @plugin.temp_handle(f"check_date {user_id} {group_id}", {"user_id", "group_id"}, 60)
-    async def _(temp_event: Event, finish):
-        if temp_event.user_id != user_id or temp_event.group_id != group_id:
+    @plugin.temp_handle(key, {"user_id", "group_id"}, 30)
+    async def _(event_1: Event, finish):
+        if event_1.user_id != user_id or event_1.group_id != group_id:
             return
-        date = temp_event.raw_command
+        date = event_1.raw_command
         folder = folders.get(date)
         if not folder:
             return tip
         files = {f.stem.split()[1].replace("-", ":"): f for f in folder.iterdir() if f.is_file()}
         tip2 = "请输入你要回档的时间:\n" + "\n".join(files.keys())
+        finish()
 
-        @plugin.temp_handle(f"check_time {user_id} {group_id}", {"user_id", "group_id", "permission"}, 60)
-        async def _(temp2_event: Event, finish2):
-            if temp_event.user_id != user_id or temp_event.group_id != group_id:
+        @plugin.temp_handle(key, {"user_id", "group_id"}, 30)
+        async def _(event_2: Event, finish):
+            if event_1.user_id != user_id or event_1.group_id != group_id:
                 return
-            clock = temp2_event.raw_command
+            clock = event_2.raw_command
             file = files.get(clock)
             if not file:
                 return tip2
@@ -228,10 +230,26 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
             user = manager.data.user_dict[user_id] = old_data.user(user_id)
             for account_id in user.accounts_map.values():
                 manager.data.register(old_data.account_dict[account_id])
-            finish2()
-            return f"你已经回档到{date}-{clock}"
+            finish()
+            return f"你已经回档到{date} {clock}"
 
-        finish()
         return tip2
 
     return tip
+
+
+@usage("恶魔轮盘", {"user_id", "group_id", "nickname", "Bot_Nickname"})
+async def _(prop: Prop, event: Event, count: int, extra: str):
+    user, account = manager.account(event)
+    bank = prop.locate_bank(user, account)
+    if prop.deal(bank, -1):
+        return f"使用失败，你没有足够的{prop.name}"
+
+
+"""
+手中的左轮没有消失，你的眼前出现了一张纸条。
+为了庆祝你活了下来,我们还要送你一份礼物。
+你手中的左轮已经重新装好了子弹。
+你可以把它扔在仓库里。
+但是如果你想继续开枪的话，那就来吧。
+*你获得了 【恶魔轮盘】*1"""

@@ -129,10 +129,10 @@ class Plugin:
         return func
 
     def __call__(self, command: str) -> dict[int, Event] | None:
-        if not command:
+        command_list = command.split()
+        if not command_list:
             return
         data = {}
-        command_list = command.strip().split()
         command_start = command_list[0]
         for cmd, keys in self.command_dict.items():
             if not command_start.startswith(cmd):
