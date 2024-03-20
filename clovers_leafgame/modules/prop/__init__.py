@@ -15,6 +15,7 @@ config = Config.parse_obj(clovers_config.get(__package__, {}))
 gacha_gold = config.gacha_gold
 packet_gold = config.packet_gold
 luckey_min, luckey_max = config.luckey_coin
+ticket_price = gacha_gold * 50
 
 
 @plugin.handle(r"^(.+)连抽?卡?|单抽", {"user_id", "group_id", "nickname", "to_me"})
@@ -86,7 +87,7 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
 async def _(prop: Prop, event: Event, count: int, extra: str):
     bank = prop.locate_bank(*manager.account(event))
     if prop.deal(bank, -1):
-        return f"使用失败，你没有足够的{prop.name}"
+        return f"使用失败，你未持有{prop.name}"
     return "你获得了10亿金币，100万钻石。祝你好运！"
 
 
@@ -103,6 +104,8 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
 
 @usage("随机红包", {"user_id", "group_id", "nickname"})
 async def _(prop: Prop, event: Event, count: int, extra: str):
+    if count < 1:
+        return
     user, account = manager.account(event)
     bank = prop.locate_bank(user, account)
     if n := prop.deal(bank, -count):
@@ -164,44 +167,28 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
         return f"你失去了{gold}金币。\n{event.event.kwargs['Bot_Nickname']}送你1个『随机红包』，祝你好运~"
 
 
-@add_prop_extra("道具兑换券")
-def _(event: Event, count: int) -> Result:
-    user, group_account = Manager.locate_user(event)
-    if not group_account:
-        return "私聊未关联账户，请发送【关联账户】关联群内账户。"
-    props_account = group_account.props
-    prop_name = "道具兑换券"
-    if len(event.args) == 1:
-        pass
-    elif len(event.args) == 2:
-        if event.args[1].isdigit():
-            count = int(event.args[1])
-        else:
-            prop_name = event.args[1]
+@usage("道具兑换券", {"user_id", "group_id", "nickname"})
+async def _(prop: Prop, event: Event, count: int, extra: str):
+    if extra:
+        prop_name = extra.strip()
+        target_prop = manager.props_library.get(prop_name)
+        if not target_prop:
+            return f"不存在道具【{prop_name}】"
+        if target_prop.rare == 0:
+            return f"无法兑换【{target_prop.name}】"
     else:
-        event.args = event.args[1:]
-        prop_name, count, _ = event.args_parse()
-    prop_code = get_prop_code(prop_name)
-    if not prop_code:
-        return f"没有【{prop_name}】这种道具。"
-    if prop_code[0] == "0":
-        return "不能兑换特殊道具。"
+        target_prop = prop
+    user, account = manager.account(event)
+    bank = prop.locate_bank(user, account)
     # 购买道具兑换券，价格 50抽
-    props_account.setdefault("62102", 0)
-    buy = max(count - props_account["62102"], 0)
-    gold = buy * gacha_gold * 50
-    if group_account.gold < gold:
-        return f"金币不足。你还有{group_account.gold}枚金币。（需要：{gold}）"
-    # 购买结算
-    group_account.gold -= gold
-    props_account["62102"] += buy
-    # 道具结算
-    if prop_code[1] == "3":
-        account = user
+    if count > bank[prop.id]:
+        gold = ticket_price * (count - bank[prop.id])
+        if n := GOLD.deal(account.bank, -gold):
+            return f"金币不足。你还有{n}枚金币。（需要：{gold}）"
+        bank[prop.id] = 0
     else:
-        account = group_account
-    account.props[prop_code] = account.props.get(prop_code, 0) + count
-    props_account["62102"] -= count
-    if props_account["62102"] < 1:
-        del props_account["62102"]
-    return f"你获得了{count}个【{prop_name}】！（使用金币：{gold}）"
+        bank[prop.id] -= count
+
+    target_bank = target_prop.locate_bank(user, account)
+    target_bank[target_prop.id] += count
+    return f"你获得了{count}个【{target_prop.name}】！"

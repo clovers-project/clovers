@@ -49,7 +49,7 @@ def remove_tag(text: str, pattern: re.Pattern):
         return None
 
 
-def line_wrap(line: str, width: int, font: FreeTypeFont, start: int = 0):
+def line_wrap(line: str, width: int, font: FreeTypeFont, start: float = 0):
     text_x = start
     new_str = ""
     for char in line:
@@ -67,7 +67,7 @@ class Tag:
         self.align: str = align
         self.font: FreeTypeFont = font
         self.cmap: dict = cmap
-        self.color: str = None
+        self.color: str | None = None
         self.passport: bool = False
         self.noautowrap: bool = False
         self.nowrap: bool = False
@@ -86,13 +86,13 @@ def linecard(
     text: str,
     font_manager: FontManager,
     font_size: int,
-    width: int = None,
-    height: int = None,
-    padding: tuple = (20, 20),
+    width: int | None = None,
+    height: int | None = None,
+    padding: tuple[int, int] = (20, 20),
     spacing: float = 1.2,
-    bg_color: str = None,
+    bg_color: str | int = 0,
     autowrap: bool = False,
-    canvas: IMG = None,
+    canvas: IMG | None = None,
 ) -> IMG:
     """
     指定宽度单行文字
@@ -113,8 +113,7 @@ def linecard(
     """
     text = text.replace("\r\n", "\n")
     lines = text.split("\n")
-    padding_x = padding[0]
-    padding_y = padding[1]
+    padding_x, padding_y = padding
 
     align = "left"
 
@@ -172,7 +171,7 @@ def linecard(
             tag.passport = True
 
         if autowrap and not tag.noautowrap and width and tag.font.getlength(line) > width:
-            line = line_wrap(line, width - padding_x, tag.font, x)
+            line = line_wrap(line, width - sum(padding), tag.font, x)
 
         if line == "----":
             inner_tmp = tag.font.size * spacing
@@ -248,7 +247,7 @@ ImageList = list[IMG]
 
 def info_splicing(
     info: ImageList,
-    BG_path: Path = None,
+    BG_path: Path | None = None,
     width: int = 880,
     padding: int = 20,
     spacing: int = 20,
@@ -269,7 +268,7 @@ def info_splicing(
         height = height - spacing + padding
 
     size = (width + padding * 2, height)
-    if BG_path.exists():
+    if BG_path and BG_path.exists():
         bg = Image.open(BG_path).convert("RGB")
         canvas = CropResize(bg, size)
     else:
