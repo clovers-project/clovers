@@ -25,7 +25,7 @@ class Event:
     ):
         self.raw_command = raw_command
         self.args = args
-        self.kwargs: dict[str, object] = {}
+        self.kwargs: dict = {}
 
 
 class Handle:

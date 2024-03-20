@@ -39,7 +39,7 @@ class Adapter:
         self.plugins: list[Plugin] = []
         self.wait_for: list[Awaitable] = []
 
-    async def response_task(self, method: AdapterMethod, handle: Handle, event: Event, extra: dict[str, object]):
+    async def response_task(self, method: AdapterMethod, handle: Handle, event: Event, extra: dict):
         kwargs_task = []
         extra_args = []
         for key in handle.extra_args:

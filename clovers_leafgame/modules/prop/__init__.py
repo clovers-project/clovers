@@ -1,10 +1,11 @@
 import random
+import asyncio
 from collections import Counter
+from clovers_core.plugin import Result
 from clovers_leafgame.core.clovers import Event, to_me
 from clovers_leafgame.main import plugin, manager
-from clovers_leafgame.manager import Manager
 from clovers_leafgame.item import Prop, GOLD, STD_GOLD
-from .library import usage, gacha, AIR_PACK, RED_PACKET, DIAMOND
+from .library import usage, gacha, AIR_PACK, RED_PACKET
 from clovers_leafgame.output import prop_card, bank_card
 from .output import report_card
 
@@ -196,10 +197,10 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
 
 @usage("绯红迷雾之书", {"user_id", "group_id", "nickname"})
 async def _(prop: Prop, event: Event, count: int, extra: str):
-    bank = prop.locate_bank(*manager.account(event))
+    user_id = event.user_id
+    bank = manager.data.user(user_id).bank
     if prop.deal(bank, -1):
         return f"使用失败，你未持有{prop.name}"
-    user_id = event.user_id
     group_id = event.group_id
     folders = {f.name: f for f in manager.backup_path.iterdir() if f.is_dir()}
     tip = "请输入你要回档的日期:\n" + "\n".join(folders.keys())
@@ -219,7 +220,7 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
 
         @plugin.temp_handle(key, {"user_id", "group_id"}, 30)
         async def _(event_2: Event, finish):
-            if event_1.user_id != user_id or event_1.group_id != group_id:
+            if event_2.user_id != user_id or event_2.group_id != group_id:
                 return
             clock = event_2.raw_command
             file = files.get(clock)
@@ -240,16 +241,58 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
 
 @usage("恶魔轮盘", {"user_id", "group_id", "nickname", "Bot_Nickname"})
 async def _(prop: Prop, event: Event, count: int, extra: str):
-    user, account = manager.account(event)
-    bank = prop.locate_bank(user, account)
-    if prop.deal(bank, -1):
+    user_id = event.user_id
+    group_id = event.group_id
+    user = manager.data.user(user_id)
+    if user.bank[prop.id] < 1:
         return f"使用失败，你没有足够的{prop.name}"
+    group_id = event.group_id
 
+    def ten_times_bank(bank: Counter):
+        for k in bank.keys():
+            bank[k] *= 10
 
-"""
-手中的左轮没有消失，你的眼前出现了一张纸条。
-为了庆祝你活了下来,我们还要送你一份礼物。
-你手中的左轮已经重新装好了子弹。
-你可以把它扔在仓库里。
-但是如果你想继续开枪的话，那就来吧。
-*你获得了 【恶魔轮盘】*1"""
+    @plugin.temp_handle(f"{user_id} {group_id}", {"user_id", "group_id"}, 30)
+    async def _(event_1: Event, finish):
+        if event_1.user_id != user_id or event_1.group_id != group_id:
+            return
+        finish()
+        if event_1.raw_command == "取消":
+            return "恶魔轮盘已取消"
+        if event_1.raw_command != "开枪":
+            return
+
+        async def result():
+            bullet_lst = [0, 0, 0, 0, 0, 0]
+            for i in random.sample([0, 1, 2, 3, 4, 5], random.randint(0, 6)):
+                bullet_lst[i] = 1
+            index = random.randint(0, 5)
+            yield plugin.build_result(f"子弹列表{" ".join(str(x) for x in bullet_lst)}，你中了第{index+1}发子弹。")
+            await asyncio.sleep(1)
+            if bullet_lst[index] == 1:
+                manager.data.cancel_user(user_id)
+                yield plugin.build_result("砰！一团火从枪口喷出，你从这个世界上消失了。")
+                return
+            counter = Counter()
+            ten_times_bank(user.bank)
+            user.bank[prop.id] = 1
+            counter += user.bank
+            for account_id in user.accounts_map.values():
+                account = manager.data.account_dict[account_id]
+                ten_times_bank(account.bank)
+                counter += account.bank
+            user.bank[STD_GOLD.id] += manager.stock_value(user.invest) * 10
+            yield plugin.build_result("咔！你活了下来...")
+            yield plugin.build_result(
+                [
+                    "这是你获得的道具",
+                    manager.info_card(
+                        [prop_card([(p, n) for k, n in counter.items() if (p := manager.props_library.get(k))])],
+                        user_id,
+                    ),
+                ]
+            )
+
+        return Result("segmented", result)
+
+    return "你手中的左轮枪已经装好了子弹，请开枪，或者取消。"
