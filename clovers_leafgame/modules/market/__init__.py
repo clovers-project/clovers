@@ -5,7 +5,7 @@ from io import BytesIO
 from collections import Counter
 from clovers_apscheduler import scheduler
 from clovers_utils.tools import item_name_rule, gini_coef, format_number
-from clovers_leafgame.core.clovers import Event, to_me, group_admin, superuser
+from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.core.data import Group, Stock
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import GOLD, LICENSE, STD_GOLD
@@ -96,8 +96,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"市场注册", "公司注册", "注册公司"}, {"group_id", "to_me", "permission", "group_avatar"})
-@to_me.decorator
-@group_admin.decorator
+@Check().to_me().group_admin().check
 async def _(event: Event):
     group_id = event.group_id
     group = manager.data.group(group_id)
@@ -134,8 +133,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"公司重命名"}, {"group_id", "to_me", "permission"})
-@to_me.decorator
-@group_admin.decorator
+@Check().to_me().group_admin().check
 async def _(event: Event):
     group = manager.data.group(event.group_id)
     stock = group.stock
@@ -258,7 +256,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"继承公司账户", "继承群账户"}, {"user_id", "permission"})
-@superuser.decorator
+@Check().superuser().check
 async def _(event: Event):
     args = event.args
     if len(args) != 3:
@@ -309,7 +307,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"刷新市场"}, {"permission"})
-@superuser.decorator
+@Check().superuser().check
 @scheduler.scheduled_job("cron", minute="*/5", misfire_grace_time=120)
 async def _():
     def stock_update(group: Group):

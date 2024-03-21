@@ -2,7 +2,7 @@ import random
 import asyncio
 from collections import Counter
 from clovers_core.plugin import Result
-from clovers_leafgame.core.clovers import Event, to_me
+from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import Prop, GOLD, STD_GOLD
 from .library import usage, gacha, AIR_PACK, RED_PACKET
@@ -21,7 +21,7 @@ ticket_price = gacha_gold * 50
 
 
 @plugin.handle(r"^(.+)连抽?卡?|单抽", {"user_id", "group_id", "nickname", "to_me"})
-@to_me.decorator
+@Check().to_me().check
 async def _(event: Event):
     count = event.args_to_int()
     if not count:

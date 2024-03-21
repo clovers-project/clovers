@@ -136,9 +136,3 @@ class Check:
             return await func(event, *args, **kwargs)
 
         return wrapper
-
-
-to_me = Check().to_me().check
-superuser = Check().superuser().check
-group_admin = Check().group_admin().check
-at_list = Check().at().check

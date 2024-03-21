@@ -1,7 +1,7 @@
 from datetime import datetime
 from collections import Counter
 from clovers_apscheduler import scheduler
-from clovers_leafgame.core.clovers import Event, superuser
+from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.main import plugin, manager
 
 
@@ -50,14 +50,14 @@ def verification():
 
 # 数据验证
 @plugin.handle({"数据验证"}, {"permission"})
-@superuser.decorator
+@Check().superuser().check
 async def _(event: Event):
     verification()
     print("数据已验证")
 
 
 @plugin.handle({"保存游戏"}, {"permission"})
-@superuser.decorator
+@Check().superuser().check
 @scheduler.scheduled_job("cron", minute="*/10", misfire_grace_time=120)
 async def _():
     manager.save()
@@ -65,7 +65,7 @@ async def _():
 
 
 @plugin.handle({"刷新每日"}, {"permission"})
-@superuser.decorator
+@Check().superuser().check
 @scheduler.scheduled_job("cron", hour=0, misfire_grace_time=120)
 async def _():
     revolution_today = datetime.today().weekday() in {4, 5, 6}
@@ -84,7 +84,7 @@ async def _():
 
 # 数据备份
 @plugin.handle({"数据备份"}, {"permission"})
-@superuser.decorator
+@Check().superuser().check
 @scheduler.scheduled_job("cron", hour="*/4", misfire_grace_time=120)
 async def _():
     manager.backup()

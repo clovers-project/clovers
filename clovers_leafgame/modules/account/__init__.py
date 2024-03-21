@@ -4,7 +4,7 @@ from datetime import datetime
 from PIL import ImageColor
 from collections import Counter
 from clovers_utils.tools import download_url, format_number
-from clovers_leafgame.core.clovers import Event, to_me, superuser, at_list
+from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import (
     GOLD,
@@ -40,7 +40,7 @@ props_data = lambda bank: [(prop, n) for prop_id, n in bank.items() if n != 0 an
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
-@to_me.decorator
+@Check().to_me().check
 async def _(event: Event):
     user_id = event.user_id
     user = manager.data.user(user_id)
@@ -78,7 +78,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"删除背景"}, {"user_id", "to_me"})
-@to_me.decorator
+@Check().to_me().check
 async def _(event: Event):
     Path.unlink(manager.BG_PATH / f"{event.user_id}.png", True)
     return "背景图片删除成功！"
@@ -98,7 +98,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"发红包"}, {"user_id", "group_id", "at", "permission"})
-@at_list.decorator
+@Check().at().check
 async def _(event: Event):
     unsettled = event.args_to_int()
     sender_id = event.user_id
@@ -112,7 +112,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"送道具"}, {"user_id", "group_id", "at", "permission"})
-@at_list.decorator
+@Check().at().check
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
@@ -335,7 +335,7 @@ async def _(event: Event):
 
 # 超管指令
 @plugin.handle({"获取"}, {"user_id", "group_id", "nickname", "permission"})
-@superuser.decorator
+@Check().superuser().check
 async def _(event: Event):
     if not (args := event.args_parse()):
         return
@@ -349,8 +349,7 @@ async def _(event: Event):
 
 
 @plugin.handle({"冻结资产"}, {"user_id", "group_id", "permission", "at"})
-@at_list.decorator
-@superuser.decorator
+@Check().superuser().at().check
 async def _(event: Event):
     user_id = event.user_id
     group_id = event.group_id
