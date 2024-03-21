@@ -207,10 +207,9 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
     key = f"{user_id} {group_id}"
 
     @plugin.temp_handle(key, {"user_id", "group_id"}, 30)
-    async def _(event_1: Event, finish):
-        if event_1.user_id != user_id or event_1.group_id != group_id:
-            return
-        date = event_1.raw_command
+    @Check().locate(user_id, group_id).check
+    async def _(event: Event, finish):
+        date = event.raw_command
         folder = folders.get(date)
         if not folder:
             return tip
@@ -219,10 +218,9 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
         finish()
 
         @plugin.temp_handle(key, {"user_id", "group_id"}, 30)
-        async def _(event_2: Event, finish):
-            if event_2.user_id != user_id or event_2.group_id != group_id:
-                return
-            clock = event_2.raw_command
+        @Check().locate(user_id, group_id).check
+        async def _(event: Event, finish):
+            clock = event.raw_command
             file = files.get(clock)
             if not file:
                 return tip2

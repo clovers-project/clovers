@@ -1,13 +1,12 @@
-import inspect
 from collections.abc import Coroutine, Callable
 
 
 def kwfilter(func: Callable[..., Coroutine]):
-    kw = inspect.signature(func).parameters.keys()
+    kw = set(func.__code__.co_varnames)
     if not kw:
-        return lambda *args, **kwargs: func()
+        return lambda **kwargs: func()
 
-    async def wrapper(*args, **kwargs):
-        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
+    async def wrapper(**kwargs):
+        return await func(**{k: v for k, v in kwargs.items() if k in kw})
 
     return wrapper
