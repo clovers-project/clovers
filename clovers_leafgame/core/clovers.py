@@ -1,6 +1,5 @@
 from collections.abc import Callable, Coroutine
 from clovers_core.plugin import Event as CloversEvent
-from clovers_core.utils import kwfilter
 from clovers_utils.tools import to_int
 
 
@@ -96,54 +95,50 @@ class Event:
 
 
 class Check:
-    superuser: bool = False
-    group_owner: bool = False
-    group_admin: bool = False
-    to_me: bool = False
-    at: bool = False
+    checker: list[Callable[[Event], bool]]
 
-    def __init__(
-        self,
-        superuser: bool = False,
-        group_owner: bool = False,
-        group_admin: bool = False,
-        to_me: bool = False,
-        at: bool = False,
-    ) -> None:
-        self.superuser: bool = superuser
-        self.group_owner: bool = group_owner
-        self.group_admin: bool = group_admin
-        self.to_me: bool = to_me
-        self.at: bool = at
-        self.check: list[Callable[[Event], bool]] = []
+    def __init__(self) -> None:
+        self.checker = []
 
-    def decorator(self, func: Callable[..., Coroutine]):
-        if self.superuser:
-            self.check.append(lambda event: event.permission > 2)
-        elif self.group_owner:
-            self.check.append(lambda event: event.permission > 1)
-        elif self.group_admin:
-            self.check.append(lambda event: event.permission > 0)
-        if self.to_me:
-            self.check.append(lambda event: event.to_me)
-        if self.at:
-            self.check.append(lambda event: True if event.at else False)
+    def superuser(self):
+        self.checker.append(lambda event: event.permission > 2)
+        return self
 
-        if len(self.check) == 1:
-            check = self.check[0]
+    def group_owner(self):
+        self.checker.append(lambda event: event.permission > 1)
+        return self
+
+    def group_admin(self):
+        self.checker.append(lambda event: event.permission > 0)
+        return self
+
+    def locate(self, user_id, group_id):
+        self.checker.append(lambda event: event.user_id == user_id or event.group_id == group_id)
+        return self
+
+    def to_me(self):
+        self.checker.append(lambda event: event.to_me)
+        return self
+
+    def at(self):
+        self.checker.append(lambda event: bool(event.at))
+        return self
+
+    def check(self, func: Callable[..., Coroutine]):
+        if len(self.checker) == 1:
+            checker = self.checker[0]
         else:
-            check = lambda event: any(check(event) for check in self.check)
-        wrapper = kwfilter(func)
+            checker = lambda event: any(checker(event) for checker in self.checker)
 
-        async def checker(event: Event):
-            if not check(event):
+        async def wrapper(event: Event, *args, **kwargs):
+            if not checker(event):
                 return
-            return await wrapper(event)
+            return await func(event, *args, **kwargs)
 
-        return checker
+        return wrapper
 
 
-to_me = Check(to_me=True)
-superuser = Check(superuser=True)
-group_admin = Check(group_admin=True)
-at_list = Check(at=True)
+to_me = Check().to_me().check
+superuser = Check().superuser().check
+group_admin = Check().group_admin().check
+at_list = Check().at().check
