@@ -1,13 +1,23 @@
 import asyncio
 from collections.abc import Coroutine, Callable, Awaitable
 from .plugin import Plugin, Handle, Event
-from .utils import kwfilter
 
 
 class AdapterError(Exception):
     def __init__(self, message: str, data=None):
         super().__init__(message)
         self.data = data
+
+
+def kwfilter(func: Callable[..., Coroutine]):
+    kw = set(func.__code__.co_varnames)
+    if not kw:
+        return lambda *args, **kwargs: func()
+
+    async def wrapper(*args, **kwargs):
+        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
+
+    return wrapper
 
 
 class AdapterMethod:
@@ -58,7 +68,7 @@ class Adapter:
         send = method.send_dict.get(send_method) or self.method.send_dict.get(send_method)
         if not send:
             raise AdapterError(f"使用了未定义的 send 方法:{send_method}")
-        await send(result.data)
+        await send(result.data, **extra)
         return 1
 
     async def response(self, adapter: str, command: str, **extra) -> int:

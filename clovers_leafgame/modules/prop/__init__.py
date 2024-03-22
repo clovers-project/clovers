@@ -5,7 +5,7 @@ from clovers_core.plugin import Result
 from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import Prop, GOLD, STD_GOLD
-from .library import usage, gacha, AIR_PACK, RED_PACKET
+from .core import usage, gacha, AIR_PACK, RED_PACKET
 from clovers_leafgame.output import prop_card, bank_card
 from .output import report_card
 

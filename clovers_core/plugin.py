@@ -29,12 +29,12 @@ class Event:
 
 
 class Handle:
-    func: Callable[..., Coroutine]
+    func: Callable[[Event], Coroutine[None, None, Result | None]]
 
     def __init__(self, extra_args: Iterable[str]):
         self.extra_args = extra_args
 
-    async def __call__(self, event: Event) -> Result:
+    async def __call__(self, event: Event):
         return await self.func(event)
 
 
@@ -61,7 +61,7 @@ class Plugin:
         self.build_result: Callable = build_result
 
     def handle_warpper(self, func: Callable[..., Coroutine]):
-        async def wrapper(event: Event):
+        async def wrapper(event: Event) -> Result | None:
             if result := await func(self.build_event(event)):
                 return self.build_result(result)
 

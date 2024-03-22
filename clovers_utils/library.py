@@ -1,10 +1,16 @@
 from collections.abc import Iterable
+from typing import overload
 
 
 class Library[K, V]:
     """多键字典"""
 
-    def __init__(self, data: Iterable[tuple[K, Iterable[K], V]] | None = None) -> None:
+    @overload
+    def __init__(self, data: Iterable[tuple[K, Iterable[K], V]]) -> None: ...
+    @overload
+    def __init__(self) -> None: ...
+
+    def __init__(self, data=None) -> None:
         self._key_data: dict[K, V] = {}
         self._index_key: dict[K, K] = {}
         self._key_indices: dict[K, set[K]] = {}
@@ -60,10 +66,15 @@ class Library[K, V]:
         raise KeyError(index)
 
     def update(self, data: "Library[K, V]"):
-        for key, indices in data._key_indices.items():
-            self.set_item(key, indices, data[key])
+        for key, indices, value in data:
+            self.set_item(key, indices, value)
 
-    def get(self, index: K, default: V | None = None):
+    @overload
+    def get(self, index: K) -> V | None: ...
+    @overload
+    def get(self, index: K, default: V) -> V: ...
+
+    def get(self, index: K, default=None):
         if key := self._index_key.get(index):
             return self._key_data[key]
         return self._key_data.get(index, default)

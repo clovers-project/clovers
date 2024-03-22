@@ -1,6 +1,5 @@
 from collections.abc import Callable, Coroutine
 from clovers_core.plugin import Event as CloversEvent
-from clovers_core.utils import kwfilter
 from clovers_utils.tools import to_int
 
 
@@ -37,7 +36,7 @@ class Event:
         return self.event.kwargs["to_me"]
 
     @property
-    def at(self) -> list:
+    def at(self) -> list[str]:
         return self.event.kwargs["at"]
 
     def is_private(self) -> bool:
@@ -125,13 +124,23 @@ class Check:
         self.checker.append(lambda event: bool(event.at))
         return self
 
-    def check(self, func: Callable[..., Coroutine]) -> Callable[[Event, tuple, dict], Coroutine]:
+    def check(self, func: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
         if len(self.checker) == 1:
             checker = self.checker[0]
         else:
             checker = lambda event: any(checker(event) for checker in self.checker)
 
         if "event" in func.__code__.co_varnames:
-            return lambda event, *args, **kwargs: func(event, *args, **kwargs) if checker(event) else None
+
+            async def wrapper(event: Event, *args, **kwargs):
+                if checker(event):
+                    return await func(event, *args, **kwargs)
+
+            return wrapper
         else:
-            return lambda event, *args, **kwargs: func(*args, **kwargs) if checker(event) else None
+
+            async def wrapper(event: Event, *args, **kwargs):
+                if checker(event):
+                    return await func(*args, **kwargs)
+
+            return wrapper
