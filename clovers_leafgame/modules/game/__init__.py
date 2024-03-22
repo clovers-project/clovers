@@ -92,7 +92,9 @@ async def _(session: Session, arg: str):
     bullet = [0, 0, 0, 0, 0, 0]
     for i in random.sample([0, 1, 2, 3, 4, 5, 6], bullet_num):
         bullet[i] = 1
-    session.data = {"bullet_num": bullet_num, "bullet": bullet, "index": 0}
+    session.data["bullet_num"] = bullet_num
+    session.data["bullet"] = bullet
+    session.data["index"] = 0
     if session.bet:
         prop, n = session.bet
         tip = f"\n本场金额：{prop.name} {n}"
