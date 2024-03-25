@@ -49,6 +49,7 @@ async def _(event: Event):
 @plugin.handle({"超时结算"}, {"user_id", "group_id", "nickname"})
 async def _(event: Event):
     if (session := place.get(event.group_id)) and session.timeout() < 0:
+        session.win = session.p2_uid if session.next == session.p1_uid else session.p1_uid
         return session.end()
 
 

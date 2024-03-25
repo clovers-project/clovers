@@ -27,7 +27,7 @@ class Session:
     p2_uid: str | None = None
     p2_nickname: str | None = None
     round = 1
-    next: str | None = None
+    next: str
     win: str | None = None
     bet: tuple[Prop, int] | None = None
     data: dict = {}
