@@ -88,11 +88,9 @@ class Session:
 
 
 class Game:
-    def __init__(self, name: str, create_commands: set[str], action_commands: set[str]) -> None:
+    def __init__(self, name: str, action_tip: str) -> None:
         self.name = name
-        self.create_commands = create_commands
-        self.action_commands = action_commands
-        self.action_commands_tips = "|".join(action_commands)
+        self.action_tip = action_tip
 
     @staticmethod
     def args_parse(args: Sequence[str]) -> tuple[str, int, str]:

@@ -1,6 +1,7 @@
 import random
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.core.clovers import Event
+from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
 from clovers_core.config import config as clovers_config
 from .config import Config
@@ -33,7 +34,7 @@ async def _(event: Event):
         tip = ""
     session.join(user_id, event.nickname)
     session.next = session.p1_uid
-    return f"{session.p2_nickname}接受了对决！\n本场对决为【{session.game.name}】\n{tip}请{session.p1_nickname}发送指令\n{session.game.action_commands_tips}"
+    return f"{session.p2_nickname}接受了对决！\n本场对决为【{session.game.name}】\n{tip}请{session.p1_nickname}发送指令\n{session.game.action_tip}"
 
 
 @plugin.handle({"拒绝挑战"}, {"user_id", "group_id"})
@@ -78,10 +79,10 @@ async def _(event: Event):
     return "游戏已重置。"
 
 
-russian_roulette = Game("俄罗斯轮盘", {"俄罗斯轮盘", "装弹"}, {"开枪"})
+russian_roulette = Game("俄罗斯轮盘", "开枪")
 
 
-@plugin.handle(russian_roulette.create_commands, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"俄罗斯轮盘", "装弹"}, {"user_id", "group_id", "nickname", "at"})
 @russian_roulette.create(place)
 async def _(session: Session, arg: str):
     bullet_num = to_int(arg)
@@ -97,14 +98,14 @@ async def _(session: Session, arg: str):
     session.data["index"] = 0
     if session.bet:
         prop, n = session.bet
-        tip = f"\n本场金额：{prop.name} {n}"
+        tip = f"\n本场下注：{prop.name} {n}"
     else:
         tip = ""
     tip += f"\n第一枪的概率为：{round(bullet_num * 100 / 7,2)}%"
     return f"{' '.join('咔' for _ in range(bullet_num))}，装填完毕{tip}\n{session.create_info()}"
 
 
-@plugin.handle(russian_roulette.action_commands, {"user_id", "group_id", "nickname"})
+@plugin.handle({"开枪"}, {"user_id", "group_id", "nickname"})
 @russian_roulette.action(place)
 async def _(event: Event, session: Session):
     bullet = session.data["bullet"]
@@ -120,7 +121,7 @@ async def _(event: Event, session: Session):
         session.win = session.p2_uid if session.p2_uid == user_id else session.p1_uid
         random_tip = random.choice(["嘭！，你直接去世了", "眼前一黑，你直接穿越到了异世界...(死亡)", "终究还是你先走一步..."])
         result = f"{shot_tip}{random_tip}\n第 {index + MAG.index(1) + 1} 发子弹送走了你..."
-        session.end(result)
+        return session.end(result)
     else:
         session.nextround()
         session.data["index"] += count
@@ -132,4 +133,98 @@ async def _(event: Event, session: Session):
                 "看来运气不错，你活了下来",
             ]
         )
-        return f"{shot_tip}{random_tip}\n下一枪中弹的概率：{round(session.data["bullet_num"] * 100 / (l_MAG - count),2)}%\n接下来轮到{next_name}了..."
+        return f"{shot_tip}{random_tip}\n下一枪中弹的概率：{round(session.data['bullet_num'] * 100 / (l_MAG - count),2)}%\n接下来轮到{next_name}了..."
+
+
+dice = Game("掷骰子", "开数")
+
+
+@plugin.handle({"掷色子", "掷骰子"}, {"user_id", "group_id", "nickname", "at"})
+@dice.create(place)
+async def _(session: Session, arg: str):
+    def dice_pt(dice_array: list):
+        pt = 0
+        for i in range(1, 7):
+            if dice_array.count(i) <= 1:
+                pt += i * dice_array.count(i)
+            elif dice_array.count(i) == 2:
+                pt += (100 + i) * (10 ** dice_array.count(i))
+            else:
+                pt += i * (10 ** (2 + dice_array.count(i)))
+        return pt
+
+    dice_array1 = [random.randint(1, 6) for _ in range(5)]
+    session.data["dice_array1"] = dice_array1
+    session.data["pt1"] = dice_pt(dice_array1)
+    dice_array2 = [random.randint(1, 6) for _ in range(5)]
+    session.data["dice_array2"] = dice_array2
+    session.data["pt2"] = dice_pt(dice_array2)
+    session.data["bet"] = session.bet
+    if session.bet:
+        prop, n = session.bet
+        half_n = int(n / 2)
+        session.bet = prop, half_n
+        tip = f"\n本场下注：{prop.name} {n}（{half_n}/次）"
+    else:
+        tip = ""
+    return f"哗啦哗啦~，骰子准备完毕{tip}\n{session.create_info()}"
+
+
+@plugin.handle({"开数"}, {"user_id", "group_id", "nickname"})
+@dice.action(place)
+async def _(event: Event, session: Session):
+    user_id = event.user_id
+    if user_id == session.p1_uid:
+        next_name = session.p2_nickname
+        dice_array = session.data["dice_array2"]
+        pt = session.data["pt2"]
+    else:
+        next_name = session.p1_nickname
+        dice_array = session.data["dice_array1"]
+        pt = session.data["pt1"]
+
+    def pt_analyse(pt: int):
+        array_type = []
+        if (n := int(pt / 10000000)) > 0:
+            pt -= n * 10000000
+            array_type.append(f"满 {n}")
+        if (n := int(pt / 1000000)) > 0:
+            pt -= n * 1000000
+            array_type.append(f"串 {n}")
+        if (n := int(pt / 100000)) > 0:
+            pt -= n * 100000
+            array_type.append(f"条 {n}")
+        if (n := int(pt / 10000)) > 0:
+            if n == 1:
+                pt -= 10000
+                n = int(pt / 100)
+                array_type.append(f"对 {n}")
+            else:
+                pt -= 20000
+                n = int(pt / 100)
+                array_type.append(f"两对 {n}")
+            pt -= n * 100
+        if pt > 0:
+            array_type.append(f"散 {pt}")
+        return "+".join(array_type)
+
+    def display(dice_array: list) -> str:
+        lst_dict = {0: "〇", 1: "１", 2: "２", 3: "３", 4: "４", 5: "５", 6: "６", 7: "７", 8: "８", 9: "９"}
+        return " ".join(lst_dict[x] for x in dice_array)
+
+    output = BytesIO()
+    text_to_image(
+        f"玩家：{session.p1_nickname}\n组合：{display(dice_array)}\n点数：{pt_analyse(pt)}\n----\n下一回合：{next_name}",
+        width=700,
+        bg_color="white",
+    ).save(output)
+    if session.round == 2:
+        session.bet = session.data["bet"]
+        pt1 = session.data["pt1"]
+        pt2 = session.data["pt2"]
+        session.win = session.p1_uid if pt1 > pt2 else session.p2_uid
+        return session.end(output)
+    return output
+
+
+poker = Game("扑克对战", "出牌")
