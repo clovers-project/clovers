@@ -23,7 +23,7 @@ class Session:
     at: str | None = None
     p1_uid: str
     p1_nickname: str
-    p2_uid: str | None = None
+    p2_uid: str = ""
     p2_nickname: str | None = None
     round = 1
     next: str
