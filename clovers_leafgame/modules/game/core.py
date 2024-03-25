@@ -1,5 +1,4 @@
 import time
-import re
 from collections.abc import Coroutine, Callable, Sequence
 from clovers_utils.tools import to_int
 from clovers_leafgame.main import manager
@@ -153,6 +152,8 @@ class Game:
             async def wrapper(event: Event):
                 group_id = event.group_id
                 if not (session := self.session_check(place, group_id)):
+                    return
+                if session.game.name != self.name:
                     return
                 user_id = event.user_id
                 if tip := session.action_check(user_id):

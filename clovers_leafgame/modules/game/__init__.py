@@ -1,8 +1,10 @@
 import random
+import asyncio
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
+from .tools import random_poker
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -229,3 +231,211 @@ async def _(event: Event, session: Session):
 
 
 poker = Game("扑克对战", "出牌")
+
+
+class PokerGame:
+    class Gamer:
+        def __init__(self, hand: list[tuple[int, int]], HP: int, ATK: int = 0, DEF: int = 0, SP: int = 0) -> None:
+            self.hand = hand
+            self.HP = HP
+            self.ATK = ATK
+            self.DEF = DEF
+            self.SP = SP
+
+        def status(self) -> str:
+            return f"HP {self.HP} SP {self.SP} DEF {self.DEF}"
+
+        def handcard(self) -> str:
+            return "|".join(f"{PokerGame.suit[suit]}{PokerGame.point[point]}" for suit, point in self.hand)
+
+    suit = {0: "结束", 1: "防御", 2: "恢复", 3: "技能", 4: "攻击"}
+    point = {0: "0", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "J", 12: "Q", 13: "K"}
+
+    def __init__(self) -> None:
+        deck = random_poker(2)
+        hand = deck[:3]
+        deck = deck[3:]
+        self.deck = deck + [(0, 0), (0, 0), (0, 0), (0, 0)]
+        self.P1 = self.Gamer(hand, 20)
+        self.P2 = self.Gamer([], 25, SP=2)
+
+        def action_ACE(self, roll: int = 1) -> str:
+            """
+            手牌全部作为技能牌（ACE技能）
+                Active:行动牌生效对象
+            """
+            card_msg = "技能牌为"
+            skill_msg = "\n"
+            for card in Active["hand"]:
+                suit = card[0]
+                point = roll if card[1] == 1 else card[1]
+                card_msg += f"【{cls.suit[suit]} {cls.point[point]}】"
+                if suit == 1:
+                    Active["DEF"] += point
+                    skill_msg += f"♤防御力强化了 {point}\n"
+                elif suit == 2:
+                    Active["HP"] += point
+                    skill_msg += f"♡生命值增加了 {point}\n"
+                elif suit == 3:
+                    Active["SP"] += point + point
+                    skill_msg += f"♧技能点增加了 {point}\n"
+                elif suit == 4:
+                    Active["ATK"] += point
+                    skill_msg += f"♢发动了攻击 {point}\n"
+                else:
+                    return "出现未知错误"
+                Active["SP"] -= point
+                Active["SP"] = 0 if Active["SP"] < 0 else Active["SP"]
+            return "技能牌为"
+            return card_msg + skill_msg[:-1]
+
+        @classmethod
+        def action(cls, index: int, Active: dict) -> str:
+            """
+            行动牌生效
+                index:手牌序号
+                Active:行动牌生效对象
+            """
+            card = Active["hand"][index]
+            suit = card[0]
+            point = card[1]
+            if point == 1:
+                roll = random.randint(1, 6)
+                msg = f"发动ACE技能！六面骰子判定为 {roll}\n"
+                msg += cls.action_ACE(Active, roll)
+            else:
+                if suit == 1:
+                    Active["ATK"] += point
+                    msg = f"♤发动了攻击{point}"
+                elif suit == 2:
+                    Active["HP"] += point
+                    msg = f"♡生命值增加了{point}"
+                elif suit == 3:
+                    Active["SP"] += point
+                    msg = f"♧技能点增加了{point}...\n"
+                    roll = random.randint(1, 20)
+                    if Active["SP"] < roll:
+                        msg += f'二十面骰判定为{roll}点，当前技能点{Active["SP"]}\n技能发动失败...'
+                    else:
+                        del Active["hand"][index]
+                        msg += f'二十面骰判定为{roll}点，当前技能点{Active["SP"]}\n技能发动成功！\n'
+                        msg += cls.action_ACE(Active)
+                elif suit == 4:
+                    Active["ATK"] = point
+                    msg = f"♢发动了攻击{point}"
+                else:
+                    msg = "出现未知错误"
+            return msg
+
+        @classmethod
+        def skill(cls, card: list, Player: dict) -> str:
+            """
+            技能牌生效
+                card:技能牌
+                Player:技能牌生效对象
+            """
+            suit = card[0]
+            point = card[1]
+            msg = f"技能牌为【{cls.suit[suit]} {cls.point[point]}】\n"
+            if suit == 1:
+                Player["DEF"] += point
+                msg += f"♤发动了防御 {point}"
+            elif suit == 2:
+                Player["HP"] += point
+                msg += f"♡生命值增加了 {point}"
+            elif suit == 3:
+                Player["SP"] += point + point
+                msg += f"♧技能点增加了 {point}"
+            elif suit == 4:
+                Player["ATK"] += point
+                msg += f"♢发动了反击 {point}"
+            else:
+                msg += "启动结算程序"
+            Player["SP"] -= point
+            Player["SP"] = 0 if Player["SP"] < 0 else Player["SP"]
+            return msg
+
+
+@plugin.handle({"扑克对战"}, {"user_id", "group_id", "nickname", "at"})
+@poker.create(place)
+async def _(session: Session, arg: str):
+    poker_data = PokerGame()
+    session.data["ACT"] = False
+    session.data["poker"] = poker_data
+    if session.bet:
+        prop, n = session.bet
+        tip = f"\n本场下注：{prop.name} {n}"
+    else:
+        tip = ""
+    return f"唰唰~，随机牌堆已生成{tip}\n{session.create_info()}\nP1初始手牌\n{poker_data.P1.handcard()}"
+
+
+@plugin.handle({"出牌"}, {"user_id", "group_id", "nickname"})
+@poker.action(place)
+async def _(event: Event, session: Session):
+    if session.data["ACT"]:
+        return
+    user_id = event.user_id
+    if not 1 <= (index := event.args_to_int()) <= 3:
+        return "请发送【出牌 1/2/3】打出你的手牌。"
+    session.data["ACT"] = True
+    session.nextround()
+    poker_data: PokerGame = session.data["poker"]
+    deck = poker_data.deck
+    if user_id == session.p1_uid:
+        Active = poker_data.P1
+        Passive = poker_data.P2
+        Passive_name = session.p2_nickname
+    else:
+        Active = poker_data.P2
+        Passive = poker_data.P1
+        Passive_name = session.p1_nickname
+    msg = []
+    # 出牌判定
+    msg.append(PokerGame.action(index - 1, Active))
+    # 敌方技能判定
+    if Passive.SP > 1:
+        roll = random.randint(1, 20)
+        if Passive.SP < roll:
+            msg.append(f"{Passive_name} 二十面骰判定为{roll}点，当前技能点{Passive.SP}\n技能发动失败...")
+        else:
+            msg.append(f"{Passive_name} 二十面骰判定为{roll}点，当前技能点{Passive.SP}\n技能发动成功！")
+            msg.append(PokerGame.skill(deck[0], Passive))
+            del deck[0]
+
+    # 回合结算
+    if Passive.ATK > Active.DEF:
+        Active.HP += Active.DEF - Passive.ATK
+    if Active.ATK > Passive.DEF:
+        Passive.HP += Passive.DEF - Active.ATK
+    Active.ATK = 0
+    Passive.ATK = 0
+    Passive.DEF = 0
+    # 下回合准备
+    hand = deck[0:3]
+    Passive.hand = hand
+    deck = deck[3:]
+
+    output = BytesIO()
+    text_to_image(
+        (
+            f"玩家：{session.p1_nickname}\n状态：{poker_data.P1.status()}\n"
+            "----\n"
+            f"玩家：{session.p2_nickname}\n状态：{poker_data.P2.status()}\n"
+            "----\n"
+            f"当前回合：{Passive_name}\n手牌：{Passive.handcard()}"
+        ),
+        bg_color="white",
+    ).save(output)
+    msg = "\n".join(msg)
+
+    async def result():
+        yield plugin.build_result(msg)
+        await asyncio.sleep(0.03 * len(msg))
+        yield plugin.build_result(output)
+
+    if Active.HP < 1 or Passive.HP < 1 or Passive.HP > 40 or (0, 0) in hand:
+        session.win = session.p1_uid if poker_data.P1.HP > poker_data.P2.HP else session.p2_uid
+        return session.end(result)
+    session.data["ACT"] = False
+    return result
