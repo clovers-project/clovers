@@ -4,7 +4,7 @@ from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
-from .tools import random_poker
+from .tools import random_poker, poker_suit, poker_point
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -143,7 +143,7 @@ async def _(event: Event, session: Session):
 dice = Game("掷骰子", "开数")
 
 
-@plugin.handle({"掷色子", "掷骰子", "摇骰子"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"摇色子", "摇骰子", "掷色子", "掷骰子"}, {"user_id", "group_id", "nickname", "at"})
 @dice.create(place)
 async def _(session: Session, arg: str):
     def dice_pt(dice_array: list):
@@ -160,15 +160,17 @@ async def _(session: Session, arg: str):
     dice_array1 = [random.randint(1, 6) for _ in range(5)]
     session.data["dice_array1"] = dice_array1
     session.data["pt1"] = dice_pt(dice_array1)
+
     dice_array2 = [random.randint(1, 6) for _ in range(5)]
     session.data["dice_array2"] = dice_array2
     session.data["pt2"] = dice_pt(dice_array2)
-    session.data["bet"] = session.bet
+
     if session.bet:
         prop, n = session.bet
-        half_n = int(n / 2)
-        session.bet = prop, half_n
-        tip = f"\n本场下注：{prop.name} {n}（{half_n}/次）"
+        n1 = prop.N(*manager.locate_account(session.p1_uid, session.group_id))
+        n2 = prop.N(*manager.locate_account(session.p2_uid, session.group_id))
+        session.data["bet_limit"] = min(n1, n2)
+        tip = f"\n本场下注：{prop.name} {n}/次"
     else:
         tip = ""
     return f"哗啦哗啦~，骰子准备完毕{tip}\n{session.create_info()}"
@@ -180,60 +182,71 @@ async def _(event: Event, session: Session):
     user_id = event.user_id
     if user_id == session.p1_uid:
         nickname = session.p1_nickname
-        next_name = session.p2_nickname
-        dice_array = session.data["dice_array2"]
-        pt = session.data["pt2"]
-    else:
-        nickname = session.p2_nickname
-        next_name = session.p1_nickname
         dice_array = session.data["dice_array1"]
         pt = session.data["pt1"]
+    else:
+        nickname = session.p2_nickname
+        dice_array = session.data["dice_array2"]
+        pt = session.data["pt2"]
 
     def pt_analyse(pt: int):
         array_type = []
         if (n := int(pt / 10000000)) > 0:
             pt -= n * 10000000
-            array_type.append(f"满 {n}")
+            array_type.append(f"满{n}")
         if (n := int(pt / 1000000)) > 0:
             pt -= n * 1000000
-            array_type.append(f"串 {n}")
+            array_type.append(f"串{n}")
         if (n := int(pt / 100000)) > 0:
             pt -= n * 100000
-            array_type.append(f"条 {n}")
+            array_type.append(f"条{n}")
         if (n := int(pt / 10000)) > 0:
             if n == 1:
                 pt -= 10000
                 n = int(pt / 100)
-                array_type.append(f"对 {n}")
+                array_type.append(f"对{n}")
             else:
                 pt -= 20000
                 n = int(pt / 100)
-                array_type.append(f"两对 {n}")
+                array_type.append(f"两对{n}")
             pt -= n * 100
         if pt > 0:
-            array_type.append(f"散 {pt}")
-        return "+".join(array_type)
+            array_type.append(f"散{pt}")
+        return " ".join(array_type)
 
-    output = BytesIO()
-    text_to_image(
-        f"玩家：{nickname}\n组合：{' '.join(str(x) for x in dice_array)}\n点数：{pt_analyse(pt)}\n----\n下一回合：{next_name}",
-        width=500,
-        bg_color="white",
-    ).save(output, format="png")
+    result = f"玩家：{nickname}\n组合：{' '.join(str(x) for x in dice_array)}\n点数：{pt_analyse(pt)}"
     if session.round == 2:
-        session.bet = session.data["bet"]
+        if session.bet:
+            prop, n = session.bet
+            n += n
+            session.bet = (prop, min([n, session.data["bet_limit"]]))
         pt1 = session.data["pt1"]
         pt2 = session.data["pt2"]
         session.win = session.p1_uid if pt1 > pt2 else session.p2_uid
-        return session.end(output)
+        return session.end(result)
     session.nextround()
-    return output
+    return result + f"\n下一回合{session.p2_nickname}"
 
 
 poker = Game("扑克对战", "出牌")
 
 
 class PokerGame:
+    suit = {0: "结束", 1: "防御", 2: "恢复", 3: "技能", 4: "攻击"}
+    point = {0: "0", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "J", 12: "Q", 13: "K"}
+
+    def __init__(self) -> None:
+        deck = random_poker(2)
+        hand = deck[:3]
+        deck = deck[3:]
+        self.deck = deck + [(0, 0), (0, 0), (0, 0), (0, 0)]
+        self.P1 = self.Gamer(hand, 20)
+        self.P2 = self.Gamer([], 25, SP=2)
+
+    @classmethod
+    def card(cls, suit: int, point: int):
+        return f"{cls.suit[suit]}{cls.point[point]}"
+
     class Gamer:
         def __init__(self, hand: list[tuple[int, int]], HP: int, ATK: int = 0, DEF: int = 0, SP: int = 0) -> None:
             self.hand = hand
@@ -246,114 +259,7 @@ class PokerGame:
             return f"HP {self.HP} SP {self.SP} DEF {self.DEF}"
 
         def handcard(self) -> str:
-            return "|".join(f"{PokerGame.suit[suit]}{PokerGame.point[point]}" for suit, point in self.hand)
-
-    suit = {0: "结束", 1: "防御", 2: "恢复", 3: "技能", 4: "攻击"}
-    point = {0: "0", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "J", 12: "Q", 13: "K"}
-
-    def __init__(self) -> None:
-        deck = random_poker(2)
-        hand = deck[:3]
-        deck = deck[3:]
-        self.deck = deck + [(0, 0), (0, 0), (0, 0), (0, 0)]
-        self.P1 = self.Gamer(hand, 20)
-        self.P2 = self.Gamer([], 25, SP=2)
-
-        def action_ACE(self, roll: int = 1) -> str:
-            """
-            手牌全部作为技能牌（ACE技能）
-                Active:行动牌生效对象
-            """
-            card_msg = "技能牌为"
-            skill_msg = "\n"
-            for card in Active["hand"]:
-                suit = card[0]
-                point = roll if card[1] == 1 else card[1]
-                card_msg += f"【{cls.suit[suit]} {cls.point[point]}】"
-                if suit == 1:
-                    Active["DEF"] += point
-                    skill_msg += f"♤防御力强化了 {point}\n"
-                elif suit == 2:
-                    Active["HP"] += point
-                    skill_msg += f"♡生命值增加了 {point}\n"
-                elif suit == 3:
-                    Active["SP"] += point + point
-                    skill_msg += f"♧技能点增加了 {point}\n"
-                elif suit == 4:
-                    Active["ATK"] += point
-                    skill_msg += f"♢发动了攻击 {point}\n"
-                else:
-                    return "出现未知错误"
-                Active["SP"] -= point
-                Active["SP"] = 0 if Active["SP"] < 0 else Active["SP"]
-            return "技能牌为"
-            return card_msg + skill_msg[:-1]
-
-        @classmethod
-        def action(cls, index: int, Active: dict) -> str:
-            """
-            行动牌生效
-                index:手牌序号
-                Active:行动牌生效对象
-            """
-            card = Active["hand"][index]
-            suit = card[0]
-            point = card[1]
-            if point == 1:
-                roll = random.randint(1, 6)
-                msg = f"发动ACE技能！六面骰子判定为 {roll}\n"
-                msg += cls.action_ACE(Active, roll)
-            else:
-                if suit == 1:
-                    Active["ATK"] += point
-                    msg = f"♤发动了攻击{point}"
-                elif suit == 2:
-                    Active["HP"] += point
-                    msg = f"♡生命值增加了{point}"
-                elif suit == 3:
-                    Active["SP"] += point
-                    msg = f"♧技能点增加了{point}...\n"
-                    roll = random.randint(1, 20)
-                    if Active["SP"] < roll:
-                        msg += f'二十面骰判定为{roll}点，当前技能点{Active["SP"]}\n技能发动失败...'
-                    else:
-                        del Active["hand"][index]
-                        msg += f'二十面骰判定为{roll}点，当前技能点{Active["SP"]}\n技能发动成功！\n'
-                        msg += cls.action_ACE(Active)
-                elif suit == 4:
-                    Active["ATK"] = point
-                    msg = f"♢发动了攻击{point}"
-                else:
-                    msg = "出现未知错误"
-            return msg
-
-        @classmethod
-        def skill(cls, card: list, Player: dict) -> str:
-            """
-            技能牌生效
-                card:技能牌
-                Player:技能牌生效对象
-            """
-            suit = card[0]
-            point = card[1]
-            msg = f"技能牌为【{cls.suit[suit]} {cls.point[point]}】\n"
-            if suit == 1:
-                Player["DEF"] += point
-                msg += f"♤发动了防御 {point}"
-            elif suit == 2:
-                Player["HP"] += point
-                msg += f"♡生命值增加了 {point}"
-            elif suit == 3:
-                Player["SP"] += point + point
-                msg += f"♧技能点增加了 {point}"
-            elif suit == 4:
-                Player["ATK"] += point
-                msg += f"♢发动了反击 {point}"
-            else:
-                msg += "启动结算程序"
-            Player["SP"] -= point
-            Player["SP"] = 0 if Player["SP"] < 0 else Player["SP"]
-            return msg
+            return "|".join(PokerGame.card(*card) for card in self.hand)
 
 
 @plugin.handle({"扑克对战"}, {"user_id", "group_id", "nickname", "at"})
@@ -378,42 +284,107 @@ async def _(event: Event, session: Session):
     user_id = event.user_id
     if not 1 <= (index := event.args_to_int()) <= 3:
         return "请发送【出牌 1/2/3】打出你的手牌。"
+    index -= 1
     session.data["ACT"] = True
     session.nextround()
     poker_data: PokerGame = session.data["poker"]
     deck = poker_data.deck
     if user_id == session.p1_uid:
-        Active = poker_data.P1
-        Passive = poker_data.P2
-        Passive_name = session.p2_nickname
+        active = poker_data.P1
+        passive = poker_data.P2
+        passive_name = session.p2_nickname
     else:
-        Active = poker_data.P2
-        Passive = poker_data.P1
-        Passive_name = session.p1_nickname
+        active = poker_data.P2
+        passive = poker_data.P1
+        passive_name = session.p1_nickname
     msg = []
-    # 出牌判定
-    msg.append(PokerGame.action(index - 1, Active))
-    # 敌方技能判定
-    if Passive.SP > 1:
-        roll = random.randint(1, 20)
-        if Passive.SP < roll:
-            msg.append(f"{Passive_name} 二十面骰判定为{roll}点，当前技能点{Passive.SP}\n技能发动失败...")
-        else:
-            msg.append(f"{Passive_name} 二十面骰判定为{roll}点，当前技能点{Passive.SP}\n技能发动成功！")
-            msg.append(PokerGame.skill(deck[0], Passive))
-            del deck[0]
 
+    # 出牌判定
+    def action_ACE(active: PokerGame.Gamer, roll: int = 1):
+        msg = [f"技能牌：{active.handcard()}"]
+        for suit, point in active.hand:
+            point = roll if point == 1 else point
+            match suit:
+                case 1:
+                    active.DEF += point
+                    msg.append(f"♤防御力强化了 {point}")
+                case 2:
+                    active.HP += point
+                    msg.append(f"♡生命值增加了 {point}")
+                case 3:
+                    active.SP += point * 2
+                    msg.append(f"♧技能点增加了 {point}")
+                case 4:
+                    active.ATK += point
+                    msg.append(f"♢发动了攻击 {point}")
+            active.SP -= point
+            active.SP = 0 if active.SP < 0 else active.SP
+        return msg
+
+    suit, point = active.hand[index]
+    if point == 1:
+        roll = random.randint(1, 6)
+        msg.append(f"发动ACE技能！六面骰子判定为 {roll}")
+        msg += action_ACE(active, roll)
+    else:
+        match suit:
+            case 1:
+                active.ATK += point
+                msg.append(f"♤发动了攻击{point}")
+            case 2:
+                active.HP += point
+                msg.append(f"♡生命值增加了{point}")
+            case 3:
+                active.SP += point
+                msg.append(f"♧技能点增加了{point}")
+                roll = random.randint(1, 20)
+                msg.append(f"二十面骰判定为{roll}点，当前技能点{active.SP}")
+                if active.SP < roll:
+                    msg.append("技能发动失败...")
+                else:
+                    msg.append("技能发动成功！")
+                    del active.hand[index]
+                    msg += action_ACE(active)
+            case 4:
+                active.ATK += point
+                msg.append(f"♢发动了攻击{point}")
+    # 敌方技能判定
+    if passive.SP > 1:
+        roll = random.randint(1, 20)
+        msg.append(f"{passive_name} 二十面骰判定为{roll}点，当前技能点{passive.SP}")
+        if passive.SP < roll:
+            msg.append("技能发动失败...")
+        else:
+            msg.append("技能发动成功！")
+            suit, point = deck[0]
+            deck = deck[1:]
+            msg.append(f"技能牌：{PokerGame.card(suit, point)}")
+            match suit:
+                case 1:
+                    passive.DEF += point
+                    msg.append(f"♤发动了防御 {point}")
+                case 2:
+                    passive.HP += point
+                    msg.append(f"♡生命值增加了 {point}")
+                case 3:
+                    passive.SP += point * 2
+                    msg.append(f"♧技能点增加了 {point}")
+                case 4:
+                    passive.ATK += point
+                    msg.append(f"♢发动了反击 {point}")
+            passive.SP -= point
+            passive.SP = 0 if passive.SP < 0 else passive.SP
     # 回合结算
-    if Passive.ATK > Active.DEF:
-        Active.HP += Active.DEF - Passive.ATK
-    if Active.ATK > Passive.DEF:
-        Passive.HP += Passive.DEF - Active.ATK
-    Active.ATK = 0
-    Passive.ATK = 0
-    Passive.DEF = 0
+    if passive.ATK > active.DEF:
+        active.HP += active.DEF - passive.ATK
+    if active.ATK > passive.DEF:
+        passive.HP += passive.DEF - active.ATK
+    active.ATK = 0
+    passive.ATK = 0
+    passive.DEF = 0
     # 下回合准备
     hand = deck[0:3]
-    Passive.hand = hand
+    passive.hand = hand
     deck = deck[3:]
 
     output = BytesIO()
@@ -423,7 +394,7 @@ async def _(event: Event, session: Session):
             "----\n"
             f"玩家：{session.p2_nickname}\n状态：{poker_data.P2.status()}\n"
             "----\n"
-            f"当前回合：{Passive_name}\n手牌：{Passive.handcard()}"
+            f"当前回合：{passive_name}\n手牌：{passive.handcard()}"
         ),
         bg_color="white",
     ).save(output, format="png")
@@ -434,8 +405,219 @@ async def _(event: Event, session: Session):
         await asyncio.sleep(0.03 * len(msg))
         yield output
 
-    if Active.HP < 1 or Passive.HP < 1 or Passive.HP > 40 or (0, 0) in hand:
+    if active.HP < 1 or passive.HP < 1 or passive.HP > 40 or (0, 0) in hand:
         session.win = session.p1_uid if poker_data.P1.HP > poker_data.P2.HP else session.p2_uid
         return session.end(result)
     session.data["ACT"] = False
     return result
+
+
+cantrell = Game("梭哈", "看牌|开牌")
+
+
+@plugin.handle({"同花顺", "港式五张", "梭哈"}, {"user_id", "group_id", "nickname", "at"})
+@cantrell.create(place)
+async def _(session: Session, arg: str):
+    level = to_int(arg)
+    if level:
+        level = 1 if level < 1 else level
+        level = 5 if level > 5 else level
+    else:
+        level = 1
+    deck = random_poker(range_point=(2, 15))
+
+    def is_straight(points: list[int]):
+        """
+        判断是否为顺子
+        """
+        points = sorted(points)
+        for i in range(1, len(points)):
+            if points[i] - points[i - 1] != 1:
+                return False
+        return True
+
+    def cantrell_pt(hand: list[tuple[int, int]]) -> tuple[int, str]:
+        """
+        牌型点数
+        """
+        pt = 0
+        name = []
+        suits, points = zip(*hand)
+        # 判断同花
+        if len(set(suits)) == 1:
+            pt += suits[0]
+            if is_straight(points):
+                point = max(points)
+                pt += point * (100**9)
+                name.append(f"同花顺{poker_suit[suits[0]]} {poker_point[point]}")
+            else:
+                point = sum(points)
+                pt += point * (100**6)
+                name.append(f"同花{poker_suit[suits[0]]} {point}")
+        else:
+            pt += sum(suits)
+            # 判断顺子
+            if is_straight(points):
+                point = max(points)
+                pt += point * (100**5)
+                name.append(f"顺子 {poker_point[point]}")
+            else:
+                setpoints = set(points)
+                # 判断四条或葫芦
+                if len(setpoints) == 2:
+                    for point in setpoints:
+                        if points.count(point) == 4:
+                            pt += point * (100**8)
+                            name.append(f"四条 {poker_point[point]}")
+                        if points.count(point) == 3:
+                            pt += point * (100**7)
+                            name.append(f"葫芦 {poker_point[point]}")
+                else:
+                    # 判断三条，两对，一对
+                    exp = 1
+                    tmp = 0
+                    for point in setpoints:
+                        if points.count(point) == 3:
+                            pt += point * (100**4)
+                            name.append(f"三条 {poker_point[point]}")
+                            break
+                        if points.count(point) == 2:
+                            exp += 1
+                            tmp += point
+                            name.append(f"对 {poker_point[point]}")
+                    else:
+                        pt += tmp * (100**exp)
+
+                tmp = 0
+                for point in setpoints:
+                    if points.count(point) == 1:
+                        pt += point * (100)
+                        tmp += point
+                if tmp:
+                    name.append(f"散 {tmp}")
+
+        return pt, " ".join(name)
+
+    def max_hand(hands: list[list[tuple[int, int]]]):
+        max_hand = hands[0]
+        max_pt, max_name = cantrell_pt(max_hand)
+        for hand in hands[1:]:
+            pt, name = cantrell_pt(hand)
+            if pt > max_pt:
+                max_pt = pt
+                max_name = name
+                max_hand = hand
+        return max_hand, max_pt, max_name
+
+    if level == 1:
+        hand1 = deck[0:5]
+        pt1, name1 = cantrell_pt(hand1)
+        hand2 = deck[5:10]
+        pt2, name2 = cantrell_pt(hand2)
+    else:
+        deck = [deck[i : i + 5] for i in range(0, 50, 5)]
+        hand1, pt1, name1 = max_hand(deck[0:level])
+        hand2, pt2, name2 = max_hand(deck[level : 2 * level])
+
+    session.data["hand1"] = hand1
+    session.data["hand2"] = hand2
+    session.data["pt1"] = pt1
+    session.data["pt2"] = pt2
+    session.data["name1"] = name1
+    session.data["name2"] = name2
+    if session.bet:
+        prop, n = session.bet
+        session.data["bet_limit"]
+        tip = f"\n本场下注：{prop.name} {n}"
+    else:
+        tip = ""
+    return f"唰唰~，随机牌堆已生成，等级：{level}{tip}\n{session.create_info()}"
+
+
+@plugin.handle({"看牌"}, {"user_id", "group_id", "nickname"})
+@cantrell.action(place)
+async def _(event: Event, session: Session):
+    if not event.is_private():
+        return "请私信回复 看牌 查看手牌"
+    expose = session.round + 1 // 2 + 2
+    session.delay()
+    if event.user_id == session.p1_uid:
+        hand = session.data["hand1"]
+    else:
+        hand = session.data["hand2"]
+    cards = "\n".join(f"【{poker_suit[suit]},{poker_point[point]}】" for suit, point in hand[0:expose])
+    return f"你的手牌：\n{cards}"
+
+
+@plugin.handle({"看牌"}, {"user_id", "group_id", "nickname"})
+@cantrell.action(place)
+async def _(event: Event, session: Session):
+    if not event.is_private():
+        return "请私信回复 看牌 查看手牌"
+    expose = session.round + 1 // 2 + 2
+    session.delay()
+    if event.user_id == session.p1_uid:
+        hand = session.data["hand1"]
+    else:
+        hand = session.data["hand2"]
+    cards = "\n".join(f"【{poker_suit[suit]},{poker_point[point]}】" for suit, point in hand[0:expose])
+    return f"你的手牌：\n{cards}"
+
+
+@plugin.handle({"开牌"}, {"user_id", "group_id", "nickname"})
+@cantrell.action(place)
+async def _(event: Event, session: Session):
+    if session.bet:
+        prop, n = session.bet
+        n += session.data["bet"]
+        session.bet = (prop, min([n, n1, n2]))
+
+    def cantrell_play(self, user_id: int, gold: int):
+        """
+        开牌
+        """
+        session = self.session
+        gold = self.gold if gold == None else gold
+        gold = min(gold, session.bet_limit - session.gold)
+        if gold > self.max_bet_gold:
+            return f"开牌金额不能超过{self.max_bet_gold}"
+        expose = session.round / 2
+        session.nextround()
+        session.time += 120
+        if expose == int(expose):
+            gold = max(gold, self.gold)
+            session.gold += gold
+            expose = int(expose) + 2
+            hand1 = self.hand1[0:expose]
+            hand2 = self.hand2[0:expose]
+            cantrell_suit = self.cantrell_suit
+            cantrell_point = self.cantrell_point
+
+            if expose == 5:
+                session.win = session.p1_uid if self.pt1[0] > self.pt2[0] else session.p2_uid
+                msg = (
+                    "P1手牌：\n"
+                    "|"
+                    + "".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in self.hand1)
+                    + f"\n牌型：\n{self.pt1[1]}"
+                    "\n----\n"
+                    "P2手牌：\n"
+                    "|"
+                    + "".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in self.hand2)
+                    + f"\n牌型：\n{self.pt2[1]}"
+                )
+                self.end(linecard_to_png(msg, width=880))
+            else:
+                msg = (
+                    f"玩家：{session.p1_nickname}\n"
+                    "手牌：\n"
+                    f'|{"".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in hand1)}{(5 - expose)*"   |"}'
+                    "\n----\n"
+                    f"玩家：{session.p2_nickname}\n"
+                    "手牌：\n"
+                    f'|{"".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in hand2)}{(5 - expose)*"   |"}'
+                )
+                return linecard_to_png(f"您已跟注{gold}金币\n" if gold else "" + msg, width=880)
+        else:
+            self.gold = gold
+            return f"您已加注{gold}金币，" if gold else "" + f"请{session.p2_nickname}看牌|开牌"

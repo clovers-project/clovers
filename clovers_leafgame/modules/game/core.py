@@ -58,6 +58,9 @@ class Session:
         self.round += 1
         self.next = self.p1_uid if self.next == self.p2_uid else self.p2_uid
 
+    def delay(self, t:float = 0):
+        self.time = time.time() + t
+
     def create_check(self, user_id: str):
         p2_uid = self.p2_uid
         if not p2_uid:
@@ -94,22 +97,19 @@ class Session:
             return:结算界面
         """
         group_id = self.group_id
-        win = self.win
-        if win is None:
-            raise PluginError("场次没有获胜者，无法结算。")
+        win = self.win if self.win else self.p1_uid if self.next == self.p2_uid else self.p2_uid
         if win == self.p1_uid:
             win_name = self.p1_nickname
             lose = self.p2_uid
             lose_name = self.p2_nickname
         else:
-            win = self.p2_uid
             win_name = self.p2_nickname
             lose = self.p1_uid
             lose_name = self.p1_nickname
 
         bet = self.bet
         if bet:
-            tip = manager.transfer(*bet, win, lose, group_id)
+            tip = manager.transfer(*bet, lose, win, group_id)
             info = [text_to_image(tip + endline("结算"), autowrap=True)]
         else:
             info = []
@@ -119,15 +119,15 @@ class Session:
         lose_rank = ranklist["lose"] = Counter(ranklist.get("lose", {}))
         lose_rank[lose] += 1
         win_achieve = ranklist["win_achieve"] = Counter(ranklist.get("win_achieve", {}))
-        lose_achieve = ranklist["lose_achieve"] = Counter(ranklist.get("lose_achieve", {}))
         win_achieve[win] += 1
-        lose_achieve[win] = 0
         win_achieve[lose] = 0
+        lose_achieve = ranklist["lose_achieve"] = Counter(ranklist.get("lose_achieve", {}))
+        lose_achieve[win] = 0
         lose_achieve[lose] += 1
         card = (
             f"[pixel][20]◆胜者 {win_name}[nowrap]\n[pixel][460]◇败者 {lose_name}\n"
             f"[pixel][20]◆战绩 {win_rank[win]}:{lose_rank[win]}[nowrap]\n[pixel][460]◇战绩 {win_rank[lose]}:{lose_rank[lose]}\n"
-            f"[pixel][20]◆连胜 {win_achieve[win]}[nowrap]\n[pixel][460]◇连败  {lose_achieve[lose]}"
+            f"[pixel][20]◆连胜 {win_achieve[win]}[nowrap]\n[pixel][460]◇连败 {lose_achieve[lose]}"
         )
         info.insert(0, text_to_image(card + endline("对战")))
         result = [f"这场对决是 {win_name} 胜利了", manager.info_card(info, win)]
