@@ -93,7 +93,7 @@ async def _(session: Session, arg: str):
         bullet_num = random.randint(1, 6) if bullet_num < 1 or bullet_num > 6 else bullet_num
     else:
         bullet_num = 1
-    bullet = [0, 0, 0, 0, 0, 0]
+    bullet = [0, 0, 0, 0, 0, 0, 0]
     for i in random.sample([0, 1, 2, 3, 4, 5, 6], bullet_num):
         bullet[i] = 1
     session.data["bullet_num"] = bullet_num
@@ -105,6 +105,7 @@ async def _(session: Session, arg: str):
     else:
         tip = ""
     tip += f"\n第一枪的概率为：{round(bullet_num * 100 / 7,2)}%"
+    session.tip = str(bullet)
     return f"{' '.join('咔' for _ in range(bullet_num))}，装填完毕{tip}\n{session.create_info()}"
 
 
@@ -115,9 +116,9 @@ async def _(event: Event, session: Session):
     index = session.data["index"]
     user_id = event.user_id
     MAG = bullet[index:]
-    count = event.args_to_int()
+    count = event.args_to_int() or 1
     l_MAG = len(MAG)
-    if count < 1 or count > l_MAG:
+    if count < 0 or count > l_MAG:
         count = l_MAG
     shot_tip = f"连开{count}枪！\n" if count > 1 else ""
     if any(MAG[:count]):
@@ -142,7 +143,7 @@ async def _(event: Event, session: Session):
 dice = Game("掷骰子", "开数")
 
 
-@plugin.handle({"掷色子", "掷骰子"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"掷色子", "掷骰子", "摇骰子"}, {"user_id", "group_id", "nickname", "at"})
 @dice.create(place)
 async def _(session: Session, arg: str):
     def dice_pt(dice_array: list):
@@ -178,10 +179,12 @@ async def _(session: Session, arg: str):
 async def _(event: Event, session: Session):
     user_id = event.user_id
     if user_id == session.p1_uid:
+        nickname = session.p1_nickname
         next_name = session.p2_nickname
         dice_array = session.data["dice_array2"]
         pt = session.data["pt2"]
     else:
+        nickname = session.p2_nickname
         next_name = session.p1_nickname
         dice_array = session.data["dice_array1"]
         pt = session.data["pt1"]
@@ -211,22 +214,19 @@ async def _(event: Event, session: Session):
             array_type.append(f"散 {pt}")
         return "+".join(array_type)
 
-    def display(dice_array: list) -> str:
-        lst_dict = {0: "〇", 1: "１", 2: "２", 3: "３", 4: "４", 5: "５", 6: "６", 7: "７", 8: "８", 9: "９"}
-        return " ".join(lst_dict[x] for x in dice_array)
-
     output = BytesIO()
     text_to_image(
-        f"玩家：{session.p1_nickname}\n组合：{display(dice_array)}\n点数：{pt_analyse(pt)}\n----\n下一回合：{next_name}",
-        width=700,
+        f"玩家：{nickname}\n组合：{' '.join(str(x) for x in dice_array)}\n点数：{pt_analyse(pt)}\n----\n下一回合：{next_name}",
+        width=500,
         bg_color="white",
-    ).save(output)
+    ).save(output, format="png")
     if session.round == 2:
         session.bet = session.data["bet"]
         pt1 = session.data["pt1"]
         pt2 = session.data["pt2"]
         session.win = session.p1_uid if pt1 > pt2 else session.p2_uid
         return session.end(output)
+    session.nextround()
     return output
 
 
@@ -426,13 +426,13 @@ async def _(event: Event, session: Session):
             f"当前回合：{Passive_name}\n手牌：{Passive.handcard()}"
         ),
         bg_color="white",
-    ).save(output)
+    ).save(output, format="png")
     msg = "\n".join(msg)
 
     async def result():
-        yield plugin.build_result(msg)
+        yield msg
         await asyncio.sleep(0.03 * len(msg))
-        yield plugin.build_result(output)
+        yield output
 
     if Active.HP < 1 or Passive.HP < 1 or Passive.HP > 40 or (0, 0) in hand:
         session.win = session.p1_uid if poker_data.P1.HP > poker_data.P2.HP else session.p2_uid

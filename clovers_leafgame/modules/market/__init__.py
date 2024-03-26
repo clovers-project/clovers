@@ -300,9 +300,9 @@ async def _(event: Event):
     del manager.group_library[deceased_group.id]
     manager.data.cancel_group(deceased_group.id)
     info = []
-    info.append(invest_card([(stock, v) for k, v in invest_group.items() if (stock := manager.group_library[k].stock)], "群投资继承"))
-    info.append(prop_card([(manager.props_library[k], v) for k, v in bank_group.items()], "群金库继承"))
-    info.append(prop_card([(manager.props_library[k], v) for k, v in all_bank_private.items()], "个人总继承"))
+    info.append(invest_card(manager.invest_data(invest_group), "群投资继承"))
+    info.append(prop_card(manager.props_data(bank_group), "群金库继承"))
+    info.append(prop_card(manager.props_data(all_bank_private), "个人总继承"))
     return manager.info_card(info, event.user_id)
 
 

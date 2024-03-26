@@ -35,10 +35,6 @@ revolution_marking = config.revolution_marking
 debug_marking = config.debug_marking
 
 
-invest_data = lambda bank: [(stock, n) for group_id, n in bank.items() if n != 0 and (stock := manager.group_library[group_id].stock)]
-props_data = lambda bank: [(prop, n) for prop_id, n in bank.items() if n != 0 and (prop := manager.props_library.get(prop_id))]
-
-
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})
 @Check().to_me().check
 async def _(event: Event):
@@ -194,7 +190,7 @@ async def _(event: Event):
     lines.append(f"[color][#FFCC33]金币 {format_number(sum_std_n)}")
     lines.append(f"[color][#0066CC]股票 {format_number(manager.stock_value(user.invest))}")
     info.append(text_to_image("\n".join(lines), 40, canvas=dist_card(dist)))
-    data = invest_data(user.invest)
+    data = manager.invest_data(user.invest)
     if data:
         info.append(invest_card(data, "股票信息"))
     lines = []
@@ -221,7 +217,7 @@ async def _(event: Event):
     if not props:
         return "您的仓库空空如也。"
 
-    data = props_data(props)
+    data = manager.props_data(props)
     if len(data) < 10 or event.single_arg() in {"信息", "介绍", "详情"}:
         info = bank_card(data)
     else:
@@ -232,7 +228,7 @@ async def _(event: Event):
 @plugin.handle({"股票查询", "投资查询"}, {"user_id", "group_id", "nickname"})
 async def _(event: Event):
     user, account = manager.account(event)
-    data = invest_data(user.invest)
+    data = manager.invest_data(user.invest)
     if data:
         return manager.info_card([invest_card(data, f"股票信息:{account.name}")], event.user_id)
     return "您的仓库空空如也。"
@@ -247,12 +243,12 @@ async def _(event: Event):
     group_id = event.group_id
     group = manager.data.group(group_id)
     if command == "查看":
-        data = props_data(group.bank)
+        data = manager.props_data(group.bank)
         if len(data) < 6:
             info = bank_card(data)
         else:
             info = [prop_card(data, "群金库")]
-        data = invest_data(group.invest)
+        data = manager.invest_data(group.invest)
         if data:
             info.append(invest_card(data, "群投资"))
         return manager.info_card(info, user_id) if info else "群金库是空的"
@@ -323,9 +319,9 @@ async def _(event: Event):
         info.append(text_to_image("\n".join(result(*seg) for seg in ranklist[:10]) + endline("路灯挂件榜")))
     if record := group.extra.get("stock_record"):
         info.append(candlestick((9.5, 3), 12, record))
-    if data := props_data(group.bank):
+    if data := manager.props_data(group.bank):
         info.append(prop_card(data, "群金库"))
-    if data := invest_data(group.invest):
+    if data := manager.invest_data(group.invest):
         info.append(invest_card(data, "群投资"))
     if group.message:
         info.append(text_to_image("\n".join(group.message) + endline("Message"), 30, autowrap=True))

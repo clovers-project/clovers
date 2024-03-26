@@ -1,7 +1,9 @@
 import time
+import asyncio
 from collections import Counter
 from collections.abc import Coroutine, Callable, Sequence
 from clovers_utils.tools import to_int
+from clovers_core.plugin import PluginError
 from clovers_leafgame.main import manager
 from clovers_leafgame.item import Prop, GOLD
 from clovers_leafgame.output import text_to_image, endline
@@ -92,59 +94,59 @@ class Session:
             return:结算界面
         """
         group_id = self.group_id
-        win = self.win if self.win else self.p1_uid if self.next == self.p2_uid else self.p2_uid
+        win = self.win
+        if win is None:
+            raise PluginError("场次没有获胜者，无法结算。")
         if win == self.p1_uid:
             win_name = self.p1_nickname
             lose = self.p2_uid
             lose_name = self.p2_nickname
         else:
+            win = self.p2_uid
             win_name = self.p2_nickname
             lose = self.p1_uid
             lose_name = self.p1_nickname
+
         bet = self.bet
         if bet:
             tip = manager.transfer(*bet, win, lose, group_id)
             info = [text_to_image(tip + endline("结算"), autowrap=True)]
         else:
             info = []
-        ranklist: dict[str, Counter[str]] = manager.data.extra.setdefault("ranklist", {})
-        win_rank = ranklist.setdefault("win", Counter())
+        ranklist = manager.data.extra.setdefault("ranklist", {})
+        win_rank = ranklist["win"] = Counter(ranklist.get("win", {}))
         win_rank[win] += 1
-        lose_rank = ranklist.setdefault("lose", Counter())
+        lose_rank = ranklist["lose"] = Counter(ranklist.get("lose", {}))
         lose_rank[lose] += 1
-        win_achieve = ranklist.setdefault("win_achieve", Counter())
-        lose_achieve = ranklist.setdefault("lose_achieve", Counter())
+        win_achieve = ranklist["win_achieve"] = Counter(ranklist.get("win_achieve", {}))
+        lose_achieve = ranklist["lose_achieve"] = Counter(ranklist.get("lose_achieve", {}))
         win_achieve[win] += 1
         lose_achieve[win] = 0
         win_achieve[lose] = 0
         lose_achieve[lose] += 1
-        card = []
-        card.append(f"◆胜者 {win_name}")
-        card.append(f"◆战绩 {win_rank[win]}:{lose_rank[win]}")
-        card.append(f"◆连胜 {win_achieve[win]}")
-        card.append("----")
-        card.append(f"◇败者 {lose_name}")
-        card.append(f"◇战绩 {win_rank[lose]}:{lose_rank[lose]}")
-        card.append(f"◇胜率  {lose_achieve[lose]}")
-        info.insert(0, text_to_image("\n".join(card) + endline("对战")))
-        return (f"这场对决是 {win_name} 胜利了", manager.info_card(info, win), self.tip)
+        card = (
+            f"[pixel][20]◆胜者 {win_name}[nowrap]\n[pixel][460]◇败者 {lose_name}\n"
+            f"[pixel][20]◆战绩 {win_rank[win]}:{lose_rank[win]}[nowrap]\n[pixel][460]◇战绩 {win_rank[lose]}:{lose_rank[lose]}\n"
+            f"[pixel][20]◆连胜 {win_achieve[win]}[nowrap]\n[pixel][460]◇连败  {lose_achieve[lose]}"
+        )
+        info.insert(0, text_to_image(card + endline("对战")))
+        result = [f"这场对决是 {win_name} 胜利了", manager.info_card(info, win)]
+        if self.tip:
+            result.append(self.tip)
+        return result
 
     def end(self, result=None):
         settle = self.settle()
 
         async def output():
             if result:
-                if isinstance(result, (str, BytesIO, list)):
-                    yield result
-                else:
-                    async for i in result():
-                        if i:
-                            yield i
+                yield result
                 await asyncio.sleep(1)
-            for i in settle:
-                if i:
-                    yield i
-                    await asyncio.sleep(1)
+            for x in settle:
+                yield x
+                await asyncio.sleep(1)
+
+        return output
 
 
 class Game:

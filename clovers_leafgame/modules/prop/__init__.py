@@ -1,7 +1,6 @@
 import random
 import asyncio
 from collections import Counter
-from clovers_core.plugin import Result
 from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import Prop, GOLD, STD_GOLD
@@ -125,7 +124,7 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
         std_n = n * manager.data.group(account.group_id).level
         user.bank[STD_GOLD.id] += std_n
         user.add_message(f"【{prop.name}】你在群内的欠款（{-std_n}枚标准金币）已转移到个人账户")
-    data = [(p, n) for k, n in bank.items() if (p := manager.props_library.get(k))]
+    data = manager.props_data(bank)
     manager.data.cancel_account(account.id)
     return ["你在本群的账户已重置，祝你好运~", manager.info_card([prop_card(data, "账户已重置")], user.id)]
 
@@ -265,11 +264,11 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
             for i in random.sample([0, 1, 2, 3, 4, 5], random.randint(0, 6)):
                 bullet_lst[i] = 1
             index = random.randint(0, 5)
-            yield plugin.build_result(f"子弹列表{" ".join(str(x) for x in bullet_lst)}，你中了第{index+1}发子弹。")
+            yield f"子弹列表{" ".join(str(x) for x in bullet_lst)}，你中了第{index+1}发子弹。"
             await asyncio.sleep(1)
             if bullet_lst[index] == 1:
                 manager.data.cancel_user(user_id)
-                yield plugin.build_result("砰！一团火从枪口喷出，你从这个世界上消失了。")
+                yield "砰！一团火从枪口喷出，你从这个世界上消失了。"
                 return
             counter = Counter()
             ten_times_bank(user.bank)
@@ -280,17 +279,12 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
                 ten_times_bank(account.bank)
                 counter += account.bank
             user.bank[STD_GOLD.id] += manager.stock_value(user.invest) * 10
-            yield plugin.build_result("咔！你活了下来...")
-            yield plugin.build_result(
-                [
-                    "这是你获得的道具",
-                    manager.info_card(
-                        [prop_card([(p, n) for k, n in counter.items() if (p := manager.props_library.get(k))])],
-                        user_id,
-                    ),
-                ]
-            )
+            yield "咔！你活了下来..."
+            yield [
+                "这是你获得的道具",
+                manager.info_card([prop_card(manager.props_data(counter))], user_id),
+            ]
 
-        return Result("segmented", result)
+        return result
 
     return "你手中的左轮枪已经装好了子弹，请开枪，或者取消。"

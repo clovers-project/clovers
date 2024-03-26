@@ -147,3 +147,9 @@ class Manager:
             else:
                 invest[group_id] = 0
         return int(value)
+
+    def invest_data(self, bank: Counter[str]):
+        return [(stock, n) for group_id, n in bank.items() if n != 0 and (stock := self.group_library[group_id].stock)]
+
+    def props_data(self, bank: Counter[str]):
+        return [(prop, n) for prop_id, n in bank.items() if n != 0 and (prop := self.props_library.get(prop_id))]
