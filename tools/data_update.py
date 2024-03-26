@@ -140,6 +140,7 @@ class DataBase(BaseModel):
     user_dict: dict[str, User] = {}
     group_dict: dict[str, Group] = {}
     account_dict: dict[str, Account] = {}
+    extra: dict = {}
 
     def save(self, file):
         """
@@ -184,10 +185,11 @@ for user_id, user in data.user.items():
         group_account.bank["1111"] = group_account.gold
         invest += group_account.invest
         user.accounts[group_id] = group_account
-        user.extra["win"] = user.win
-        user.extra["win_achieve"] = user.Achieve_win
-        user.extra["lose"] = user.lose
-        user.extra["lose_achieve"] = user.Achieve_lose
+        ranklist: dict[str, Counter] = data.extra.setdefault("ranklist", {})
+        ranklist.setdefault("win", Counter())[user_id] = user.win
+        ranklist.setdefault("win_achieve", Counter())[user_id] = user.Achieve_win
+        ranklist.setdefault("lose", Counter())[user_id] = user.lose
+        ranklist.setdefault("lose_achieve", Counter())[user_id] = user.Achieve_lose
         group_account.group_id = group_id
         group_account.user_id = user_id
         account_id = f"{user_id}-{group_id}"

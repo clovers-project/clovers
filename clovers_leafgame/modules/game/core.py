@@ -1,8 +1,10 @@
 import time
+from collections import Counter
 from collections.abc import Coroutine, Callable, Sequence
 from clovers_utils.tools import to_int
 from clovers_leafgame.main import manager
 from clovers_leafgame.item import Prop, GOLD
+from clovers_leafgame.output import text_to_image, endline
 from clovers_leafgame.core.clovers import Event
 from clovers_core.config import config as clovers_config
 from .config import Config
@@ -31,6 +33,7 @@ class Session:
     bet: tuple[Prop, int] | None = None
     data: dict = {}
     game: "Game"
+    tip: str | None = None
 
     def __init__(self, group_id: str, user_id: str, nickname: str, game: "Game"):
         self.time = time.time()
@@ -83,7 +86,65 @@ class Session:
         else:
             return f"{self.p1_nickname} 发起挑战！\n回复 接受挑战 即可开始对局。\n【{timeout}秒内有效】"
 
-    def end(self, result=None): ...
+    def settle(self):
+        """
+        游戏结束结算
+            return:结算界面
+        """
+        group_id = self.group_id
+        win = self.win if self.win else self.p1_uid if self.next == self.p2_uid else self.p2_uid
+        if win == self.p1_uid:
+            win_name = self.p1_nickname
+            lose = self.p2_uid
+            lose_name = self.p2_nickname
+        else:
+            win_name = self.p2_nickname
+            lose = self.p1_uid
+            lose_name = self.p1_nickname
+        bet = self.bet
+        if bet:
+            tip = manager.transfer(*bet, win, lose, group_id)
+            info = [text_to_image(tip + endline("结算"), autowrap=True)]
+        else:
+            info = []
+        ranklist: dict[str, Counter[str]] = manager.data.extra.setdefault("ranklist", {})
+        win_rank = ranklist.setdefault("win", Counter())
+        win_rank[win] += 1
+        lose_rank = ranklist.setdefault("lose", Counter())
+        lose_rank[lose] += 1
+        win_achieve = ranklist.setdefault("win_achieve", Counter())
+        lose_achieve = ranklist.setdefault("lose_achieve", Counter())
+        win_achieve[win] += 1
+        lose_achieve[win] = 0
+        win_achieve[lose] = 0
+        lose_achieve[lose] += 1
+        card = []
+        card.append(f"◆胜者 {win_name}")
+        card.append(f"◆战绩 {win_rank[win]}:{lose_rank[win]}")
+        card.append(f"◆连胜 {win_achieve[win]}")
+        card.append("----")
+        card.append(f"◇败者 {lose_name}")
+        card.append(f"◇战绩 {win_rank[lose]}:{lose_rank[lose]}")
+        card.append(f"◇胜率  {lose_achieve[lose]}")
+        info.insert(0, text_to_image("\n".join(card) + endline("对战")))
+        return (f"这场对决是 {win_name} 胜利了", manager.info_card(info, win), self.tip)
+
+    def end(self, result=None):
+        settle = self.settle()
+
+        async def output():
+            if result:
+                if isinstance(result, (str, BytesIO, list)):
+                    yield result
+                else:
+                    async for i in result():
+                        if i:
+                            yield i
+                await asyncio.sleep(1)
+            for i in settle:
+                if i:
+                    yield i
+                    await asyncio.sleep(1)
 
 
 class Game:

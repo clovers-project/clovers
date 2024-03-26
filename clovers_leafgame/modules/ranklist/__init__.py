@@ -2,24 +2,23 @@ import re
 import heapq
 import asyncio
 from collections import Counter
+from collections.abc import Callable
 from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.main import plugin, manager
 from clovers_utils.tools import download_url
 from .output import draw_rank
 
 
-def rank_title(title):
+def rank_title(title) -> Callable[[str], int] | None:
     match title:
         case "胜场":
-            return lambda locate_id: manager.data.user(locate_id).extra.setdefault("win", 0)
+            return lambda locate_id: manager.data.extra.setdefault("win", Counter())[locate_id]
         case "连胜":
-            return lambda locate_id: manager.data.user(locate_id).extra.setdefault("win_achieve", 0)
+            return lambda locate_id: manager.data.extra.setdefault("win_achieve", Counter())[locate_id]
         case "败场":
-            return lambda locate_id: manager.data.user(locate_id).extra.setdefault("lose", 0)
+            return lambda locate_id: manager.data.extra.setdefault("lose", Counter())[locate_id]
         case "败场":
-            return lambda locate_id: manager.data.user(locate_id).extra.setdefault("lose_achieve", 0)
-        case _:
-            return
+            return lambda locate_id: manager.data.extra.setdefault("lose_achieve", Counter())[locate_id]
 
 
 def all_ranklist(title: str):

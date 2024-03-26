@@ -121,6 +121,7 @@ class DataBase(BaseModel):
     user_dict: dict[str, User] = {}
     group_dict: dict[str, Group] = {}
     account_dict: dict[str, Account] = {}
+    extra: dict = {}
 
     @classmethod
     def load(cls, file: Path) -> "DataBase":

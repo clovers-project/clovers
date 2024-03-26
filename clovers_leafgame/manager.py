@@ -5,8 +5,6 @@
 ————————————————————
 +++++++++++++++++"""
 
-import typing_extensions
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from collections import Counter
@@ -127,7 +125,7 @@ class Manager:
             tip = f"扣除2%手续费：{tax}，实际到账{prop.name}数{unsettled - tax}"
         prop.deal(receiver_bank, unsettled - tax)
         prop.deal(self.data.group(group_id).bank, tax)
-        return f"{sender_name} 向 {receiver_name} 赠送{unsettled}个{prop.name}\n{tip}"
+        return f"{sender_name} 向 {receiver_name} 赠送了{unsettled}个{prop.name}\n{tip}"
 
     def group_wealths(self, group_name: str, prop_id: str) -> list[int]:
         """
