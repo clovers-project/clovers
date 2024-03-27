@@ -58,7 +58,7 @@ class Session:
         self.round += 1
         self.next = self.p1_uid if self.next == self.p2_uid else self.p2_uid
 
-    def delay(self, t:float = 0):
+    def delay(self, t: float = 0):
         self.time = time.time() + t
 
     def create_check(self, user_id: str):
@@ -136,6 +136,7 @@ class Session:
         return result
 
     def end(self, result=None):
+        self.time = 0
         settle = self.settle()
 
         async def output():
@@ -193,6 +194,7 @@ class Game:
                 prop_name, n, arg = self.args_parse(event.args)
                 prop = manager.props_library.get(prop_name, GOLD)
                 user, account = manager.locate_account(user_id, group_id)
+                user.connect = group_id
                 bank = prop.locate_bank(user, account)
                 if n < 0:
                     n = default_bet
@@ -213,7 +215,7 @@ class Game:
     def action(self, place: dict[str, Session]):
         def decorator(func: Callable[[Event, Session], Coroutine]):
             async def wrapper(event: Event):
-                group_id = event.group_id
+                group_id = event.group_id or manager.data.user(event.user_id).connect
                 if not (session := self.session_check(place, group_id)):
                     return
                 if session.game.name != self.name:

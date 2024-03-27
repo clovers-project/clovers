@@ -4,7 +4,7 @@ from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
-from .tools import random_poker, poker_suit, poker_point
+from .tools import random_poker, poker_suit, poker_point, poker_show
 from clovers_core.config import config as clovers_config
 from .config import Config
 
@@ -101,7 +101,7 @@ async def _(session: Session, arg: str):
     session.data["index"] = 0
     if session.bet:
         prop, n = session.bet
-        tip = f"\n本场下注：{prop.name} {n}"
+        tip = f"\n本场下注：{n}{prop.name}"
     else:
         tip = ""
     tip += f"\n第一枪的概率为：{round(bullet_num * 100 / 7,2)}%"
@@ -170,7 +170,7 @@ async def _(session: Session, arg: str):
         n1 = prop.N(*manager.locate_account(session.p1_uid, session.group_id))
         n2 = prop.N(*manager.locate_account(session.p2_uid, session.group_id))
         session.data["bet_limit"] = min(n1, n2)
-        tip = f"\n本场下注：{prop.name} {n}/次"
+        tip = f"\n本场下注：{n}{prop.name}/次"
     else:
         tip = ""
     return f"哗啦哗啦~，骰子准备完毕{tip}\n{session.create_info()}"
@@ -259,7 +259,7 @@ class PokerGame:
             return f"HP {self.HP} SP {self.SP} DEF {self.DEF}"
 
         def handcard(self) -> str:
-            return "|".join(PokerGame.card(*card) for card in self.hand)
+            return " ".join(f"【{i}】{PokerGame.card(*card)}" for i, card in enumerate(self.hand, 1))
 
 
 @plugin.handle({"扑克对战"}, {"user_id", "group_id", "nickname", "at"})
@@ -270,7 +270,7 @@ async def _(session: Session, arg: str):
     session.data["poker"] = poker_data
     if session.bet:
         prop, n = session.bet
-        tip = f"\n本场下注：{prop.name} {n}"
+        tip = f"\n本场下注：{n}{prop.name}"
     else:
         tip = ""
     return f"唰唰~，随机牌堆已生成{tip}\n{session.create_info()}\nP1初始手牌\n{poker_data.P1.handcard()}"
@@ -389,27 +389,23 @@ async def _(event: Event, session: Session):
 
     output = BytesIO()
     text_to_image(
-        (
-            f"玩家：{session.p1_nickname}\n状态：{poker_data.P1.status()}\n"
-            "----\n"
-            f"玩家：{session.p2_nickname}\n状态：{poker_data.P2.status()}\n"
-            "----\n"
-            f"当前回合：{passive_name}\n手牌：{passive.handcard()}"
-        ),
+        f"玩家：{session.p1_nickname}\n状态：{poker_data.P1.status()}\n----\n玩家：{session.p2_nickname}\n状态：{poker_data.P2.status()}\n----\n{passive.handcard()}",
         bg_color="white",
     ).save(output, format="png")
     msg = "\n".join(msg)
 
-    async def result():
+    async def result(tip: str | None = None):
         yield msg
         await asyncio.sleep(0.03 * len(msg))
         yield output
+        if tip:
+            yield tip
 
     if active.HP < 1 or passive.HP < 1 or passive.HP > 40 or (0, 0) in hand:
         session.win = session.p1_uid if poker_data.P1.HP > poker_data.P2.HP else session.p2_uid
-        return session.end(result)
+        return session.end(result("游戏结束"))
     session.data["ACT"] = False
-    return result
+    return result(f"请{passive_name}发送【出牌 1/2/3】打出你的手牌。")
 
 
 cantrell = Game("梭哈", "看牌|开牌")
@@ -525,13 +521,14 @@ async def _(session: Session, arg: str):
     session.data["pt2"] = pt2
     session.data["name1"] = name1
     session.data["name2"] = name2
+    session.data["expose"] = 3
     if session.bet:
         prop, n = session.bet
         n1 = prop.N(*manager.locate_account(session.p1_uid, session.group_id))
         n2 = prop.N(*manager.locate_account(session.p2_uid, session.group_id))
         session.data["bet_limit"] = min(n1, n2)
         session.data["bet"] = n
-        tip = f"\n本场下注：{prop.name} {n}/轮"
+        tip = f"\n本场下注：{n}{prop.name}/轮"
     else:
         tip = ""
     return f"唰唰~，随机牌堆已生成，等级：{level}{tip}\n{session.create_info()}"
@@ -542,80 +539,48 @@ async def _(session: Session, arg: str):
 async def _(event: Event, session: Session):
     if not event.is_private():
         return "请私信回复 看牌 查看手牌"
-    expose = session.round + 1 // 2 + 2
+    expose = session.data["expose"]
     session.delay()
-    if event.user_id == session.p1_uid:
-        hand = session.data["hand1"]
-    else:
-        hand = session.data["hand2"]
-    cards = "\n".join(f"【{poker_suit[suit]},{poker_point[point]}】" for suit, point in hand[0:expose])
-    return f"你的手牌：\n{cards}"
-
-
-@plugin.handle({"看牌"}, {"user_id", "group_id", "nickname"})
-@cantrell.action(place)
-async def _(event: Event, session: Session):
-    if not event.is_private():
-        return "请私信回复 看牌 查看手牌"
-    expose = session.round + 1 // 2 + 2
-    session.delay()
-    if event.user_id == session.p1_uid:
-        hand = session.data["hand1"]
-    else:
-        hand = session.data["hand2"]
-    cards = "\n".join(f"【{poker_suit[suit]},{poker_point[point]}】" for suit, point in hand[0:expose])
-    return f"你的手牌：\n{cards}"
+    hand = session.data["hand1"] if event.user_id == session.p1_uid else session.data["hand2"]
+    return f"{poker_show(hand[0:expose])}"
 
 
 @plugin.handle({"开牌"}, {"user_id", "group_id", "nickname"})
 @cantrell.action(place)
 async def _(event: Event, session: Session):
-    expose = session.round / 2
-    session.nextround()    
-    if expose != int(expose):
-        return  f"请{session.p2_nickname}{cantrell.action_tip}"  
+    user_id = event.user_id
+    session.nextround()
+    if user_id == session.p1_uid:
+        return f"请{session.p2_nickname}\n{cantrell.action_tip}"
     if session.bet:
         prop, n = session.bet
         n += session.data["bet"]
         n = min([n, session.data["bet_limit"]])
         session.bet = (prop, n)
-        tip = f"当前下注{n}{prop.name}，" 
+        tip = f"当前下注{n}{prop.name}\n"
     else:
         tip = ""
-
-    gold = max(gold, self.gold)
-    session.gold += gold
-    expose = int(expose) + 2
-    hand1 = self.hand1[0:expose]
-    hand2 = self.hand2[0:expose]
-    cantrell_suit = self.cantrell_suit
-    cantrell_point = self.cantrell_point
-
-            if expose == 5:
-                session.win = session.p1_uid if self.pt1[0] > self.pt2[0] else session.p2_uid
-                msg = (
-                    "P1手牌：\n"
-                    "|"
-                    + "".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in self.hand1)
-                    + f"\n牌型：\n{self.pt1[1]}"
-                    "\n----\n"
-                    "P2手牌：\n"
-                    "|"
-                    + "".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in self.hand2)
-                    + f"\n牌型：\n{self.pt2[1]}"
-                )
-                self.end(linecard_to_png(msg, width=880))
-            else:
-                msg = (
-                    f"玩家：{session.p1_nickname}\n"
-                    "手牌：\n"
-                    f'|{"".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in hand1)}{(5 - expose)*"   |"}'
-                    "\n----\n"
-                    f"玩家：{session.p2_nickname}\n"
-                    "手牌：\n"
-                    f'|{"".join(f"{cantrell_suit[suit]}{cantrell_point[point]}|" for suit, point in hand2)}{(5 - expose)*"   |"}'
-                )
-                return linecard_to_png(f"您已跟注{gold}金币\n" if gold else "" + msg, width=880)
-        else:
-            self.gold = gold
-            return f"您已加注{gold}金币，" if gold else "" + f"请{session.p2_nickname}看牌|开牌"
+    expose = session.data["expose"]
+    session.data["expose"] += 1
+    hand1 = session.data["hand1"][:expose]
+    hand2 = session.data["hand2"][:expose]
+    result1 = f"玩家：{session.p1_nickname}\n手牌：{poker_show(hand1)}"
+    result2 = f"玩家：{session.p2_nickname}\n手牌：{poker_show(hand2)}"
+    output = BytesIO()
+    if expose == 5:
+        session.win = session.p1_uid if session.data["pt1"] > session.data["pt2"] else session.p2_uid
+        result1 += f"\n牌型：{session.data['name1']}"
+        result2 += f"\n牌型：{session.data['name2']}"
+        text_to_image(
+            f"{result1}\n----\n{result2}",
+            bg_color="white",
+            width=880,
+        ).save(output, format="png")
+        return session.end(output)
+    else:
+        text_to_image(
+            f"{tip}{result1}\n----\n{result2}",
+            bg_color="white",
+            width=880,
+        ).save(output, format="png")
+        return [output, f"请{session.p1_nickname}\n{cantrell.action_tip}"]
