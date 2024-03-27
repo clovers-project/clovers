@@ -147,7 +147,7 @@ class Session:
                 yield x
                 await asyncio.sleep(1)
 
-        return output
+        return output()
 
 
 class Game:

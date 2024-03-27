@@ -285,6 +285,6 @@ async def _(prop: Prop, event: Event, count: int, extra: str):
                 manager.info_card([prop_card(manager.props_data(counter))], user_id),
             ]
 
-        return result
+        return result()
 
     return "你手中的左轮枪已经装好了子弹，请开枪，或者取消。"

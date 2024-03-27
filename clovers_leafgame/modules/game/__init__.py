@@ -232,7 +232,7 @@ poker = Game("扑克对战", "出牌")
 
 
 class PokerGame:
-    suit = {0: "结束", 1: "防御", 2: "恢复", 3: "技能", 4: "攻击"}
+    suit = {0: "结束", 1: "♤防御", 2: "♡恢复", 3: "♧技能", 4: "♢攻击"}
     point = {0: "0", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "J", 12: "Q", 13: "K"}
 
     def __init__(self) -> None:
@@ -394,12 +394,10 @@ async def _(event: Event, session: Session):
     ).save(output, format="png")
     msg = "\n".join(msg)
 
-    async def result(tip: str | None = None):
+    async def result(tip: str):
         yield msg
         await asyncio.sleep(0.03 * len(msg))
-        yield output
-        if tip:
-            yield tip
+        yield [tip, output]
 
     if active.HP < 1 or passive.HP < 1 or passive.HP > 40 or (0, 0) in hand:
         session.win = session.p1_uid if poker_data.P1.HP > poker_data.P2.HP else session.p2_uid

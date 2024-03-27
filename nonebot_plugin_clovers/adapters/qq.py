@@ -39,9 +39,9 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
         await main.send(msg)
 
     @method.send("segmented")
-    async def _(message: Callable[[], AsyncGenerator[Result, None]]):
+    async def _(message: AsyncGenerator[Result, None]):
         """发送分段信息"""
-        async for seg in message():
+        async for seg in message:
             await method.send_dict[seg.send_method](seg.data)
 
     @method.kwarg("user_id")

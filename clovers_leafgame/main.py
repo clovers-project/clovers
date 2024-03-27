@@ -1,5 +1,5 @@
 from io import BytesIO
-from collections.abc import Callable
+from collections.abc import AsyncGenerator
 from clovers_core.plugin import Plugin, Result
 from clovers_core.config import config as clovers_config
 from clovers_leafgame.core.clovers import Event
@@ -17,13 +17,13 @@ def build_result(result):
         return Result("image", result)
     if isinstance(result, list):
         return Result("list", [build_result(seg) for seg in result])
-    if isinstance(result, Callable):
+    if isinstance(result, AsyncGenerator):
 
         async def output():
-            async for x in result():
+            async for x in result:
                 yield build_result(x)
 
-        return Result("segmented", output)
+        return Result("segmented", output())
     return result
 
 
