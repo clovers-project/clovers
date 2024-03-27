@@ -527,8 +527,11 @@ async def _(session: Session, arg: str):
     session.data["name2"] = name2
     if session.bet:
         prop, n = session.bet
-        session.data["bet_limit"]
-        tip = f"\n本场下注：{prop.name} {n}"
+        n1 = prop.N(*manager.locate_account(session.p1_uid, session.group_id))
+        n2 = prop.N(*manager.locate_account(session.p2_uid, session.group_id))
+        session.data["bet_limit"] = min(n1, n2)
+        session.data["bet"] = n
+        tip = f"\n本场下注：{prop.name} {n}/轮"
     else:
         tip = ""
     return f"唰唰~，随机牌堆已生成，等级：{level}{tip}\n{session.create_info()}"
@@ -567,31 +570,26 @@ async def _(event: Event, session: Session):
 @plugin.handle({"开牌"}, {"user_id", "group_id", "nickname"})
 @cantrell.action(place)
 async def _(event: Event, session: Session):
+    expose = session.round / 2
+    session.nextround()    
+    if expose != int(expose):
+        return  f"请{session.p2_nickname}{cantrell.action_tip}"  
     if session.bet:
         prop, n = session.bet
         n += session.data["bet"]
-        session.bet = (prop, min([n, n1, n2]))
+        n = min([n, session.data["bet_limit"]])
+        session.bet = (prop, n)
+        tip = f"当前下注{n}{prop.name}，" 
+    else:
+        tip = ""
 
-    def cantrell_play(self, user_id: int, gold: int):
-        """
-        开牌
-        """
-        session = self.session
-        gold = self.gold if gold == None else gold
-        gold = min(gold, session.bet_limit - session.gold)
-        if gold > self.max_bet_gold:
-            return f"开牌金额不能超过{self.max_bet_gold}"
-        expose = session.round / 2
-        session.nextround()
-        session.time += 120
-        if expose == int(expose):
-            gold = max(gold, self.gold)
-            session.gold += gold
-            expose = int(expose) + 2
-            hand1 = self.hand1[0:expose]
-            hand2 = self.hand2[0:expose]
-            cantrell_suit = self.cantrell_suit
-            cantrell_point = self.cantrell_point
+    gold = max(gold, self.gold)
+    session.gold += gold
+    expose = int(expose) + 2
+    hand1 = self.hand1[0:expose]
+    hand2 = self.hand2[0:expose]
+    cantrell_suit = self.cantrell_suit
+    cantrell_point = self.cantrell_point
 
             if expose == 5:
                 session.win = session.p1_uid if self.pt1[0] > self.pt2[0] else session.p2_uid
