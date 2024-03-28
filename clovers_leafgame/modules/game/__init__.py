@@ -199,6 +199,7 @@ async def _(session: Session, arg: str):
         n1 = prop.N(*manager.locate_account(session.p1_uid, session.group_id))
         n2 = prop.N(*manager.locate_account(session.p2_uid, session.group_id))
         session.data["bet_limit"] = min(n1, n2)
+        session.data["bet"] = n
         tip = f"\n本场下注：{n}{prop.name}/次"
     else:
         tip = ""
@@ -220,10 +221,7 @@ async def _(event: Event, session: Session):
 
     result = f"玩家：{nickname}\n组合：{' '.join(str(x) for x in dice_array)}\n点数：{array_name}"
     if session.round == 2:
-        if session.bet:
-            prop, n = session.bet
-            n += n
-            session.bet = (prop, min(n, session.data["bet_limit"]))
+        session.double_bet()
         session.win = session.p1_uid if session.data["pt1"] > session.data["pt2"] else session.p2_uid
         return session.end(result)
     session.nextround()
@@ -542,7 +540,7 @@ async def _(event: Event, session: Session):
     expose = session.data["expose"]
     session.delay()
     hand = session.data["hand1"] if event.user_id == session.p1_uid else session.data["hand2"]
-    return f"{poker_show(hand[0:expose])}"
+    return f"{poker_show(hand[0:expose],'\n')}"
 
 
 @plugin.handle({"开牌"}, {"user_id", "group_id", "nickname"})
@@ -552,12 +550,10 @@ async def _(event: Event, session: Session):
     session.nextround()
     if user_id == session.p1_uid:
         return f"请{session.p2_nickname}\n{cantrell.action_tip}"
+    session.double_bet()
     if session.bet:
         prop, n = session.bet
-        n += session.data["bet"]
-        n = min([n, session.data["bet_limit"]])
-        session.bet = (prop, n)
-        tip = f"当前下注{n}{prop.name}\n"
+        tip = f"\n----\n当前下注{n}{prop.name}"
     else:
         tip = ""
     expose = session.data["expose"]
@@ -579,17 +575,17 @@ async def _(event: Event, session: Session):
         return session.end(output)
     else:
         text_to_image(
-            f"{tip}{result1}\n----\n{result2}",
+            f"{result1}\n----\n{result2}{tip}",
             bg_color="white",
             width=880,
         ).save(output, format="png")
         return [output, f"请{session.p1_nickname}\n{cantrell.action_tip}"]
 
 
-blackjack = Game("梭哈", "看牌|开牌")
+blackjack = Game("21点", "停牌|抽牌|双倍停牌")
 
 
-@plugin.handle({"同花顺", "港式五张", "梭哈"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"21点", "黑杰克"}, {"user_id", "group_id", "nickname", "at"})
 @blackjack.create(place)
 async def _(session: Session, arg: str):
     deck = random_poker()
@@ -605,4 +601,72 @@ async def _(session: Session, arg: str):
         tip = f"\n本场下注：{n}{prop.name}/轮"
     else:
         tip = ""
-    return f"唰唰~，随机牌堆已生成，等级：{level}{tip}\n{session.create_info()}"
+    return f"唰唰~，随机牌堆已生成，{tip}\n{session.create_info()}"
+
+
+def blackjack_pt(hand: list[tuple[int, int]]) -> int:
+    """
+    返回21点牌组点数。
+    """
+    pts = [point if point < 10 else 10 for suip, point in hand]
+    pt = sum(pts)
+    if 1 in pts and pt <= 11:
+        pt += 10
+    return pt
+
+
+def blackjack_hit(session: Session):
+    session.delay()
+    if session.round == 1:
+        hand = session.data["hand1"]
+        session.win = session.p2_uid
+    else:
+        hand = session.data["hand2"]
+        session.win = session.p1_uid
+    deck = session.data["deck"]
+    card = deck[0]
+    deck = deck[1:]
+    hand.append(card)
+    pt = blackjack_pt(hand)
+    return hand, pt
+
+
+@plugin.handle({"抽牌"}, {"user_id", "group_id", "nickname"})
+@blackjack.action(place)
+async def _(event: Event, session: Session):
+    hand, pt = blackjack_hit(session)
+    msg = f"你的手牌：\n{poker_show(hand,'\n')}\n合计:{pt}点"
+    if pt > 21:
+        return session.end(msg)
+    if not event.is_private():
+        msg = "请在私信抽牌\n" + msg
+    return msg
+
+
+@plugin.handle({"停牌"}, {"user_id", "group_id", "nickname"})
+@blackjack.action(place)
+async def _(event: Event, session: Session):
+    if session.round == 1:
+        return f"请{session.p2_nickname}抽牌|停牌|双倍停牌"
+    session.nextround()
+    hand1 = session.data["hand1"]
+    pt1 = blackjack_pt(hand1)
+    hand2 = session.data["hand2"]
+    pt2 = blackjack_pt(hand2)
+    session.win = session.p1_uid if pt1 > pt2 else session.p2_uid
+    output = BytesIO()
+    result1 = f"玩家：{session.p1_nickname}\n手牌：{poker_show(hand1, '\n')}\n合计:{pt1}点"
+    result2 = f"玩家：{session.p2_nickname}\n手牌：{poker_show(hand2,'\n')}\n合计:{pt2}点"
+    text_to_image(
+        f"{result1}\n----\n{result2}",
+        bg_color="white",
+        width=880,
+    ).save(output, format="png")
+    return session.end(output)
+
+
+def Blackjack_DoubleDown(self, event: Event):
+    """
+    双倍停牌
+    """
+    return
