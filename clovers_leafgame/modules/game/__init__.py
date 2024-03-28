@@ -24,17 +24,17 @@ async def _(event: Event):
         return
     if session.at and session.at != user_id:
         return f"现在是 {session.p1_nickname} 发起的对决，请等待比赛结束后再开始下一轮..."
-    user, group_account = manager.locate_account(user_id, group_id)
+    user, account = manager.account(event)
     user.connect = group_id
     bet = session.bet
     if bet:
         prop, n = bet
-        if group_account.bank[prop.id] < n:
-            return f"你的无法接受这场对决！\n——你还有{group_account.bank[prop.id]}个{prop.name}。"
+        if account.bank[prop.id] < n:
+            return f"你的无法接受这场对决！\n——你还有{account.bank[prop.id]}个{prop.name}。"
         tip = f"对战金额为 {n} {prop.name}\n"
     else:
         tip = ""
-    session.join(user_id, event.nickname)
+    session.join(user_id, account.name)
     session.next = session.p1_uid
     return f"{session.p2_nickname}接受了对决！\n本场对决为【{session.game.name}】\n{tip}请{session.p1_nickname}发送指令\n{session.game.action_tip}"
 
@@ -48,14 +48,14 @@ async def _(event: Event):
         return "拒绝成功，对决已结束。"
 
 
-@plugin.handle({"超时结算"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"超时结算"}, {"user_id", "group_id"})
 async def _(event: Event):
     if (session := place.get(event.group_id)) and session.timeout() < 0:
         session.win = session.p2_uid if session.next == session.p1_uid else session.p1_uid
         return session.end()
 
 
-@plugin.handle({"认输"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"认输"}, {"user_id", "group_id"})
 async def _(event: Event):
     user_id = event.user_id
     session = place.get(event.group_id)
@@ -70,7 +70,7 @@ async def _(event: Event):
     return session.end()
 
 
-@plugin.handle({"游戏重置"}, {"user_id", "group_id", "nickname", "permission"})
+@plugin.handle({"游戏重置"}, {"user_id", "group_id", "permission"})
 async def _(event: Event):
     group_id = event.group_id
     session = place.get(group_id)
@@ -85,7 +85,7 @@ async def _(event: Event):
 russian_roulette = Game("俄罗斯轮盘", "开枪")
 
 
-@plugin.handle({"俄罗斯轮盘", "装弹"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"俄罗斯轮盘", "装弹"}, {"user_id", "group_id", "at"})
 @russian_roulette.create(place)
 async def _(session: Session, arg: str):
     bullet_num = to_int(arg)
@@ -109,7 +109,7 @@ async def _(session: Session, arg: str):
     return f"{' '.join('咔' for _ in range(bullet_num))}，装填完毕{tip}\n{session.create_info()}"
 
 
-@plugin.handle({"开枪"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"开枪"}, {"user_id", "group_id"})
 @russian_roulette.action(place)
 async def _(event: Event, session: Session):
     bullet = session.data["bullet"]
@@ -143,7 +143,7 @@ async def _(event: Event, session: Session):
 dice = Game("掷骰子", "开数")
 
 
-@plugin.handle({"摇色子", "摇骰子", "掷色子", "掷骰子"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"摇色子", "摇骰子", "掷色子", "掷骰子"}, {"user_id", "group_id", "at"})
 @dice.create(place)
 async def _(session: Session, arg: str):
     def dice_pt(dice_array: list):
@@ -206,7 +206,7 @@ async def _(session: Session, arg: str):
     return f"哗啦哗啦~，骰子准备完毕{tip}\n{session.create_info()}"
 
 
-@plugin.handle({"开数"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"开数"}, {"user_id", "group_id"})
 @dice.action(place)
 async def _(event: Event, session: Session):
     user_id = event.user_id
@@ -232,8 +232,23 @@ poker = Game("扑克对战", "出牌")
 
 
 class PokerGame:
-    suit = {0: "结束", 1: "♤防御", 2: "♡恢复", 3: "♧技能", 4: "♢攻击"}
-    point = {0: "0", 1: "A", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "10", 11: "J", 12: "Q", 13: "K"}
+    suit = {0: "结束", 1: "♠防御", 2: "♥恢复", 3: "♣技能", 4: "♦攻击"}
+    point = {
+        0: " 0",
+        1: " A",
+        2: " 2",
+        3: " 3",
+        4: " 4",
+        5: " 5",
+        6: " 6",
+        7: " 7",
+        8: " 8",
+        9: " 9",
+        10: "10",
+        11: "11",
+        12: "12",
+        13: "13",
+    }
 
     def __init__(self) -> None:
         deck = random_poker(2)
@@ -259,10 +274,10 @@ class PokerGame:
             return f"HP {self.HP} SP {self.SP} DEF {self.DEF}"
 
         def handcard(self) -> str:
-            return " ".join(f"【{i}】{PokerGame.card(*card)}" for i, card in enumerate(self.hand, 1))
+            return "\n".join(f"【{PokerGame.card(*card)}】" for i, card in enumerate(self.hand, 1))
 
 
-@plugin.handle({"扑克对战"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"扑克对战"}, {"user_id", "group_id", "at"})
 @poker.create(place)
 async def _(session: Session, arg: str):
     poker_data = PokerGame()
@@ -276,7 +291,7 @@ async def _(session: Session, arg: str):
     return f"唰唰~，随机牌堆已生成{tip}\n{session.create_info()}\nP1初始手牌\n{poker_data.P1.handcard()}"
 
 
-@plugin.handle({"出牌"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"出牌"}, {"user_id", "group_id"})
 @poker.action(place)
 async def _(event: Event, session: Session):
     if session.data["ACT"]:
@@ -301,22 +316,22 @@ async def _(event: Event, session: Session):
 
     # 出牌判定
     def action_ACE(active: PokerGame.Gamer, roll: int = 1):
-        msg = [f"技能牌：{active.handcard()}"]
+        msg = [f"技能牌：\n{active.handcard()}"]
         for suit, point in active.hand:
             point = roll if point == 1 else point
             match suit:
                 case 1:
                     active.DEF += point
-                    msg.append(f"♤防御力强化了 {point}")
+                    msg.append(f"♠防御力强化了{point}")
                 case 2:
                     active.HP += point
-                    msg.append(f"♡生命值增加了 {point}")
+                    msg.append(f"♥生命值增加了{point}")
                 case 3:
                     active.SP += point * 2
-                    msg.append(f"♧技能点增加了 {point}")
+                    msg.append(f"♣技能点增加了{point}")
                 case 4:
                     active.ATK += point
-                    msg.append(f"♢发动了攻击 {point}")
+                    msg.append(f"♦发动了攻击{point}")
             active.SP -= point
             active.SP = 0 if active.SP < 0 else active.SP
         return msg
@@ -330,13 +345,13 @@ async def _(event: Event, session: Session):
         match suit:
             case 1:
                 active.ATK += point
-                msg.append(f"♤发动了攻击{point}")
+                msg.append(f"♠发动了攻击{point}")
             case 2:
                 active.HP += point
-                msg.append(f"♡生命值增加了{point}")
+                msg.append(f"♥生命值增加了{point}")
             case 3:
                 active.SP += point
-                msg.append(f"♧技能点增加了{point}")
+                msg.append(f"♣技能点增加了{point}")
                 roll = random.randint(1, 20)
                 msg.append(f"二十面骰判定为{roll}点，当前技能点{active.SP}")
                 if active.SP < roll:
@@ -347,7 +362,7 @@ async def _(event: Event, session: Session):
                     msg += action_ACE(active)
             case 4:
                 active.ATK += point
-                msg.append(f"♢发动了攻击{point}")
+                msg.append(f"♦发动了攻击{point}")
     # 敌方技能判定
     if passive.SP > 1:
         roll = random.randint(1, 20)
@@ -362,16 +377,16 @@ async def _(event: Event, session: Session):
             match suit:
                 case 1:
                     passive.DEF += point
-                    msg.append(f"♤发动了防御 {point}")
+                    msg.append(f"♠发动了防御{point}")
                 case 2:
                     passive.HP += point
-                    msg.append(f"♡生命值增加了 {point}")
+                    msg.append(f"♥生命值增加了{point}")
                 case 3:
                     passive.SP += point * 2
-                    msg.append(f"♧技能点增加了 {point}")
+                    msg.append(f"♣技能点增加了{point}")
                 case 4:
                     passive.ATK += point
-                    msg.append(f"♢发动了反击 {point}")
+                    msg.append(f"♦发动了反击{point}")
             passive.SP -= point
             passive.SP = 0 if passive.SP < 0 else passive.SP
     # 回合结算
@@ -390,6 +405,7 @@ async def _(event: Event, session: Session):
     output = BytesIO()
     text_to_image(
         f"玩家：{session.p1_nickname}\n状态：{poker_data.P1.status()}\n----\n玩家：{session.p2_nickname}\n状态：{poker_data.P2.status()}\n----\n{passive.handcard()}",
+        width=540,
         bg_color="white",
     ).save(output, format="png")
     msg = "\n".join(msg)
@@ -409,7 +425,7 @@ async def _(event: Event, session: Session):
 cantrell = Game("梭哈", "看牌|开牌")
 
 
-@plugin.handle({"同花顺", "港式五张", "梭哈"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"同花顺", "港式五张", "梭哈"}, {"user_id", "group_id", "at"})
 @cantrell.create(place)
 async def _(session: Session, arg: str):
     level = to_int(arg)
@@ -532,7 +548,7 @@ async def _(session: Session, arg: str):
     return f"唰唰~，随机牌堆已生成，等级：{level}{tip}\n{session.create_info()}"
 
 
-@plugin.handle({"看牌"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"看牌"}, {"user_id", "group_id"})
 @cantrell.action(place)
 async def _(event: Event, session: Session):
     if not event.is_private():
@@ -543,7 +559,7 @@ async def _(event: Event, session: Session):
     return f"{poker_show(hand[0:expose],'\n')}"
 
 
-@plugin.handle({"开牌"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"开牌"}, {"user_id", "group_id"})
 @cantrell.action(place)
 async def _(event: Event, session: Session):
     user_id = event.user_id
@@ -585,7 +601,7 @@ async def _(event: Event, session: Session):
 blackjack = Game("21点", "停牌|抽牌|双倍停牌")
 
 
-@plugin.handle({"21点", "黑杰克"}, {"user_id", "group_id", "nickname", "at"})
+@plugin.handle({"21点", "黑杰克"}, {"user_id", "group_id", "at"})
 @blackjack.create(place)
 async def _(session: Session, arg: str):
     deck = random_poker()
@@ -625,13 +641,30 @@ def blackjack_hit(session: Session):
         session.win = session.p1_uid
     deck = session.data["deck"]
     card = deck[0]
-    deck = deck[1:]
+    session.data["deck"] = deck[1:]
     hand.append(card)
     pt = blackjack_pt(hand)
     return hand, pt
 
 
-@plugin.handle({"抽牌"}, {"user_id", "group_id", "nickname"})
+def blackjack_end(session: Session):
+    hand1 = session.data["hand1"]
+    pt1 = blackjack_pt(hand1)
+    hand2 = session.data["hand2"]
+    pt2 = blackjack_pt(hand2)
+    session.win = session.p1_uid if pt1 > pt2 else session.p2_uid
+    output = BytesIO()
+    result1 = f"玩家：{session.p1_nickname}\n手牌：{poker_show(hand1, '')}\n合计:{pt1}点"
+    result2 = f"玩家：{session.p2_nickname}\n手牌：{poker_show(hand2, '')}\n合计:{pt2}点"
+    text_to_image(
+        f"{result1}\n----\n{result2}",
+        bg_color="white",
+        width=0,
+    ).save(output, format="png")
+    return session.end(output)
+
+
+@plugin.handle({"抽牌"}, {"user_id", "group_id"})
 @blackjack.action(place)
 async def _(event: Event, session: Session):
     hand, pt = blackjack_hit(session)
@@ -643,30 +676,118 @@ async def _(event: Event, session: Session):
     return msg
 
 
-@plugin.handle({"停牌"}, {"user_id", "group_id", "nickname"})
+@plugin.handle({"停牌"}, {"user_id", "group_id"})
 @blackjack.action(place)
 async def _(event: Event, session: Session):
     if session.round == 1:
+        session.nextround()
         return f"请{session.p2_nickname}抽牌|停牌|双倍停牌"
+    return blackjack_end(session)
+
+
+@plugin.handle({"双倍停牌"}, {"user_id", "group_id"})
+@blackjack.action(place)
+async def _(event: Event, session: Session):
+    session.double_bet()
+    hand, pt = blackjack_hit(session)
+    if session.round > 1:
+        return blackjack_end(session)
     session.nextround()
-    hand1 = session.data["hand1"]
-    pt1 = blackjack_pt(hand1)
-    hand2 = session.data["hand2"]
-    pt2 = blackjack_pt(hand2)
-    session.win = session.p1_uid if pt1 > pt2 else session.p2_uid
-    output = BytesIO()
-    result1 = f"玩家：{session.p1_nickname}\n手牌：{poker_show(hand1, '\n')}\n合计:{pt1}点"
-    result2 = f"玩家：{session.p2_nickname}\n手牌：{poker_show(hand2,'\n')}\n合计:{pt2}点"
-    text_to_image(
-        f"{result1}\n----\n{result2}",
-        bg_color="white",
-        width=880,
-    ).save(output, format="png")
-    return session.end(output)
+    msg = f"你的手牌：\n{poker_show(hand,'\n')}\n合计:{pt}点"
+    if pt > 21:
+        return session.end(msg)
+
+    async def result():
+        yield msg
+        await asyncio.sleep(1)
+        yield f"请{session.p2_nickname}抽牌|停牌|双倍停牌"
+
+    return result()
 
 
-def Blackjack_DoubleDown(self, event: Event):
+westernduel = Game("西部对战", "装弹|开枪|闪避|闪避开枪|预判开枪")
+
+
+@plugin.handle({"西部对战"}, {"user_id", "group_id", "at"})
+@westernduel.create(place)
+async def _(session: Session, arg: str):
+    session.data["MAG1"] = 1
+    session.data["MAG2"] = 1
+    if session.bet:
+        prop, n = session.bet
+        tip = f"\n本场下注：{n}{prop.name}/轮"
+    else:
+        tip = ""
+    return f"唰唰~，随机牌堆已生成，{tip}\n{session.create_info()}"
+
+
+@plugin.handle({"装弹"}, {"user_id", "group_id"})
+@westernduel.action(place)
+async def _(event: Event, session: Session):
+    if event.user_id == session.p1_uid:
+        session.data["MAG1"] += 1
+        session.data["MAG1"] = min(session.data["MAG1"], 6)
+        session.data["card"] = "装弹"
+    else:
+        if session.data["card"] in {"开枪", "闪避开枪"}:
+            return 
+        session.data["MAG1"] += 1
+        session.data["MAG1"] = min(session.data["MAG1"], 6)
+
+
+def action(self, event: Event):
     """
-    双倍停牌
+    装弹|开枪|闪避|闪避开枪|预判开枪
     """
-    return
+    user_id = event.user_id
+    session = self.session
+    if msg := session.shot_check(user_id):
+        return None if msg == " " else msg
+
+    card = event.raw_command
+    if user_id == session.p1_uid:
+        if card == "装弹":
+
+        elif card in {"开枪", "闪枪", "预判开枪"}:
+            if self.MAG1 < 1:
+                return f"行动失败。你的子弹不足"
+            self.MAG1 -= 1
+        self.first = card
+        session.nextround()
+        return f"{session.p1_nickname}已行动，现在是{session.p2_nickname}的回合。"
+    else:
+        if card == "装弹":
+            self.MAG2 += 1
+            self.MAG2 = min(self.MAG2, 6)
+        elif card in {"开枪", "闪枪", "预判开枪"}:
+            if self.MAG2 < 1:
+                return f"行动失败。你的子弹不足"
+            self.MAG2 -= 1
+        session.nextround()
+        msg = f"双方行动 {self.first} - {card}\n"
+        msg += f"剩余子弹 {self.MAG1} - {self.MAG2}\n"
+        if (
+            self.first == "开枪"
+            and card in {"装弹", "预判开枪"}
+            or self.first == "闪枪"
+            and card in {"装弹", "开枪"}
+            or self.first == "预判开枪"
+            and card in {"闪避", "闪枪"}
+        ):
+            session.win = session.p1_uid
+            msg += f"{session.p1_nickname}赢得了对决"
+        elif (
+            card == "开枪"
+            and self.first in {"装弹", "预判开枪"}
+            or card == "闪枪"
+            and self.first in {"装弹", "开枪"}
+            or card == "预判开枪"
+            and self.first in {"闪避", "闪枪"}
+        ):
+            session.win = session.p2_uid
+            msg += f"{session.p2_nickname}赢得了对决"
+        else:
+            self.first = None
+            msg += f"本轮平局。请{session.p1_nickname}开始行动！"
+            return msg
+        self.end(msg)
