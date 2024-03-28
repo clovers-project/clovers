@@ -617,7 +617,7 @@ async def _(session: Session, arg: str):
         tip = f"\n本场下注：{n}{prop.name}/轮"
     else:
         tip = ""
-    return f"唰唰~，随机牌堆已生成，{tip}\n{session.create_info()}"
+    return f"唰唰~，随机牌堆已生成。{tip}\n{session.create_info()}"
 
 
 def blackjack_pt(hand: list[tuple[int, int]]) -> int:
@@ -718,76 +718,139 @@ async def _(session: Session, arg: str):
         tip = f"\n本场下注：{n}{prop.name}/轮"
     else:
         tip = ""
-    return f"唰唰~，随机牌堆已生成，{tip}\n{session.create_info()}"
+    return f"西部对战场地已创建。{tip}\n{session.create_info()}"
 
 
-@plugin.handle({"装弹"}, {"user_id", "group_id"})
+@plugin.handle({"装弹"}, {"user_id", "group_id", "send_group_message"})
 @westernduel.action(place)
 async def _(event: Event, session: Session):
     if event.user_id == session.p1_uid:
+        if not event.is_private():
+            return "请私信发送指令。"
         session.data["MAG1"] += 1
         session.data["MAG1"] = min(session.data["MAG1"], 6)
         session.data["card"] = "装弹"
+        await event.send_group_message(
+            session.group_id,
+            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+        )
+        result = "行动完毕"
     else:
-        if session.data["card"] in {"开枪", "闪避开枪"}:
-            return 
-        session.data["MAG1"] += 1
-        session.data["MAG1"] = min(session.data["MAG1"], 6)
-
-
-def action(self, event: Event):
-    """
-    装弹|开枪|闪避|闪避开枪|预判开枪
-    """
-    user_id = event.user_id
-    session = self.session
-    if msg := session.shot_check(user_id):
-        return None if msg == " " else msg
-
-    card = event.raw_command
-    if user_id == session.p1_uid:
-        if card == "装弹":
-
-        elif card in {"开枪", "闪枪", "预判开枪"}:
-            if self.MAG1 < 1:
-                return f"行动失败。你的子弹不足"
-            self.MAG1 -= 1
-        self.first = card
-        session.nextround()
-        return f"{session.p1_nickname}已行动，现在是{session.p2_nickname}的回合。"
-    else:
-        if card == "装弹":
-            self.MAG2 += 1
-            self.MAG2 = min(self.MAG2, 6)
-        elif card in {"开枪", "闪枪", "预判开枪"}:
-            if self.MAG2 < 1:
-                return f"行动失败。你的子弹不足"
-            self.MAG2 -= 1
-        session.nextround()
-        msg = f"双方行动 {self.first} - {card}\n"
-        msg += f"剩余子弹 {self.MAG1} - {self.MAG2}\n"
-        if (
-            self.first == "开枪"
-            and card in {"装弹", "预判开枪"}
-            or self.first == "闪枪"
-            and card in {"装弹", "开枪"}
-            or self.first == "预判开枪"
-            and card in {"闪避", "闪枪"}
-        ):
+        card = session.data["card"]
+        result = f"双方行动: {card} - 装弹"
+        if card in {"开枪", "闪枪"}:
             session.win = session.p1_uid
-            msg += f"{session.p1_nickname}赢得了对决"
-        elif (
-            card == "开枪"
-            and self.first in {"装弹", "预判开枪"}
-            or card == "闪枪"
-            and self.first in {"装弹", "开枪"}
-            or card == "预判开枪"
-            and self.first in {"闪避", "闪枪"}
-        ):
+            return session.end(result)
+        session.data["MAG2"] += 1
+        session.data["MAG2"] = min(session.data["MAG2"], 6)
+        return result + "\n本轮平局。"
+
+
+@plugin.handle({"开枪"}, {"user_id", "group_id", "send_group_message"})
+@westernduel.action(place)
+async def _(event: Event, session: Session):
+    if event.user_id == session.p1_uid:
+        if not event.is_private():
+            return "请私信发送指令。"
+        if session.data["MAG1"] < 1:
+            return "行动失败。你的子弹不足"
+        session.data["MAG1"] -= 1
+        await event.send_group_message(
+            session.group_id,
+            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+        )
+        return "行动完毕"
+    else:
+        if session.data["MAG2"] < 1:
+            return "行动失败。你的子弹不足"
+        card = session.data["card"]
+        result = f"双方行动: {card} - 开枪"
+        if card == "闪枪":
+            session.win = session.p1_uid
+            return session.end(result)
+        if card in {"装弹", "预判开枪"}:
             session.win = session.p2_uid
-            msg += f"{session.p2_nickname}赢得了对决"
-        else:
-            self.first = None
-            msg += f"本轮平局。请{session.p1_nickname}开始行动！"
-            return msg
-        self.end(msg)
+            return session.end(result)
+        session.data["MAG2"] -= 1
+        return result + "\n本轮平局。"
+
+
+@plugin.handle({"闪避"}, {"user_id", "group_id", "send_group_message"})
+@westernduel.action(place)
+async def _(event: Event, session: Session):
+    if event.user_id == session.p1_uid:
+        if not event.is_private():
+            return "请私信发送指令。"
+        await event.send_group_message(
+            session.group_id,
+            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+        )
+        return "行动完毕"
+    else:
+        card = session.data["card"]
+        result = f"双方行动: {card} - 闪避"
+        if card == "预判开枪":
+            session.win = session.p1_uid
+            return session.end(result)
+    return result + "\n本轮平局。"
+
+
+@plugin.handle({"闪枪"}, {"user_id", "group_id", "send_group_message"})
+@westernduel.action(place)
+async def _(event: Event, session: Session):
+    if event.user_id == session.p1_uid:
+        if not event.is_private():
+            return "请私信发送指令。"
+        if session.data["MAG1"] < 1:
+            return "行动失败。你的子弹不足"
+        session.data["MAG1"] -= 1
+        await event.send_group_message(
+            session.group_id,
+            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+        )
+        return "行动完毕"
+    else:
+        if session.data["MAG2"] < 1:
+            return "行动失败。你的子弹不足"
+        session.data["MAG2"] -= 1
+        card = session.data["card"]
+        result = f"双方行动: {card} - 开枪"
+        if card == "预判开枪":
+            session.win = session.p1_uid
+            return session.end(result)
+        if card in {"装弹", "开枪"}:
+            session.win = session.p2_uid
+            return session.end(result)
+        return result + "\n本轮平局。"
+
+
+@plugin.handle({"预判开枪"}, {"user_id", "group_id", "send_group_message"})
+@westernduel.action(place)
+async def _(event: Event, session: Session):
+    if event.user_id == session.p1_uid:
+        if not event.is_private():
+            return "请私信发送指令。"
+        if session.data["MAG1"] < 1:
+            return "行动失败。你的子弹不足"
+        session.data["MAG1"] -= 1
+        await event.send_group_message(
+            session.group_id,
+            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+        )
+        return "行动完毕"
+    else:
+        if session.data["MAG2"] < 1:
+            return "行动失败。你的子弹不足"
+        session.data["MAG2"] -= 1
+        card = session.data["card"]
+        result = f"双方行动: {card} - 开枪"
+        if card == "预判开枪":
+            session.win = session.p1_uid
+            return session.end(result)
+        if card in {"闪避", "闪枪"}:
+            session.win = session.p2_uid
+            return session.end(result)
+        if card == "开枪":
+            session.win = session.p1_uid
+            return session.end(result)
+        return result + "\n本轮平局。"

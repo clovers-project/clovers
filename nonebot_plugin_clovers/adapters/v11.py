@@ -96,4 +96,8 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
     async def _(event: MessageEvent) -> list[str]:
         return [str(msg.data["qq"]) for msg in event.message if msg.type == "at"]
 
+    @method.kwarg("send_group_message")
+    async def _(bot: Bot, event: MessageEvent):
+        return [str(msg.data["qq"]) for msg in event.message if msg.type == "at"]
+
     return method

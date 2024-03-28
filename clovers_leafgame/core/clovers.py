@@ -93,6 +93,12 @@ class Event:
         if args := self.args:
             return args[0]
 
+    async def send_group_message(self, group_id: str, message):
+        func = self.event.kwargs.get("send_group_message")
+        if not func:
+            return
+        await func(group_id=group_id, message=message)
+
 
 class Check:
     checker: list[Callable[[Event], bool]]
