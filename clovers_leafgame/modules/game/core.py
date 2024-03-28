@@ -59,7 +59,9 @@ class Session:
         self.next = self.p1_uid if self.next == self.p2_uid else self.p2_uid
 
     def double_bet(self):
-        self
+        if self.bet:
+            prop, n = self.bet
+            n += self.data["bet"]
 
     def delay(self, t: float = 0):
         self.time = time.time() + t
