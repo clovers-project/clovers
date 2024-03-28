@@ -58,6 +58,9 @@ class Session:
         self.round += 1
         self.next = self.p1_uid if self.next == self.p2_uid else self.p2_uid
 
+    def double_bet(self):
+        self
+
     def delay(self, t: float = 0):
         self.time = time.time() + t
 
