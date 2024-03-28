@@ -2,7 +2,7 @@ import sys
 
 sys.path.append(r"D:\GIT\clovers_core")
 from io import BytesIO
-from collections.abc import Callable, AsyncGenerator
+from collections.abc import Callable, Coroutine, AsyncGenerator
 from clovers_core.adapter import AdapterMethod
 from clovers_core.plugin import Result
 from nonebot.matcher import Matcher
@@ -22,17 +22,17 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
     method = AdapterMethod()
 
     @method.send("text")
-    async def _(message: str):
+    async def _(message: str, send: Callable[..., Coroutine] = main.send):
         """发送纯文本"""
-        await main.send(message)
+        await send(message)
 
     @method.send("image")
-    async def _(message: BytesIO):
+    async def _(message: BytesIO, send: Callable[..., Coroutine] = main.send):
         """发送图片"""
-        await main.send(MessageSegment.image(message))
+        await send(MessageSegment.image(message))
 
     @method.send("list")
-    async def _(message: list[Result]):
+    async def _(message: list[Result], send: Callable[..., Coroutine] = main.send):
         """发送图片文本混合信息"""
         msg = Message()
         for seg in message:
@@ -40,13 +40,13 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
                 msg += seg.data
             elif seg.send_method == "image":
                 msg += MessageSegment.image(seg.data)
-        await main.send(msg)
+        await send(msg)
 
     @method.send("segmented")
-    async def _(message: AsyncGenerator[Result, None]):
+    async def _(message: AsyncGenerator[Result, None], send: Callable[..., Coroutine] = main.send):
         """发送分段信息"""
         async for seg in message:
-            await method.send_dict[seg.send_method](seg.data)
+            await method.send_dict[seg.send_method](seg.data, send)
 
     @method.kwarg("user_id")
     async def _(event: MessageEvent):
@@ -97,7 +97,11 @@ def initializer(main: type[Matcher]) -> AdapterMethod:
         return [str(msg.data["qq"]) for msg in event.message if msg.type == "at"]
 
     @method.kwarg("send_group_message")
-    async def _(bot: Bot, event: MessageEvent):
-        return [str(msg.data["qq"]) for msg in event.message if msg.type == "at"]
+    async def _(bot: Bot) -> Callable[[int, Result], Coroutine]:
+        async def send_group_message(group_id: int, result: Result):
+            send = lambda message: bot.send_group_msg(group_id=group_id, message=message)
+            await method.send_dict[result.send_method](result.data, send)
+
+        return send_group_message
 
     return method

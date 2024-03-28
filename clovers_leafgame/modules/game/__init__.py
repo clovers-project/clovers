@@ -729,7 +729,6 @@ def western_duel_action(event: Event, session: Session, card: str):
         session.data["card"] = card
         return "MAG1", "行动完毕"
     else:
-        session.data["card"] = None
         return "MAG2", f"双方行动: {session.data['card']} - {card}"
 
 
@@ -743,10 +742,10 @@ async def _(event: Event, session: Session):
     session.data[MAG] += 1
     session.data[MAG] = min(session.data["MAG2"], 6)
     card = session.data["card"]
-    if not card:
+    if event.user_id == session.p1_uid:
         await event.send_group_message(
             session.group_id,
-            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+            plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
         )
         return tip
     if card in {"开枪", "闪枪"}:
@@ -766,10 +765,10 @@ async def _(event: Event, session: Session):
     session.nextround()
     session.data[MAG] -= 1
     card = session.data["card"]
-    if not card:
+    if event.user_id == session.p1_uid:
         await event.send_group_message(
             session.group_id,
-            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+            plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
         )
         return tip
     if card == "闪枪":
@@ -789,10 +788,10 @@ async def _(event: Event, session: Session):
         return tip
     session.nextround()
     card = session.data["card"]
-    if not card:
+    if event.user_id == session.p1_uid:
         await event.send_group_message(
             session.group_id,
-            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+            plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
         )
         return tip
     if card == "预判开枪":
@@ -812,10 +811,10 @@ async def _(event: Event, session: Session):
     session.nextround()
     session.data[MAG] -= 1
     card = session.data["card"]
-    if not card:
+    if event.user_id == session.p1_uid:
         await event.send_group_message(
             session.group_id,
-            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+            plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
         )
         return tip
     if card == "预判开枪":
@@ -841,7 +840,7 @@ async def _(event: Event, session: Session):
     if not card:
         await event.send_group_message(
             session.group_id,
-            message=plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
+            plugin.build_result(f"{session.p1_nickname}已行动，请{session.p2_nickname}开始行动。"),
         )
         return tip
     if card == "开枪":
