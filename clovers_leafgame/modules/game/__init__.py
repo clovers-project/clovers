@@ -852,11 +852,14 @@ async def _(event: Event, session: Session):
     return tip + "\n本轮平局。"
 
 
-from .HorseRace.start import load_dlcs
-from .HorseRace.race_group import race_group
+from .horse_race.start import load_dlcs
+from .horse_race.race_group import race_group
 
-@plugin.handle({"赛马创建"}, {"user_id", "group_id", "at"})
-@western_duel.create(place)
+horse_race = Game("赛马", "加入赛马")
+
+
+@plugin.handle({"赛马创建"}, {"user_id", "group_id"})
+@horse_race.create(place)
 async def _(session: Session, arg: str):
     session.data["MAG1"] = 1
     session.data["MAG2"] = 1
@@ -867,6 +870,7 @@ async def _(session: Session, arg: str):
     else:
         tip = ""
     return f"西部对战场地已创建。{tip}\n{session.create_info()}"
+
 
 class HorseRace:
     """
