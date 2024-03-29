@@ -97,7 +97,10 @@ class Event:
         func = self.event.kwargs.get("send_group_message")
         if not func:
             return
-        await func(group_id=group_id, result=result)
+        try:
+            await func(group_id=group_id, result=result)
+        except Exception as e:
+            print(e)
 
 
 class Check:

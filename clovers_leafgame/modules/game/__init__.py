@@ -850,3 +850,145 @@ async def _(event: Event, session: Session):
         session.win = session.p2_uid
         return session.end(tip)
     return tip + "\n本轮平局。"
+
+
+from .HorseRace.start import load_dlcs
+from .HorseRace.race_group import race_group
+
+@plugin.handle({"赛马创建"}, {"user_id", "group_id", "at"})
+@western_duel.create(place)
+async def _(session: Session, arg: str):
+    session.data["MAG1"] = 1
+    session.data["MAG2"] = 1
+    session.data["card"] = None
+    if session.bet:
+        prop, n = session.bet
+        tip = f"\n本场下注：{n}{prop.name}/轮"
+    else:
+        tip = ""
+    return f"西部对战场地已创建。{tip}\n{session.create_info()}"
+
+class HorseRace:
+    """
+    赛马小游戏
+    """
+
+    name: str = "HorseRace"
+    events_list = load_dlcs()
+
+    def __init__(self, kwargs):
+        super().__init__(kwargs)
+        self.world = RaceWorld()
+
+    def join(self, event: Event) -> Result:
+        """
+        赛马加入
+        """
+        if self.name != "HorseRace":
+            return "其他游戏进行中。"
+        session = self.session
+        user, group_account = Manager.locate_user(event)
+        user_id = user.user_id
+        if (gold := group_account.gold) < session.gold:
+            return f"报名赛马需要{self.session.gold}金币，你的金币：{gold}。"
+        race = self.world
+        if race.start != 0:
+            return
+        if (query_of_player := race.query_of_player()) >= max_player:
+            return "加入失败！赛马场就那么大，满了满了！"
+        if race.is_player_in(user_id) == True:
+            return "加入失败！您已经加入了赛马场!"
+        horsename = event.single_arg("")
+        if not horsename:
+            return "请输入你的马儿名字"
+        horsename = horsename[:2] + "酱" if len(horsename) > 7 else horsename
+        race.add_player(horsename, user_id, group_account.nickname)
+        return f"{event.nickname}\n" "> 加入赛马成功\n" "> 赌上马儿性命的一战即将开始!\n" f"> 赛马场位置:{query_of_player + 1}/{max_player}"
+
+    def run(self):
+        """
+        赛马开始
+        """
+        events_list = self.events_list
+        race = self.world
+        if (player_count := race.query_of_player()) == 0:
+            return
+        if race.start == 1:
+            return
+        if race.start == 0 or race.start == 2:
+            if player_count >= min_player:
+                race.start = 1
+            else:
+                return f"开始失败！赛马开局需要最少{min_player}人参与"
+
+        session = self.session
+        group_id = session.group_id
+        session.time = time.time() + 180
+        empty_race = ["[  ]" for _ in range(max_player - player_count)]
+
+        async def result():
+            yield f"> 比赛开始\n> 当前奖金：{session.gold * player_count}金币" if session.gold else "比赛开始！"
+            await asyncio.sleep(1)
+            while race.start == 1:
+                # 回合数+1
+                race.round_add()
+                # 移除超时buff
+                race.del_buff_overtime()
+                # 马儿全名计算
+                race.fullname()
+                # 回合事件计算
+                text = race.event_start(events_list)
+                # 马儿移动
+                race.move()
+                # 场地显示
+                output = linecard_to_png("\n".join(race.display() + empty_race), font_size=30)
+                yield [text, output]
+                await asyncio.sleep(0.5 + int(0.06 * len(text)))
+                # 全员失败计算
+                if race.is_die_all():
+                    for x in race.player:
+                        user_id = x.playeruid
+                        if user_id in Manager.user_data:
+                            user, group_accounts = Manager.locate_user_at(user_id, group_id)
+                            user.gold -= session.gold
+                            group_accounts.gold -= session.gold
+                    del current_games[group_id]
+                    yield "比赛已结束，鉴定为无马生还"
+                    return
+
+                # 全员胜利计算
+                winer = race.is_win_all()
+                winer_list = "\n"
+                if winer != []:
+                    yield f"> 比赛结束\n> {bot_name}正在为您生成战报..."
+                    await asyncio.sleep(1)
+                    gold = int(session.gold * player_count / len(winer))
+                    for x in race.player:
+                        user_id = x.playeruid
+                        if user_id in Manager.user_data:
+                            user, group_accounts = Manager.locate_user_at(user_id, group_id)
+                            user.gold -= session.gold
+                            group_accounts.gold -= session.gold
+                    for user_name, user_id in winer:
+                        winer_list += f"> {user_name}\n"
+                        if user_id in Manager.user_data:
+                            user, group_accounts = Manager.locate_user_at(user_id, group_id)
+                            user.gold += gold
+                            group_accounts.gold += gold
+                    del current_games[group_id]
+                    yield f"> 比赛已结束，胜者为：{winer_list}" + (f"> 本次奖金：{gold} 金币" if gold else "> 祝贺！")
+                    return
+                await asyncio.sleep(1)
+
+        return result
+
+    def start_tips(self, msg):
+        """
+        发起游戏：赛马
+        """
+        return (
+            f"{msg}\n"
+            "> 创建赛马比赛成功！\n"
+            + (f"> 本场金额：{self.session.gold}金币\n" if self.session.gold else "")
+            + "> 输入 【赛马加入 名字】 即可加入赛马。"
+        )
