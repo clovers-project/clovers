@@ -1,7 +1,7 @@
 import random
 import asyncio
 from clovers_leafgame.main import plugin, manager
-from clovers_leafgame.core.clovers import Event
+from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
 from .tools import random_poker, poker_suit, poker_point, poker_show
@@ -850,3 +850,50 @@ async def _(event: Event, session: Session):
         session.win = session.p2_uid
         return session.end(tip)
     return tip + "\n本轮平局。"
+
+
+horse_race = Game("赛马小游戏", "赛马加入 名字")
+
+from .horse_race.start import load_dlcs
+from .horse_race.race_group import race_group as RaceWorld
+
+
+@plugin.handle({"赛马创建"}, {"user_id", "group_id", "at"})
+@horse_race.create(place)
+async def _(session: Session, arg: str):
+    session.at = session.p1_uid
+    if session.bet:
+        prop, n = session.bet
+        tip = f"\n> 本场下注：{n}{prop.name}"
+    else:
+        tip = ""
+    session.data["world"] = RaceWorld()
+    return f"> 创建赛马比赛成功！{tip},\n> 输入 【赛马加入 名字】 即可加入赛马。"
+
+
+max_player = config.max_player
+
+
+@plugin.handle({"赛马加入"}, {"user_id", "group_id"})
+async def _(event: Event):
+    user_id = event.user_id
+    if not (session := horse_race.place_check(place, event.group_id)):
+        return
+    user, account = manager.account(event)
+    if session.bet:
+        prop, n = session.bet
+        if account.bank[prop.id] < n:
+            return f"报名赛马需要{n}个{prop.name}（你持有的的数量{account.bank[prop.id]}）"
+    world: RaceWorld = session.data["world"]
+    if world.start != 0:
+        return
+    if (query_of_player := world.query_of_player()) >= max_player:
+        return "加入失败！赛马场就那么大，满了满了！"
+    if world.is_player_in(user_id) == True:
+        return "加入失败！您已经加入了赛马场!"
+    horsename = event.single_arg()
+    if not horsename:
+        return "请输入你的马儿名字"
+    horsename = horsename[:1] + "酱" if len(horsename) >= 7 else horsename
+    world.add_player(horsename, user_id, account.name)
+    return f"{event.nickname}\n> 加入赛马成功\n> 赌上马儿性命的一战即将开始!\n> 赛马场位置:{query_of_player + 1}/{max_player}"
