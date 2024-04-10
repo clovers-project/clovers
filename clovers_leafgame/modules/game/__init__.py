@@ -857,6 +857,8 @@ horse_race = Game("赛马小游戏", "赛马加入 名字")
 from .horse_race.start import load_dlcs
 from .horse_race.race_group import race_group as RaceWorld
 
+max_player = config.max_player
+
 
 @plugin.handle({"赛马创建"}, {"user_id", "group_id", "at"})
 @horse_race.create(place)
@@ -869,9 +871,6 @@ async def _(session: Session, arg: str):
         tip = ""
     session.data["world"] = RaceWorld()
     return f"> 创建赛马比赛成功！{tip},\n> 输入 【赛马加入 名字】 即可加入赛马。"
-
-
-max_player = config.max_player
 
 
 @plugin.handle({"赛马加入"}, {"user_id", "group_id"})
