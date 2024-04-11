@@ -1,19 +1,4 @@
 ﻿from pathlib import Path
-<<<<<<< HEAD
-from nonebot.log import logger
-try:
-    import ujson as json
-except ModuleNotFoundError:
-    import json
-from ..data import resourcefile
-
-
-def load_dlcs():
-    events_list = []
-    files = Path(resourcefile / "horserace").iterdir()
-    for x in files:
-        log = f"加载事件文件：{x.name}......"
-=======
 import json
 
 
@@ -23,21 +8,10 @@ def load_dlcs(resource: Path = Path(__file__).parent / "resource"):
     for x in files:
         log = f"加载事件文件：{x.name}"
         print(log, end="......")
->>>>>>> b29862db8c37c24cb2b94c8ff8cf821e6fdbab9e
         try:
             with open(x, "r", encoding="utf-8") as f:
                 events = deal_events(json.load(f))
                 events_list.extend(events)
-<<<<<<< HEAD
-            logger.info(log + "成功!")
-        except Exception as e:
-            logger.info(log + "失败：" + e)
-    return events_list
-
-def deal_events(events):
-    events_out = []
-    for i in range(0,len(events)):
-=======
             print("成功!")
         except Exception as e:
             print(f"失败：{e}")
@@ -47,16 +21,12 @@ def deal_events(events):
 def deal_events(events):
     events_out = []
     for i in range(0, len(events)):
->>>>>>> b29862db8c37c24cb2b94c8ff8cf821e6fdbab9e
         event_i = deal(events[i])
         if event_i != {}:
             events_out.append(event_i)
     return events_out
 
-<<<<<<< HEAD
-=======
 
->>>>>>> b29862db8c37c24cb2b94c8ff8cf821e6fdbab9e
 def deal(event):
     event_out = {}
     # 读取事件限定值

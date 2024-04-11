@@ -2,13 +2,13 @@
 import random
 import math
 
-from .horse import horse
+from .horse import Horse
 from .events_main import event_main
 
 
 class race_group:
-    def __init__(self, setting_track_length: int, event_rate: int):
-        self.player: List[horse] = []
+    def __init__(self):
+        self.player: List[Horse] = []
         self.round = 0
         self.start = 0  # start指示器：0为马儿进场未开始，1为开始，2为暂停（测试用）
         self.race_only_keys = []
@@ -17,7 +17,7 @@ class race_group:
         """
         增加赛马位
         """
-        self.player.append(horse(horsename, uid, id, location, round))
+        self.player.append(Horse(horsename, uid, id, location, round))
 
     def query_of_player(self):
         """

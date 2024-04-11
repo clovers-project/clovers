@@ -852,21 +852,18 @@ async def _(event: Event, session: Session):
     return tip + "\n本轮平局。"
 
 
-horse_race = Game("赛马小游戏", "赛马加入 名字")
+from .horse_race import RaceWorld
 
-from .horse_race.start import load_dlcs
-from .horse_race.race_group import race_group as RaceWorld
-
-max_player = config.max_player
+horse_race_game = Game("赛马小游戏", "赛马加入 名字")
 
 
 @plugin.handle({"赛马创建"}, {"user_id", "group_id", "at"})
-@horse_race.create(place)
+@horse_race_game.create(place)
 async def _(session: Session, arg: str):
     session.at = session.p1_uid
     if session.bet:
         prop, n = session.bet
-        tip = f"\n> 本场下注：{n}{prop.name}"
+        tip = f"\n> 本场奖金：{n}{prop.name}"
     else:
         tip = ""
     session.data["world"] = RaceWorld()
@@ -875,8 +872,9 @@ async def _(session: Session, arg: str):
 
 @plugin.handle({"赛马加入"}, {"user_id", "group_id"})
 async def _(event: Event):
-    user_id = event.user_id
-    if not (session := horse_race.place_check(place, event.group_id)):
+    if not (session := horse_race_game.session_check(place, event.group_id)):
+        return
+    if session.game.name != horse_race_game.name:
         return
     user, account = manager.account(event)
     if session.bet:
@@ -884,15 +882,76 @@ async def _(event: Event):
         if account.bank[prop.id] < n:
             return f"报名赛马需要{n}个{prop.name}（你持有的的数量{account.bank[prop.id]}）"
     world: RaceWorld = session.data["world"]
-    if world.start != 0:
-        return
-    if (query_of_player := world.query_of_player()) >= max_player:
-        return "加入失败！赛马场就那么大，满了满了！"
-    if world.is_player_in(user_id) == True:
-        return "加入失败！您已经加入了赛马场!"
     horsename = event.single_arg()
     if not horsename:
         return "请输入你的马儿名字"
-    horsename = horsename[:1] + "酱" if len(horsename) >= 7 else horsename
-    world.add_player(horsename, user_id, account.name)
-    return f"{event.nickname}\n> 加入赛马成功\n> 赌上马儿性命的一战即将开始!\n> 赛马场位置:{query_of_player + 1}/{max_player}"
+    return world.join_horse(horsename, account.user_id, account.name)
+
+
+@plugin.handle({"赛马开始"}, {"user_id", "group_id"})
+async def _(event: Event):
+    group_id = event.group_id
+    if not (session := horse_race_game.session_check(place, group_id)):
+        return
+    if session.game.name != horse_race_game.name:
+        return
+    world: RaceWorld = session.data["world"]
+    if world.status == 1:
+        return
+    player_count = len(world.racetrack)
+    if player_count < world.min_player_numbers:
+        return f"开始失败！赛马开局需要最少{world.min_player_numbers}人参与"
+    world.status = 1
+
+    async def result():
+        if session.bet:
+            prop, n = session.bet
+            tip = f"\n> 当前奖金：{n}{prop.name}"
+        else:
+            tip = ""
+        yield f"> 比赛开始！{tip}"
+        empty_race = ["[  ]" for _ in range(world.max_player_numbers - player_count)]
+        await asyncio.sleep(1)
+        while world.status == 1:
+            round_info = world.nextround()
+            racetrack = [horse.display() for horse in world.racetrack]
+            output = text_to_image("\n".join(racetrack + empty_race), font_size=30, width=0)
+            yield [round_info, output]
+            await asyncio.sleep(0.5 + int(0.06 * len(round_info)))
+            # 全员失败计算
+            if race.is_die_all():
+                for x in race.player:
+                    user_id = x.playeruid
+                    if user_id in Manager.user_data:
+                        user, group_accounts = Manager.locate_user_at(user_id, group_id)
+                        user.gold -= session.gold
+                        group_accounts.gold -= session.gold
+                del current_games[group_id]
+                yield "比赛已结束，鉴定为无马生还"
+                return
+
+            # 全员胜利计算
+            winer = race.is_win_all()
+            winer_list = "\n"
+            if winer != []:
+                yield f"> 比赛结束\n> {bot_name}正在为您生成战报..."
+                await asyncio.sleep(1)
+                gold = int(session.gold * player_count / len(winer))
+                for x in race.player:
+                    user_id = x.playeruid
+                    if user_id in Manager.user_data:
+                        user, group_accounts = Manager.locate_user_at(user_id, group_id)
+                        user.gold -= session.gold
+                        group_accounts.gold -= session.gold
+                for user_name, user_id in winer:
+                    winer_list += f"> {user_name}\n"
+                    if user_id in Manager.user_data:
+                        user, group_accounts = Manager.locate_user_at(user_id, group_id)
+                        user.gold += gold
+                        group_accounts.gold += gold
+                del current_games[group_id]
+                yield f"> 比赛已结束，胜者为：{winer_list}" + (f"> 本次奖金：{gold} 金币" if gold else "> 祝贺！")
+                return
+            await asyncio.sleep(1)
+
+    return result
