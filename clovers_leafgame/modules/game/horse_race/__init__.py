@@ -1,35 +1,32 @@
 import random
 import math
 from collections.abc import Callable
-from .horse import Horse, Event
+from .horse import Horse, Event, Event_list
 from clovers_core.config import config as clovers_config
 from .config import Config
 
-config = Config.parse_obj(clovers_config.get(__package__, {}))
-
-min_player_numbers, max_player_numbers = config.range_of_player_numbers
-track_length = config.setting_track_length
-random_move_min,random_move_max = config.random_move_range
-random_move_range = int(random_move_min*track_length),int(random_move_max*track_length)
+config_data = Config.parse_obj(clovers_config.get(__package__, {}))
 
 
 class RaceWorld:
     def __init__(self):
         self.racetrack: list[Horse] = []
         """赛马场跑道"""
-        self.track_length = track_length
+        self.track_length = config_data.setting_track_length
         """跑道长度"""
-        self.min_player_numbers: int = min_player_numbers
-        """最少玩家数"""
-        self.max_player_numbers: int = max_player_numbers
-        """最多玩家数"""
+        random_move_min, random_move_max = config_data.random_move_range
+        self.random_move_range = int(random_move_min * self.track_length), int(random_move_max * self.track_length)
+        """随机事件跳转范围"""
+        self.min_player_numbers, self.max_player_numbers = config_data.range_of_player_numbers
+        """赛马场容量"""
         self.status: int = 0
         """状态指示器：0为马儿进场未开始，1为开始，2为暂停（测试用）"""
         self.round: int = 0
 
         self.only_keys = set()
         """唯一事件记录"""
-        self.events_list = []
+        self.event_list: list[Event] = []
+        self.event_randvalue = config_data.event_randvalue
 
     def join_horse(self, horse_name: str, user_id: str, user_name: str, location=0, round=0):
         """
@@ -109,93 +106,78 @@ class RaceWorld:
         print(f"执行事件: {event_name}")
         print(f"<0>为：{target_name_0}，<1>为：{target_name_1}")
         # 读取 describe 事件描述
-        describe = [event.describe.replace("<0>", target_name_0).replace("<1>", target_name_1)]
+        describe: list[str | None] = [event.describe.replace("<0>", target_name_0).replace("<1>", target_name_1)]
 
-        def action(targets:list[Horse],callback:Callable[...,None],*args):
+        def action(targets: list[Horse], callback: Callable[..., None], *args):
             for horse in targets:
-                callback(horse,*args)
+                callback(horse, *args)
 
         """===============以下为一次性事件==============="""
         if event.live == 1:
-            action(targets,lambda horse:horse.del_buff("die"))
+            action(targets, lambda horse: horse.del_buff("die"))
         if event.move:
-            action(targets,lambda horse,move:horse.location_move_event(move),event.move)
+            action(targets, lambda horse, move: horse.location_move_event(move), event.move)
         if not event.track_to_location is None:
-            action(targets,lambda horse,move_to:horse.location_move_to_event(move_to),event.track_to_location)
+            action(targets, lambda horse, move_to: horse.location_move_to_event(move_to), event.track_to_location)
         if event.track_random_location == 1:
-            action(targets,lambda horse:horse.location_move_to_event(random.randint(*random_move_range),event.track_to_location))
+            action(
+                targets,
+                lambda horse, random_move_range: horse.location_move_to_event(random.randint(*random_move_range), self.random_move_range),
+            )
         if event.buff_time_add:
-            action(targets,lambda horse,time_add:horse.buff_addtime(time_add),event.buff_time_add)
+            action(targets, lambda horse, time_add: horse.buff_addtime(time_add), event.buff_time_add)
         if event.del_buff:
-            action(targets,lambda horse,del_buff:horse.del_buff(del_buff),event.del_buff)
-        if event.track_exchange_location == 1 and target in {1,6}:
+            action(targets, lambda horse, del_buff: horse.del_buff(del_buff), event.del_buff)
+        if event.track_exchange_location == 1 and target in {1, 6}:
             # 马儿互换位置
             target = targets[0]
-            location =    target.location,horse.location   
+            location = target.location, horse.location
             horse.location_move_to_event(location[0])
             target.location_move_to_event(location[1])
-        if random_event_once:=event.random_event_once:
-            def action_once_event(horse:Horse,event_list:list[Event],log_pad:list[str]):
-                for event in event_list:
-                    
-
-
-            action(targets,lambda horse,event_once:horse.del_buff(del_buff),event.del_buff)
-
-
-        # 一次性随机事件
-        if event["random_event_once"] != []:
-            random_event_once = event["random_event_once"]
-            random_event_once_num = len(random_event_once)
-            for i in targets:
-                for j in range(0, random_event_once_num):
-                    random_event_once_rate = random.randint(0, random_event_once[random_event_once_num - 1][0])
-                    if random_event_once_rate <= random_event_once[j][0]:
-                        event_once = random_event_once[j][1]
-                        break
-                describe += event_main(race, i, event_once, 1)
-        # ===============以下为永久事件===============
-        # buff_tag，死亡：为1则目标死亡，此参数生成的buff默认持续999回合
-        # buff_tag：die的自定义名称，不填为“死亡”
-        if event["die"] == 1:
-            event_die(race, targets, event["die_name"])
-        # buff_tag，离开：为1则目标离开，此参数生成的buff默认持续999回合
-        # buff_tag：away的自定义名称，不填为“离开”
-        if event["away"] == 1:
-            event_away(race, targets, event["away_name"])
+        if random_event_once := event.random_event_once:
+            action(
+                targets,
+                lambda horse, event_list: describe.append(self.event_main(horse, self.roll_event(event_list), 1)),
+                random_event_once,
+            )
+        """===============以下为永久事件==============="""
+        if event.die == 1:
+            action(targets, lambda horse, die_name: horse.add_buff(die_name, {"die"}, 1, 9999), event.die_name)
+        if event.away == 1:
+            action(targets, lambda horse, away_name: horse.add_buff(away_name, {"away"}, 1, 9999), event.away_name)
         # ==============================连锁事件预留位置，暂时没做
+        # 连锁事件，以后大概也没了 ——karis
 
-        # ===============以下为buff事件===============
-        # "rounds": 0,                #buff持续回合数
-        # "name": "xxx",              #buff名称，turn值>0时为必要值
-        # "move_max": 0,              #该buff提供马儿每回合位移值区间的最大值（move_max若小于move_min，则move_max以move_min值为准）
-        # "move_min": 0,              #该buff提供马儿每回合位移值区间的最小值
-        # "locate_lock": 0,           #buff_tag，止步：若为1则目标无法移动
-        # "vertigo": 0,               #buff_tag，眩晕：若为1则目标无法移动，且不主动执行事件（暂定）
-        # "hiding": 0,                #buff_tag，隐身：不显示目标移动距离及位置
-        # "other_buff": ["buff1", "buff2", ....]
-        #                            #自定义buff_tag，仅标识用buff_tag填写处，也可以填入常规buff_tag并正常生效
-        # "random_event": [[概率值1, {事件}], [概率值2, {事件}], ......],
-        # 此为持续性随机事件，以buff形式存在，部分详见文末
-        if event["rounds"] > 0:
-            rounds = event["rounds"]
-            buffs = []
-            buff_name = event["name"]
-            move_max = event["move_max"]
-            move_min = event["move_min"]
-            if event["locate_lock"] == 1:
-                buffs.append("locate_lock")
-            if event["vertigo"] == 1:
-                buffs.append("locate_lock")
-                buffs.append("vertigo")
-            if event["hiding"] == 1:
-                buffs.append("hiding")
-            if event["other_buff"] != []:
-                buffs.extend(event["other_buff"])
-            event_in_buff = event["random_event"]
-            event_add_buff(race, targets, buff_name, rounds, buffs, move_min, move_max, event_in_buff)
-        # ===============以下为延迟事件===============
+        """===============以下为buff事件==============="""
+        if event.rounds:
+
+            def add_buff(
+                horse: Horse,
+                buff_name: str,
+                buffs: set[str],
+                round_start: int,
+                round_end: int,
+                move_min: int = 0,
+                move_max: int = 0,
+                event_in_buff: Event_list = [],
+            ):
+                horse.del_buff(buff_name)
+                horse.add_buff(buff_name, buffs, round_start, round_end, move_min, move_max, event_in_buff)
+
+            action(
+                targets,
+                lambda horse, *args: add_buff(horse, *args),
+                event.away_name,
+                event.buffs,
+                self.round + 1,
+                self.round + event.rounds,
+                event.move_min,
+                event.move_max,
+                event.random_event,
+            )
+        """===============以下为延迟事件==============="""
         # 延迟事件（以当前事件的targets为发起人的事件）：前者为多少回合后，需>1
+        delay_event = event.delay_event
         delay_event = event["delay_event"]
         if delay_event != []:
             event_delay_rounds = delay_event[0]
@@ -255,9 +237,18 @@ class RaceWorld:
                     replace_uid = race.player[targets[0]].playeruid
                 logger.info(f"替换事件{replace_name}, {str(replace_uid)}, {replace_id}")
                 race.player[targets[0]].replace_horse_ex(replace_name, replace_uid, replace_id)
-        return describe
-            logger.info(f"事件名 {event_name} 执行故障")
-            return f"事件名 {event_name} 执行故障"
+        return "\n".join(describe)
+
+    @staticmethod
+    def roll_event(event_list: Event_list) -> Event:
+        weights = []
+        events = []
+        before_randvalue = 0
+        for randvalue, event in event_list:
+            weights.append(randvalue - before_randvalue)
+            before_randvalue = randvalue
+            events.append(event)
+        return random.choices(events, weights, k=1)[0]
 
     def nextround(self):
         """
@@ -277,15 +268,12 @@ class RaceWorld:
                 event_log.append(self.event_main(horse, delay_event, 1))
             # buff随机事件触发
             for buff in horse.buff:
-                event_in_buff = buff.event_in_buff
-                event_in_buff_num = len(event_in_buff)
-                event_in_buff_rate = random.randint(0, event_in_buff[:-1][0])
-                for inner_buff in event_in_buff:
-                    if event_in_buff_rate < inner_buff[0]:
-                        event_log.append(self.event_main(horse, inner_buff[1], 1))
-                        break
+                buff_event = self.roll_event(buff.event_in_buff)
+                event_log.append(self.event_main(horse, buff_event, 1))
             # 随机事件判定
-            event_log.append(self.event_main(horse, random.choices(self.events_list), 1))
+            if random.randint(1, 1000) <= self.event_randvalue:
+                event = random.choice(self.event_list)
+                event_log.append(self.event_main(horse, event))
             # 马儿移动,包含死亡/离开/止步判定
             horse.location_move()
         return "\n".join(event_log)

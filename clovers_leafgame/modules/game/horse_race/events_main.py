@@ -261,14 +261,6 @@ def event_main(race, horse_i, event, event_delay_key=0):
 # ===============子函数区===============
 
 
-# 马儿互换位置
-def event_track_exchange_location(race, a, b):
-    x = race.player[a].location
-    race.player[a].location_move_to_event(race.player[b].location)
-    race.player[b].location_move_to_event(x)
-    logger.info(f"{race.player[a].horse} 和{race.player[b].horse}互换位置")
-
-
 # 死亡事件
 def event_die(race, targets, buff_name):
     for i in targets:

@@ -13,4 +13,4 @@ class Config(BaseModel):
     # 每回合基础移动力最大值
     base_move_max = 3
     # 事件概率 = event_rate / 1000
-    event_rate = 450
+    event_randvalue = 450

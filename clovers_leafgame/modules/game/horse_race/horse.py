@@ -1,6 +1,9 @@
 ﻿import random
 from pydantic import BaseModel
 
+Event_list = list[tuple[int, "Event"]]
+"""[[概率值1, {事件}], [概率值2, {事件}], ......]"""
+
 
 class Event(BaseModel):
     event_name: str = "未知事件"
@@ -39,18 +42,48 @@ class Event(BaseModel):
     """删除buff事件：下回合删除目标含特定buff_tag的所有buff"""
     track_exchange_location: int = 0
     """换位事件：值为1则与目标更换位置 （仅target为1,6时生效）"""
-    random_event_once: list["Event"] = []
+    random_event_once: Event_list = []
     """一次性随机事件"""
+    die: int = 0
+    """死亡：为1则目标死亡，此参数生成的buff默认持续到9999回合"""
+    die_name: str = "死亡"
+    """die的自定义名称"""
+    away: int = 0
+    """离开：为1则目标死亡，此参数生成的buff默认持续到9999回合"""
+    away_name: str = "离开"
+    """away的自定义名称"""
+    rounds: int = 0
+    """buff持续回合数"""
+    name: str = "xxx"
+    """buff名称，turn值>0时为必要值"""
+    move_max: int = 0
+    """该buff提供马儿每回合位移值区间的最大值"""
+    move_min: int = 0
+    """该buff提供马儿每回合位移值区间的最小值"""
+    buffs: set = set()
+    """buff组合，详见Buff类buffs字段文档"""
+    random_event: Event_list = []
+    """持续性随机事件，以buff形式存在"""
+    delay_event: list = []
 
 
 class Buff(BaseModel):
     name: str
+    """buff名称，turn值>0时为必要值"""
     round_start: int
+    """buff开始回合数"""
     round_end: int
+    """buff结束回合数"""
     move_min: int
     move_max: int
-    buffs: object
-    event_in_buff: list[object]
+    buffs: set[str]
+    """
+    locate_lock: 止步，目标无法移动
+    vertigo: 眩晕，目标无法移动，且不主动执行事件（暂定）
+    hiding: 隐身：不显示目标移动距离及位置
+    others: 自定义buff_tag，仅标识用buff_tag填写处，也可以填入常规buff_tag并正常生效
+    """
+    event_in_buff: Event_list
 
 
 class Horse:
@@ -67,7 +100,16 @@ class Horse:
         self.location_add_move = 0
 
     # =====马儿buff增加
-    def add_buff(self, buff_name: str, round_start: int, round_end: int, move_min: int, move_max: int, buffs, event_in_buff=[]):
+    def add_buff(
+        self,
+        buff_name: str,
+        buffs: set[str],
+        round_start: int,
+        round_end: int,
+        move_min: int = 0,
+        move_max: int = 0,
+        event_in_buff=[],
+    ):
         if move_min > move_max:
             move_max = move_min
         buff = Buff(
@@ -83,11 +125,11 @@ class Horse:
 
     # =====马儿指定buff移除：
     def del_buff(self, del_buff_key):
-        self.buff = [buff for buff in self.buff if buff.name != del_buff_key]
+        self.buff = [buff for buff in self.buff if del_buff_key not in buff.buffs]
 
     # =====马儿查找有无buff（查参数非名称）：(跳过计算回合数，只查有没有）
     def find_buff(self, find_buff_key):
-        return any(True for buff in self.buff if buff.name == find_buff_key)
+        return any(True for buff in self.buff if find_buff_key in buff.buffs)
 
     # =====马儿超时buff移除：
     def del_buff_overtime(self, round):
