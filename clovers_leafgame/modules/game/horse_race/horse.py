@@ -2,7 +2,11 @@
 from pydantic import BaseModel
 
 Event_list = list[tuple[int, "Event"]]
-"""[[概率值1, {事件}], [概率值2, {事件}], ......]"""
+"""
+[[概率值1, {事件}], [概率值2, {事件}], ......]
+
+[[延迟回合数1, {事件}], [延迟回合数2, {事件}], ......]
+"""
 
 
 class Event(BaseModel):
@@ -10,9 +14,9 @@ class Event(BaseModel):
     """事件名称"""
     only_key: int | None = None
     """唯一事件码，不为None则一场只触发一次"""
-    describe: str
+    describe: str = ""
     """事件描述"""
-    target: int
+    target: int = -1
     """
     事件生效目标
         0: 自己
@@ -28,13 +32,13 @@ class Event(BaseModel):
     """筛选事件生效目标有buff名"""
     target_no_buff: str | None = None
     """筛选事件生效目标无buff名"""
-    live: int
+    live: int = 0
     """复活事件：为1则目标复活"""
-    move: int
+    move: int = 0
     """位移事件：目标立即进行相当于参数值的位移"""
     track_to_location: int | None = None
     """随机位置事件：有值则让目标移动到指定位置"""
-    track_random_location: int
+    track_random_location: int | None = None
     """随机位置事件：为1则让目标随机位置（位置范围为可设定值，见setting.py）"""
     buff_time_add: int = 0
     """buff持续时间调整事件：目标所有buff增加/减少回合数"""
@@ -54,7 +58,7 @@ class Event(BaseModel):
     """away的自定义名称"""
     rounds: int = 0
     """buff持续回合数"""
-    name: str = "xxx"
+    name: str = "未命名buff"
     """buff名称，turn值>0时为必要值"""
     move_max: int = 0
     """该buff提供马儿每回合位移值区间的最大值"""
@@ -64,7 +68,18 @@ class Event(BaseModel):
     """buff组合，详见Buff类buffs字段文档"""
     random_event: Event_list = []
     """持续性随机事件，以buff形式存在"""
-    delay_event: list = []
+    delay_event: tuple[int, "Event"] | None = None
+    """延迟事件（以当前事件的targets为发起人的事件）：前者为多少回合后，需>1"""
+    delay_event_self: tuple[int, "Event"] | None = None
+    """延迟事件（以当前事件发起人为发起人的事件）：前者为多少回合后，需>1"""
+    another_event: "Event | None" = None
+    """同步事件（以当前事件的targets为发起人的事件），执行此事件后立马执行该事件"""
+    another_event_self: "Event | None" = None
+    """同步事件（以当前事件发起人为发起人的事件），执行此事件后立马执行该事件"""
+    add_horse: dict = {}
+    """增加一匹马事件"""
+    replace_horse: dict = {}
+    """替换一匹马事件"""
 
 
 class Buff(BaseModel):
@@ -92,14 +107,13 @@ class Horse:
         self.playeruid: str = uid
         self.player = id
         self.buff: list[Buff] = []
-        self.delay_events = []
+        self.delay_events: Event_list = []
         self.horse_fullname = horsename
         self.round = round
         self.location = location
         self.location_add = 0
         self.location_add_move = 0
 
-    # =====马儿buff增加
     def add_buff(
         self,
         buff_name: str,
@@ -110,6 +124,7 @@ class Horse:
         move_max: int = 0,
         event_in_buff=[],
     ):
+        """马儿buff增加"""
         if move_min > move_max:
             move_max = move_min
         buff = Buff(
@@ -123,117 +138,63 @@ class Horse:
         )
         self.buff.append(buff)
 
-    # =====马儿指定buff移除：
     def del_buff(self, del_buff_key):
+        """马儿指定buff移除"""
         self.buff = [buff for buff in self.buff if del_buff_key not in buff.buffs]
 
-    # =====马儿查找有无buff（查参数非名称）：(跳过计算回合数，只查有没有）
     def find_buff(self, find_buff_key):
+        """马儿查找有无buff（查参数非名称）：(跳过计算回合数，只查有没有）"""
         return any(True for buff in self.buff if find_buff_key in buff.buffs)
 
-    # =====马儿超时buff移除：
-    def del_buff_overtime(self, round):
-        for i in range(len(self.buff) - 1, -1, -1):
-            if self.buff[i][2] < round:
-                del self.buff[i]
-
-    # =====马儿buff时间延长/减少：
     def buff_addtime(self, round_add):
-        for i in range(0, len(self.buff)):
-            self.buff[i][2] += round_add
+        """马儿buff时间延长/减少"""
+        for buff in self.buff:
+            buff.round_end += round_add
 
-    # =====马儿是否止步：
     def is_stop(self) -> bool:
-        for i in range(0, len(self.buff)):
-            try:
-                self.buff[i].index("locate_lock", 6)
-                if self.buff[i][1] <= self.round:
-                    return True
-            except ValueError:
-                pass
-        return False
+        """马儿是否止步"""
+        return self.find_buff("locate_lock")
 
-    # =====马儿是否已经离开：
     def is_away(self) -> bool:
-        for i in range(0, len(self.buff)):
-            try:
-                self.buff[i].index("away", 5)
-                if self.buff[i][1] <= self.round:
-                    return True
-            except ValueError:
-                pass
-        return False
+        """马儿是否已经离开"""
+        return self.find_buff("away")
 
-    # =====马儿是否已经死亡：
     def is_die(self) -> bool:
-        for i in range(0, len(self.buff)):
-            try:
-                self.buff[i].index("die", 5)
-                if self.buff[i][1] <= self.round:
-                    return True
-            except ValueError:
-                pass
-        return False
+        """马儿是否已经死亡"""
+        return self.find_buff("die")
 
     # =====马儿全名带buff显示：
     def fullname(self):
-        fullname = f""
-        for i in range(0, len(self.buff)):
-            if self.buff[i][1] <= self.round:
-                fullname += "<" + self.buff[i][0] + ">"
-        self.horse_fullname = fullname + self.horse
+        self.horse_fullname = "".join(f"<{buff.name}>" for buff in self.buff) + self.horse
 
-    # =====马儿移动计算（事件提供的本回合移动）：
-    def location_move_event(self, move):
+    def location_move(self, move):
+        """马儿移动计算（事件提供的本回合移动）"""
         self.location_add_move += move
 
-    # =====马儿移动至特定位置计算（事件提供移动）：
-    def location_move_to_event(self, move_to):
-        self.location_add_move += move_to - self.location
+    def location_to(self, move_to):
+        """马儿移动至特定位置计算（事件提供移动）"""
+        self.location_add_move = move_to - self.location
 
-    # =====马儿移动计算：
-    def location_move(self):
-        if self.location != setting_track_length:
-            self.location_add = self.move() + self.location_add_move
-            self.location += self.location_add
-            if self.location > setting_track_length:
-                self.location_add -= self.location - setting_track_length
-                self.location = setting_track_length
-            if self.location < 0:
-                self.location_add -= self.location
-                self.location = 0
-
-    # =====马儿移动量计算：
-    def move(self):
-        if self.is_stop() == True:
-            return 0
-        if self.is_die() == True:
-            return 0
-        if self.is_away() == True:
-            return 0
-        move_min = 0
-        move_max = 0
-        for i in range(0, len(self.buff)):
-            if self.buff[i][1] <= self.round:
-                move_min += self.buff[i][3]
-                move_max += self.buff[i][4]
-        return random.randint(move_min + base_move_min, move_max + base_move_max)
+    def move(self, move_min: int, move_max: int, track_length: int):
+        """马儿移动计算"""
+        if self.is_stop() or self.is_die() or self.is_away():
+            base_move = 0
+        else:
+            for buff in self.buff:
+                move_min += buff.move_min
+                move_max += buff.move_max
+            base_move = random.randint(move_min, move_max)
+        self.location_add = base_move + self.location_add_move
+        self.location += self.location_add
+        self.location = max(track_length, self.location)
+        self.location = min(0, self.location)
 
     # =====赛马玩家战况显示：
-    def display(self):
-        display = f""
-        if self.find_buff("hiding") == False:
-            if self.location_add < 0:
-                display += "[" + str(self.location_add) + "]"
-            else:
-                display += "[+" + str(self.location_add) + "]"
-            for i in range(0, setting_track_length - self.location):
-                display += "."
-            display += self.horse_fullname
-            for i in range(setting_track_length - self.location, setting_track_length):
-                display += "."
-        else:
-            display += "[+？]"
-            for i in range(0, setting_track_length):
-                display += "."
-        return display
+    def display(self, track_length: int):
+        if self.find_buff("hiding"):
+            return "[+? ]" + "." * track_length
+
+        start = f"[{self.location_add}]" if self.location_add < 0 else f"[+{self.location_add}]"
+        track = ["." for _ in range(track_length - 1)]
+        track.insert(self.location, self.horse_fullname)
+        return start + "".join(track)

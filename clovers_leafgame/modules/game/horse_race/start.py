@@ -1,33 +1,47 @@
 ﻿from pathlib import Path
 import json
+from .horse import Event
 
 
-def load_dlcs(resource: Path = Path(__file__).parent / "resource"):
+# def load_dlcs(resource: Path = Path(__file__).parent / "event_library") -> list[Event]:
+#     events_list = []
+#     files = resource.iterdir()
+#     for x in files:
+#         log = f"加载事件文件：{x.name}"
+#         print(log, end="......")
+#         try:
+#             with open(x, "r", encoding="utf-8") as f:
+#                 events_list += [deal(event) for event in json.load(f) if event]
+#             print("成功!")
+#         except Exception as e:
+#             print(f"失败：{e}")
+#     return events_list
+def load_dlcs(resource: Path = Path(__file__).parent / "event_library") -> list[Event]:
     events_list = []
     files = resource.iterdir()
     for x in files:
         log = f"加载事件文件：{x.name}"
         print(log, end="......")
-        try:
-            with open(x, "r", encoding="utf-8") as f:
-                events = deal_events(json.load(f))
-                events_list.extend(events)
-            print("成功!")
-        except Exception as e:
-            print(f"失败：{e}")
+        with open(x, "r", encoding="utf-8") as f:
+            events_list += [deal(event) for event in json.load(f) if event]
+        print("成功!")
     return events_list
 
 
-def deal_events(events):
-    events_out = []
-    for i in range(0, len(events)):
-        event_i = deal(events[i])
-        if event_i != {}:
-            events_out.append(event_i)
-    return events_out
+def deal(raw_event: dict):
+    raw_event["only_key"] = raw_event.get("race_only")
+    buffs = set()
+    buff_tags = ["locate_lock", "vertigo", "hiding"]
+    for buff_tag in buff_tags:
+        if raw_event.get(buff_tag) == 1:
+            buffs.add(buff_tag)
+    for buff_tag in raw_event.get("other_buff", []):
+        buffs.add(buff_tag)
+    raw_event["buffs"] = buffs
+    return Event.parse_obj(raw_event)
 
 
-def deal(event):
+def _deal(event: dict):
     event_out = {}
     # 读取事件限定值
     try:
@@ -220,4 +234,6 @@ def deal(event):
         event_out["replace_horse"] = event["replace_horse"]
     except KeyError:
         event_out["replace_horse"] = {}
-    return event_out
+
+    # 上方危险勿动
+    return Event.parse_obj(event_out)
