@@ -186,13 +186,13 @@ class Horse:
             base_move = random.randint(move_min, move_max)
         self.location_add = base_move + self.location_add_move
         self.location += self.location_add
-        self.location = max(track_length, self.location)
-        self.location = min(0, self.location)
+        self.location = max(0, self.location)
+        self.location = min(track_length, self.location)
 
     # =====赛马玩家战况显示：
     def display(self, track_length: int):
         if self.find_buff("hiding"):
-            return "[+? ]" + "." * track_length
+            return "[+?]" + "." * track_length
 
         start = f"[{self.location_add}]" if self.location_add < 0 else f"[+{self.location_add}]"
         track = ["." for _ in range(track_length - 1)]

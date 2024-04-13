@@ -55,7 +55,6 @@ class RaceWorld:
             else:
                 self.only_keys.add(only_key)
         # 读取 target 目标，计算<0><1>， target_name_0 ， target_name_1
-        targets = []
         target_name_0 = horse.horse_fullname
         match event.target:
             case 0:
@@ -246,8 +245,9 @@ class RaceWorld:
             horse.delay_events = [(delay_round, delay_event) for delay_round, delay_event in horse.delay_events if delay_round > self.round]
             # buff随机事件触发
             for buff in horse.buff:
-                buff_event = self.roll_event(buff.event_in_buff)
-                event_log.append(self.event_main(horse, buff_event, 1))
+                if buff.event_in_buff:
+                    buff_event = self.roll_event(buff.event_in_buff)
+                    event_log.append(self.event_main(horse, buff_event, 1))
             # 随机事件判定
             if random.randint(1, 1000) <= self.event_randvalue:
                 event = random.choice(self.event_list)
