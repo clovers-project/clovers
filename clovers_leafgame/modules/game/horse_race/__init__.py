@@ -261,9 +261,3 @@ class RaceWorld:
         所有马儿是否死亡/离开
         """
         return all(horse.is_die() or horse.is_away() for horse in self.racetrack)
-
-    def is_win_all(self):
-        """
-        所有马儿是否到终点
-        """
-        return [horse for horse in self.racetrack if horse.location >= self.track_length]

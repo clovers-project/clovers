@@ -924,10 +924,8 @@ async def _(event: Event):
                 session.time = 0
                 yield "比赛已结束，鉴定为无马生还"
                 return
-
             # 全员胜利计算
-            winer = world.is_win_all()
-            if winer:
+            if winer := [horse for horse in world.racetrack if horse.location >= world.track_length]:
                 yield f"> 比赛结束\n> {event.event.kwargs['Bot_Nickname']}正在为您生成战报..."
                 await asyncio.sleep(1)
                 winer_list = []
