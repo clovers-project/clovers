@@ -3,8 +3,8 @@ import sys
 sys.path.append(r"D:\GIT\clovers_core")
 from io import BytesIO
 from collections.abc import Callable, AsyncGenerator
-from clovers_core.adapter import AdapterMethod
-from clovers_core.plugin import Result
+from clovers.core.adapter import AdapterMethod
+from clovers.core.plugin import Result
 from nonebot.matcher import Matcher
 from nonebot.adapters.qq import MessageEvent, Message, MessageSegment
 

@@ -1,29 +1,18 @@
-import sys
-
-sys.path.append(r"D:\GIT\clovers_core")
-sys.path.append(r"D:\GIT\clovers_leafgame")
 import os
 from pathlib import Path
 from pydantic import BaseModel
-from nonebot import on_message, get_driver
-from nonebot.matcher import Matcher
-from clovers_core.plugin import PluginLoader
-from clovers_core.adapter import Adapter
-from nonebot.adapters.qq import Bot as QQBot, MessageEvent as QQMsgEvent
-from nonebot.adapters.onebot.v11 import Bot as v11Bot, MessageEvent as v11MsgEvent
-from .adapters import qq, v11
+from nonebot import get_driver
+from clovers.core.plugin import PluginLoader
+from .adapters.main import extract_command, new_adapter
 
 # 加载配置
 driver = get_driver()
-
-
 global_config = driver.config
-
 clovers_config_file = getattr(global_config, "clovers_config_file", "clovers.toml")
 os.environ["clovers_config_file"] = clovers_config_file
 
 # 添加环境变量之后加载config
-from clovers_core.config import config as clovers_config
+from clovers.core.config import config as clovers_config
 
 
 # 加载clovers配置
@@ -36,34 +25,23 @@ config_key = __package__
 config = Config.parse_obj(clovers_config.get(config_key, {}))
 clovers_config[config_key] = config.dict()
 
+
 plugins_path = Path(config.plugins_path)
 plugins_path.mkdir(exist_ok=True, parents=True)
+
 loader = PluginLoader(plugins_path, config.plugins_list)
-adapter = Adapter()
-adapter.plugins = loader.plugins
+adapter = new_adapter(loader.plugins)
 
 driver.on_startup(adapter.startup)
 
-Bot_NICKNAME = list(global_config.nickname)
-Bot_NICKNAME = Bot_NICKNAME[0] if Bot_NICKNAME else "bot"
 
-command_start = {x for x in global_config.command_start if x}
-
-
-def extract_command(msg: str):
-    for command in command_start:
-        if msg.startswith(command):
-            return msg[len(command) :]
-    return msg
-
-
-@adapter.method.kwarg("Bot_Nickname")
-async def _():
-    return Bot_NICKNAME
-
+from nonebot import on_message
+from nonebot.matcher import Matcher
 
 main = on_message(priority=50, block=True)
 
+from .adapters import qq
+from nonebot.adapters.qq import Bot as QQBot, MessageEvent as QQMsgEvent
 
 adapter.methods["QQ"] = qq.initializer(main)
 
@@ -74,6 +52,9 @@ async def _(matcher: Matcher, bot: QQBot, event: QQMsgEvent):
     if await adapter.response("QQ", command, bot=bot, event=event):
         matcher.stop_propagation()
 
+
+from .adapters import v11
+from nonebot.adapters.onebot.v11 import Bot as v11Bot, MessageEvent as v11MsgEvent
 
 adapter.methods["v11"] = v11.initializer(main)
 
