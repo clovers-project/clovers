@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from pydantic import BaseModel
 from nonebot import get_driver
+from clovers.core.adapter import AdapterMethod
 from clovers.core.plugin import PluginLoader
 from .adapters.main import extract_command, new_adapter
 
@@ -40,27 +41,24 @@ from nonebot.matcher import Matcher
 
 main = on_message(priority=50, block=True)
 
+
+def add_response(Bot, Event, adapter_method: AdapterMethod, adapter_key: str):
+    adapter.methods[adapter_key] = adapter_method
+
+    @main.handle()
+    async def _(matcher: Matcher, bot: Bot, event: Event):
+        command = extract_command(event.get_plaintext())
+        if await adapter.response(adapter_key, command, bot=bot, event=event):
+            matcher.stop_propagation()
+
+
 from .adapters import qq
 from nonebot.adapters.qq import Bot as QQBot, MessageEvent as QQMsgEvent
 
-adapter.methods["QQ"] = qq.initializer(main)
-
-
-@main.handle()
-async def _(matcher: Matcher, bot: QQBot, event: QQMsgEvent):
-    command = extract_command(event.get_plaintext())
-    if await adapter.response("QQ", command, bot=bot, event=event):
-        matcher.stop_propagation()
+add_response(QQBot, QQMsgEvent, qq.initializer(main), "QQ")
 
 
 from .adapters import v11
 from nonebot.adapters.onebot.v11 import Bot as v11Bot, MessageEvent as v11MsgEvent
 
-adapter.methods["v11"] = v11.initializer(main)
-
-
-@main.handle()
-async def _(matcher: Matcher, bot: v11Bot, event: v11MsgEvent):
-    command = extract_command(event.get_plaintext())
-    if await adapter.response("v11", command, bot=bot, event=event):
-        matcher.stop_propagation()
+add_response(v11Bot, v11MsgEvent, v11.initializer(main), "v11")
