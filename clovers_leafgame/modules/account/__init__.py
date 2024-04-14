@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 from PIL import ImageColor
 from collections import Counter
-from clovers_utils.tools import download_url, format_number
+from clovers.utils.tools import download_url, format_number
 from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.main import plugin, manager
 from clovers_leafgame.item import (
@@ -24,15 +24,18 @@ from clovers_leafgame.output import (
     avatar_card,
     dist_card,
 )
-from clovers_core.config import config as clovers_config
+from clovers.core.config import config as clovers_config
 from .config import Config
 
-config = Config.parse_obj(clovers_config.get(__package__, {}))
 
-sign_gold = config.sign_gold
-clovers_marking = config.clovers_marking
-revolution_marking = config.revolution_marking
-debug_marking = config.debug_marking
+config_key = __package__
+config_data = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config_data.dict()
+
+sign_gold = config_data.sign_gold
+clovers_marking = config_data.clovers_marking
+revolution_marking = config_data.revolution_marking
+debug_marking = config_data.debug_marking
 
 
 @plugin.handle({"设置背景"}, {"user_id", "to_me", "image_list"})

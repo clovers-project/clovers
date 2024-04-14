@@ -1,33 +1,53 @@
 import random
+from pathlib import Path
 from collections.abc import Callable
 from .horse import Horse, Event, Event_list
 from .start import load_dlcs
-from clovers_core.config import config as clovers_config
+from clovers.core.config import config as clovers_config
 from .config import Config
 
-config_data = Config.parse_obj(clovers_config.get(__package__, {}))
+config_key = __package__
+config_data = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config_data.dict()
+
+track_length = config_data.setting_track_length
+base_move_range = config_data.base_move_range
+random_move_min, random_move_max = config_data.random_move_range
+random_move_range = int(random_move_min * track_length), int(random_move_max * track_length)
+range_of_player_numbers = config_data.range_of_player_numbers
 
 
 class RaceWorld:
+    event_list: list[Event] = load_dlcs()
+
+    @classmethod
+    def update_event_list(cls, resource_path: Path):
+        cls.event_list = load_dlcs(resource_path)
+
     def __init__(self):
         self.racetrack: list[Horse] = []
         """赛马场跑道"""
-        self.track_length = config_data.setting_track_length
+        self.track_length = track_length
         """跑道长度"""
-        self.base_move_range = config_data.base_move_range
-        random_move_min, random_move_max = config_data.random_move_range
-        self.random_move_range = int(random_move_min * self.track_length), int(random_move_max * self.track_length)
+        self.base_move_range = base_move_range
         """随机事件跳转范围"""
-        self.min_player_numbers, self.max_player_numbers = config_data.range_of_player_numbers
+        self.random_move_range = random_move_range
+        """随机事件跳转范围"""
+        self.min_player_numbers, self.max_player_numbers = range_of_player_numbers
         """赛马场容量"""
         self.status: int = 0
-        """状态指示器：0为马儿进场未开始，1为开始，2为暂停（测试用）"""
+        """
+        状态指示器
+            0:马儿进场未开始
+            1:开始
+            2:暂停
+        """
         self.round: int = 0
-
+        """当前回合数"""
         self.only_keys = set()
         """唯一事件记录"""
-        self.event_list: list[Event] = load_dlcs()
         self.event_randvalue = config_data.event_randvalue
+        """事件触发随机值（千分数，比如 450 即触发概率 450‰）"""
 
     def join_horse(self, horse_name: str, user_id: str, user_name: str, location=0, round=0):
         """

@@ -3,7 +3,7 @@ import os
 import json
 from pathlib import Path
 from collections.abc import Callable, Coroutine
-from clovers_core.plugin import PluginError
+from clovers.core.plugin import PluginError
 from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.item import Prop, AIR
 from clovers_leafgame.main import plugin, manager

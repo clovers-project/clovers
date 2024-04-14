@@ -6,12 +6,12 @@ from datetime import datetime
 from io import BytesIO
 from PIL import Image, ImageDraw
 from .core.data import Prop, Stock
-from clovers_utils.linecard import FontManager, linecard
-from clovers_utils.tools import format_number
-from .main import config
+from clovers.utils.linecard import FontManager, linecard
+from clovers.utils.tools import format_number
+from .main import config_data
 
-fontname = config.fontname
-fallback = config.fallback_fonts
+fontname = config_data.fontname
+fallback = config_data.fallback_fonts
 
 font_manager = FontManager(fontname, fallback, (30, 40, 60))
 

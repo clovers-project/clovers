@@ -2,8 +2,7 @@ from io import BytesIO
 from PIL import Image, ImageDraw
 from PIL.Image import Image as IMG
 
-from clovers_utils.tools import format_number
-from clovers_leafgame.output import font_manager
+from clovers_leafgame.output import font_manager, format_number
 
 
 def draw_rank(data: list[tuple[str, int, bytes]]) -> IMG:

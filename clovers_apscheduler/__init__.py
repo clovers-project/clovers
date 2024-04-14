@@ -1,16 +1,16 @@
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from clovers_core.config import config as clovers_config
-from clovers_core.plugin import Plugin
+from clovers.core.config import config as clovers_config
+from clovers.core.plugin import Plugin
 from .config import Config
 
 
 config_key = __package__
-config = Config.parse_obj(clovers_config.get(config_key, {}))
-clovers_config[config_key] = config.dict()
+config_data = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config_data.dict()
 
 plugin = Plugin()
 scheduler = AsyncIOScheduler()
-scheduler.configure(**config.scheduler_config)
+scheduler.configure(**config_data.scheduler_config)
 
 
 @plugin.startup

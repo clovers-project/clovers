@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Callable
 from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.main import plugin, manager
-from clovers_utils.tools import download_url
+from clovers.utils.tools import download_url
 from .output import draw_rank
 
 

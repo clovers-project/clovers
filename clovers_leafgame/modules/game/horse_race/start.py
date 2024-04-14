@@ -3,22 +3,9 @@ import json
 from .horse import Event
 
 
-# def load_dlcs(resource: Path = Path(__file__).parent / "event_library") -> list[Event]:
-#     events_list = []
-#     files = resource.iterdir()
-#     for x in files:
-#         log = f"加载事件文件：{x.name}"
-#         print(log, end="......")
-#         try:
-#             with open(x, "r", encoding="utf-8") as f:
-#                 events_list += [deal(event) for event in json.load(f) if event]
-#             print("成功!")
-#         except Exception as e:
-#             print(f"失败：{e}")
-#     return events_list
-def load_dlcs(resource: Path = Path(__file__).parent / "event_library") -> list[Event]:
+def load_dlcs(resource_path: Path = Path(__file__).parent / "event_library") -> list[Event]:
     events_list = []
-    files = resource.iterdir()
+    files = resource_path.iterdir()
     for x in files:
         log = f"加载事件文件：{x.name}"
         print(log, end="......")

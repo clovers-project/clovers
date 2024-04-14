@@ -2,19 +2,20 @@ import time
 import asyncio
 from collections import Counter
 from collections.abc import Coroutine, Callable, Sequence
-from clovers_utils.tools import to_int
-from clovers_core.plugin import PluginError
+from clovers.utils.tools import to_int
 from clovers_leafgame.main import manager
 from clovers_leafgame.item import Prop, GOLD
 from clovers_leafgame.output import text_to_image, endline
 from clovers_leafgame.core.clovers import Event
-from clovers_core.config import config as clovers_config
+from clovers.core.config import config as clovers_config
 from .config import Config
 
-config = Config.parse_obj(clovers_config.get(__package__, {}))
+config_key = __package__
+config_data = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config_data.dict()
 
-default_bet = config.default_bet
-timeout = config.timeout
+default_bet = config_data.default_bet
+timeout = config_data.timeout
 
 
 class Session:

@@ -10,20 +10,25 @@ import os
 import json
 from pathlib import Path
 from .core.data import Prop
-from clovers_utils.library import Library
+from clovers.utils.library import Library
 
-# def user_bank(self, user: User, group_id: str):
-#     match self.domain:
-#         case 1:
-#             return user
-#         case _:
-#             return user.bank
 
-# def user_N(self, user: User, group_id: str):
-#     return self.user_bank(user, group_id)[self.id, 0)
-
-# def deal_with(self, user: User, group_id: str, unsettled: int):
-#     return self.deal(self.user_bank(user, group_id), unsettled)
+def item_name_rule(item_name: str):
+    if " " in item_name or "\n" in item_name:
+        return "名称不能含有空格或回车"
+    count = 0
+    for x in item_name:
+        if ord(x) < 0x200:
+            count += 1
+        else:
+            count += 2
+    if count > 24:
+        return f"名称不能超过24字符"
+    try:
+        int(item_name)
+        return f"名称不能是数字"
+    except:
+        return None
 
 
 props_library_file = Path(os.path.join(os.path.dirname(__file__), "props_library.json"))

@@ -6,10 +6,6 @@ from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
 from .tools import random_poker, poker_suit, poker_point, poker_show
-from clovers_core.config import config as clovers_config
-from .config import Config
-
-config = Config.parse_obj(clovers_config.get(__package__, {}))
 
 place: dict[str, Session] = {}
 

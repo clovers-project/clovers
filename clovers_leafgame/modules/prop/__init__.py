@@ -8,14 +8,16 @@ from .core import usage, gacha, AIR_PACK, RED_PACKET
 from clovers_leafgame.output import prop_card, bank_card
 from .output import report_card
 
-from clovers_core.config import config as clovers_config
+from clovers.core.config import config as clovers_config
 from .config import Config
 
-config = Config.parse_obj(clovers_config.get(__package__, {}))
+config_key = __package__
+config_data = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config_data.dict()
 
-gacha_gold = config.gacha_gold
-packet_gold = config.packet_gold
-luckey_min, luckey_max = config.luckey_coin
+gacha_gold = config_data.gacha_gold
+packet_gold = config_data.packet_gold
+luckey_min, luckey_max = config_data.luckey_coin
 ticket_price = gacha_gold * 50
 
 

@@ -1,6 +1,6 @@
 from collections.abc import Callable, Coroutine
-from clovers_core.plugin import Event as CloversEvent
-from clovers_utils.tools import to_int
+from clovers.core.plugin import Event as CloversEvent
+from clovers.utils.tools import to_int
 
 
 class Event:

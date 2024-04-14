@@ -4,21 +4,24 @@ import random
 from io import BytesIO
 from collections import Counter
 from clovers_apscheduler import scheduler
-from clovers_utils.tools import item_name_rule, gini_coef, format_number
+from clovers.utils.tools import gini_coef, format_number
 from clovers_leafgame.core.clovers import Event, Check
 from clovers_leafgame.core.data import Group, Stock
 from clovers_leafgame.main import plugin, manager
-from clovers_leafgame.item import GOLD, LICENSE, STD_GOLD
+from clovers_leafgame.item import GOLD, LICENSE, STD_GOLD, item_name_rule
 from clovers_leafgame.output import text_to_image, endline, invest_card, prop_card
-from clovers_core.config import config as clovers_config
+from clovers.core.config import config as clovers_config
 from .config import Config
 
-config = Config.parse_obj(clovers_config.get(__package__, {}))
+config_key = __package__
+config_data = Config.parse_obj(clovers_config.get(config_key, {}))
+clovers_config[config_key] = config_data.dict()
 
-revolt_gold = config.revolt_gold
-revolt_gini = config.revolt_gini
-revolt_cd = config.revolt_cd
-company_public_gold = config.company_public_gold
+
+revolt_gold = config_data.revolt_gold
+revolt_gini = config_data.revolt_gini
+revolt_cd = config_data.revolt_cd
+company_public_gold = config_data.company_public_gold
 
 
 @plugin.handle({"重置签到", "领取金币"}, {"user_id", "group_id", "nickname", "avatar"})
