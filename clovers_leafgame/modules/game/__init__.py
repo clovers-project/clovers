@@ -1,7 +1,8 @@
 import random
 import asyncio
+from collections import Counter
 from clovers_leafgame.main import plugin, manager
-from clovers_leafgame.core.clovers import Event, Check
+from clovers_leafgame.core.clovers import Event
 from clovers_leafgame.output import text_to_image, BytesIO
 from .core import Session, Game, to_int
 from .tools import random_poker, poker_suit, poker_point, poker_show
@@ -36,7 +37,16 @@ async def _(event: Event):
         tip = ""
     session.join(user_id, account.name)
     session.next = session.p1_uid
-    return f"{session.p2_nickname}接受了对决！\n本场对决为【{session.game.name}】\n{tip}请{session.p1_nickname}发送指令\n{session.game.action_tip}"
+    msg = f"{session.p2_nickname}接受了对决！\n本场对决为【{session.game.name}】\n{tip}请{session.p1_nickname}发送指令\n{session.game.action_tip}"
+    if session.start_tips:
+
+        async def result():
+            yield msg
+            await asyncio.sleep(1)
+            yield session.start_tips
+
+        return result()
+    return msg
 
 
 @plugin.handle({"拒绝挑战"}, {"user_id", "group_id"})
@@ -105,7 +115,7 @@ async def _(session: Session, arg: str):
     else:
         tip = ""
     tip += f"\n第一枪的概率为：{round(bullet_num * 100 / 7,2)}%"
-    session.tip = str(bullet)
+    session.end_tips = str(bullet)
     return f"{' '.join('咔' for _ in range(bullet_num))}，装填完毕{tip}\n{session.create_info()}"
 
 
@@ -288,7 +298,8 @@ async def _(session: Session, arg: str):
         tip = f"\n本场下注：{n}{prop.name}"
     else:
         tip = ""
-    return f"唰唰~，随机牌堆已生成{tip}\n{session.create_info()}\nP1初始手牌\n{poker_data.P1.handcard()}"
+    session.start_tips = f"P1初始手牌\n{poker_data.P1.handcard()}"
+    return f"唰唰~，随机牌堆已生成{tip}\n{session.create_info()}"
 
 
 @plugin.handle({"出牌"}, {"user_id", "group_id"})
@@ -850,6 +861,206 @@ async def _(event: Event, session: Session):
         session.win = session.p2_uid
         return session.end(tip)
     return tip + "\n本轮平局。"
+
+
+buckshot_roulette = Game("恶魔轮盘", "向自己开枪|向对方开枪|使用道具")
+
+
+def buckshot_roulette_random_bullet(bullet_num: int):
+    real_bullet_num = random.randint(1, bullet_num // 2 + 1)
+    empty_bullet_num = bullet_num - real_bullet_num
+    bullet = [1] * real_bullet_num + [0] * empty_bullet_num
+    random.shuffle(bullet)
+    return bullet, real_bullet_num, empty_bullet_num
+
+
+def buckshot_roulette_random_props(props_num: int):
+    prop_list = ["手铐", "短锯", "放大镜", "香烟", "啤酒","逆转器","过期药品","箱子"]
+    return random.choices(prop_list, k=props_num)
+
+
+@plugin.handle({"恶魔轮盘"}, {"user_id", "group_id", "at"})
+@buckshot_roulette.create(place)
+async def _(session: Session, arg: str):
+    bullet, real_bullet_num, empty_bullet_num = buckshot_roulette_random_bullet(random.randint(3, 8))
+    session.data["bullet"] = bullet
+    hp = random.randint(3, 6)
+    session.data["HP_MAX"] = hp
+    session.data["HP1"] = hp
+    session.data["HP2"] = hp
+    props_num = random.randint(1, 4)
+    props1 = buckshot_roulette_random_props(props_num)
+    session.data["props1"] = props1
+    session.data["buff1"] = []
+    session.data["props2"] = buckshot_roulette_random_props(props_num)
+    session.data["buff2"] = []
+    if session.bet:
+        prop, n = session.bet
+        tip = f"\n本场下注：{n}{prop.name}/轮"
+    else:
+        tip = ""
+    start_tips = []
+    start_tips.append(f"双方血量：{hp}")
+    start_tips.append(f"本轮装弹：\n实弹:{real_bullet_num} 空弹:{empty_bullet_num}")
+    start_tips.append("你的道具：")
+    start_tips.append(" ".join(props1))
+    session.start_tips = "\n".join(start_tips)
+    return f"恶魔轮盘场地已创建。{tip}\n{session.create_info()}"
+
+
+@plugin.handle(r"向(自己|对方)开枪$", {"user_id", "group_id"})
+@buckshot_roulette.action(place)
+async def _(event: Event, session: Session):
+    user_id = event.user_id
+    bullet = session.data["bullet"]
+    current_bullet = bullet[0]
+    bullet = bullet[1:]
+    if user_id == session.p1_uid:
+        hp_self = "HP1"
+        hp_others = "HP2"
+        buff = "buff1"
+    else:
+        hp_self = "HP2"
+        hp_others = "HP1"
+        buff = "buff2"
+    target = event.single_arg()
+    hp = hp_self if target == "自己" else hp_others
+    session.data[hp] -= current_bullet
+    result = []
+    if current_bullet:
+        result.append(f"砰的一声炸响，子弹的击中了{target}")
+    else:
+        result.append("扣动板机，发出清脆的敲击声...")
+
+    if session.data[hp] <= 0:
+        session.win = session.p1_uid if hp == "HP2" else session.p2_uid
+        return session.end(result[0])
+
+    if not bullet:
+        result.append("最后一发子弹已打出。")
+        props_num = random.randint(1, 4)
+        session.data["props1"] += buckshot_roulette_random_props(props_num)
+        session.data["props1"] = session.data["props1"][:8]
+        session.data["buff1"] = []
+        session.data["props2"] += buckshot_roulette_random_props(props_num)
+        session.data["props2"] = session.data["props2"][:8]
+        session.data["buff2"] = []
+        bullet, real_bullet_num, empty_bullet_num = buckshot_roulette_random_bullet(random.randint(2, 8))
+        result.append(f"本轮装弹：\n实弹:{real_bullet_num} 空弹:{empty_bullet_num}")
+    if target == "自己" and current_bullet == 0:
+        session.delay()
+    elif "手铐" in session.data[buff]:
+        session.data[buff].remove("手铐")
+        session.delay()
+    else:
+        session.nextround()
+    session.data["bullet"] = bullet
+    result.append(f"玩家{session.p1_nickname}血量:{session.data['HP1']}")
+    result.append("道具：")
+    result.append(" ".join(f"{k} {v}" for k,v in Counter(session.data["props1"]).items()))
+    result.append(f"玩家{session.p2_nickname}血量:{session.data['HP2']}")
+    result.append("道具：")
+    result.append(" ".join(f"{k} {v}" for k,v in Counter(session.data["props2"]).items()))
+    next_name = session.p1_nickname if session.next == session.p1_uid else session.p2_nickname
+    result.append(f"请下一位玩家：{next_name}\n{buckshot_roulette.action_tip}")
+    return "\n".join(result)
+
+
+@plugin.handle({"使用道具"}, {"user_id", "group_id"})
+@buckshot_roulette.action(place)
+async def _(event: Event, session: Session):
+    # """
+    # 手铐：让对方下一回合无法行动。
+    # 短锯：
+    # 放大镜：
+    # 香烟：
+    # 啤酒：
+    # 逆转器：转换当前枪膛里面的子弹真假
+    # 肾上脉素：偷取对方的道具并立即使用
+    # 过期药品：40%的概率回两滴血，剩下的概率扣一滴血
+    # 手机：可以知道第n发的子弹真假
+    # 眼罩：对家或自己下次射击有50%概率无效，50%概率伤害+1
+    # 治疗针：下颗子弹回复1点生命
+    # 吗啡：受到致死伤害时自动使用，免疫一次死亡
+    # 箱子：每人抽取一件道具
+    # """
+
+    prop_tips = {
+        "手铐": "对方一回合无法行动",
+        "短锯": "本发子弹伤害翻倍",
+        "放大镜": "查看本发子弹",
+        "香烟": "增加1点血量",
+        "啤酒": "退一发子弹",
+        "逆转器":"转换当前枪膛里面的子弹真假",
+        "过期药品":"40%的概率回两滴血，剩下的概率扣一滴血",
+        "箱子": "每人抽取一件道具"
+    }
+    if event.user_id == session.p1_uid:
+        hp_self = "HP1"
+        hp_others = "HP2"
+        buff = "buff1"
+        props_self = "props1"
+        props_others = "props2"
+    else:
+        hp_self = "HP2"
+        hp_others = "HP1"
+        buff = "buff2"
+        props_self = "props2"
+        props_others = "props1"
+    prop_key = event.single_arg()
+    if not prop_key:
+        return
+    if prop_key not in session.data[props_self]:
+        return f"你未持有道具{prop_key}"
+    session.data[props_self].remove(prop_key)
+    tips = prop_tips.get(prop_key,"")
+    match event.single_arg():
+        case "手铐":
+            session.data[buff].append("手铐")
+        case "短锯":
+            if session.data["bullet"][0] != 0:
+                session.data["bullet"][0] = 2
+        case "放大镜":
+            tips += f"\n本发是{'空弹' if session.data["bullet"][0] == 0 else '实弹'}"
+        case "香烟":
+            session.data[hp_self] += 1
+            session.data[hp_self] = min(session.data[hp_self],session.data["HP_MAX"])
+            tips += f"\n你的血量：{session.data[hp_self]}"
+        case "啤酒":
+            bullet = session.data["bullet"]
+            if len(bullet) < 2:
+                return "不可退掉最后一发子弹。"
+            bullet_name = '空弹' if bullet[0] == 0 else '实弹'
+            tips += f"\n你退掉了一发{bullet_name}"
+            session.data["bullet"] = bullet[1:]
+        case "逆转器":
+            bullet = session.data["bullet"]
+            bullet[0] == 1 if bullet[0] == 0 else 0
+            session.data["bullet"] = bullet
+        case "过期药品":
+            if random.randint(1,10) <= 4:
+                tips += "\n你增加了2滴血"
+                session.data[hp_self] += 2
+                session.data[hp_self] = min(session.data[hp_self],session.data["HP_MAX"])
+            else:
+                tips += "\n你减少了1滴血"
+                session.data[hp_self] -= 1
+                if session.data[hp_self] <= 0:
+                    session.win = session.p1_uid if hp_self == "HP2" else session.p2_uid
+                    return session.end(tips)
+        case "箱子":
+            prop1,prop2 = buckshot_roulette_random_props(2)
+            tips += f"\n你获得了{prop1}\n对方获得了{prop2}"
+            session.data[props_self].append(prop1)
+            session.data[props_self] = session.data[props_self][:8]
+            session.data[props_others].append(prop2)
+            session.data[props_others] = session.data[props_others][:8]
+        case _:
+            return
+    session.delay(60)
+    return tips
+
+
 
 
 from .horse_race import RaceWorld

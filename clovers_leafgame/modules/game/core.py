@@ -35,7 +35,8 @@ class Session:
     bet: tuple[Prop, int] | None = None
     data: dict = {}
     game: "Game"
-    tip: str | None = None
+    end_tips: str | None = None
+    start_tips: ... = None
 
     def __init__(self, group_id: str, user_id: str, nickname: str, game: "Game"):
         self.time = time.time()
@@ -138,8 +139,8 @@ class Session:
         )
         info.insert(0, text_to_image(card + endline("对战")))
         result = [f"这场对决是 {win_name} 胜利了", manager.info_card(info, win)]
-        if self.tip:
-            result.append(self.tip)
+        if self.end_tips:
+            result.append(self.end_tips)
         return result
 
     def end(self, result=None):
