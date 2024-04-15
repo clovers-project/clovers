@@ -163,8 +163,8 @@ class Plugin:
 
 
 class PluginLoader:
-    def __init__(self, plugins_path: str | Path = "", plugins_list: list[str] = []) -> None:
-        self.plugins_path: Path = Path(plugins_path)
+    def __init__(self, plugins_path: str | Path | None = None, plugins_list: list[str] = []) -> None:
+        self.plugins_path: Path | None = None if plugins_path is None else Path(plugins_path)
         self.plugins_list: list = plugins_list
 
     @staticmethod
@@ -177,7 +177,7 @@ class PluginLoader:
             traceback.print_exc()
 
     def plugins_from_path(self):
-        if not self.plugins_path:
+        if self.plugins_path is None:
             return []
         plugins_path = ".".join(self.plugins_path.relative_to(Path()).parts)
         plugins = []
