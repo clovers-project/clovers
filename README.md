@@ -1,6 +1,6 @@
 # CLOVERS
 
-_✨ 自定义聊天平台机器人指令-响应插件框架 ✨_
+_✨ 自定义的聊天平台异步机器人指令-响应插件框架 ✨_
 
 <div align="center">
 <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
@@ -35,9 +35,7 @@ poetry add nonebot_plugin_game_collection
 
 </details>
 
-## 关于插件
-
-### 插件获取配置
+## 插件获取配置
 
 配置文件存放在一个 toml 文件里，文件由你指定
 下面是配置一个例子
@@ -68,7 +66,7 @@ clovers_config[config_key] = config_data
 
 当然你也可以不这么做
 
-### 插件编写
+## 关于插件
 
 下面是一个模板
 
@@ -248,3 +246,112 @@ async def _(event: Event):
 async def _(event: Event):
     print(event.args)
 ```
+
+## 关于适配器
+
+创建一个适配器
+
+```python
+adapter = Adapter()
+```
+
+~~创建好了~~
+
+一个适配器可以有多个适配器方法
+
+适配器的所有方法都需要自己写
+
+如果你想使用 clovers 框架，需要使用你接收到的纯文本消息触发适配器响应
+像这样
+
+```python
+#假设你在一个循环里不断轮询收发消息端是否有新消息
+while True:
+    command = received_plain_text()
+    if command:
+        await adapter.response(adapter_key, command, **kwargs)
+```
+
+`adapter_key` 适配器方法指定的 key
+`kwargs` 适配器方法需要的所有参数
+
+### 适配器方法
+
+获取参数，发送信息的方法。里面所有的方法都需要自己写
+
+发送信息，获取参数
+
+```python
+# 假如收发信息框架提供了如下方法
+
+# send_plain_text(text:str)发送纯文本
+
+method = AdapterMethod()
+@method.send("text")
+async def _(message: str):
+    send_plain_text(message)
+
+# send_image(image:bytes) 发送图片，但是需要response的参数
+
+@method.send("image")
+async def _(message: bytes,send_image):
+    send_image(message)
+
+# sender发送消息的用户信息，通过response的参数传入
+# 假设有 sender.user_id 属性为该用户uid
+@method.kwarg("user_id")
+async def _(sender):
+    return sender.user_id
+
+# 注入适配器方法
+adapter.methods["my_adapter_method"] = method
+```
+
+使用上述适配器
+
+你的 `Result("text", "你好")` 会使用 send_plain_text 发送
+你的指令响应任务获取平台参数的 `"user_id"` 就是 sender.user_id
+
+### 使用插件加载器 PluginLoader 向适配器注入插件
+
+```python
+loader = PluginLoader(plugins_path, plugins_list)
+adapter.plugins = loader.plugins
+```
+
+`plugins_list` 插件名列表,例如["plugin1","plugin2"]。从 python lib 路径下的包名加载插件
+`plugins_path` 插件文件夹，加载改路径下的文件或文件夹作为插件（排除`_`开头的文件）
+
+或者
+
+```python
+plugin = PluginLoader.load("plugin1")
+if not plugin is None:
+    adapter.plugins.append(plugin)
+```
+
+### 开始，结束任务
+
+一些插件会注册一些开始时，结束时运行的任务
+所以你需要在开始时，或结束时执行
+
+```python
+asyncio.create_task(adapter.startup)
+asyncio.create_task(adapter.shutdown)
+```
+
+或类似作用的代码
+
+## 📞 联系
+
+如有建议，bug 反馈等可以加群
+
+机器人 bug 研究中心（闲聊群） 744751179
+
+永恒之城（测试群） 724024810
+
+![群号](https://github.com/KarisAya/clovers/blob/master/%E9%99%84%E4%BB%B6/qrcode_1676538742221.jpg)
+
+## 💡 鸣谢
+
+- [nonebot2](https://github.com/nonebot/nonebot2) 跨平台 Python 异步聊天机器人框架 ~~需求都是基于这个写的~~
