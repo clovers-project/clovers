@@ -38,6 +38,7 @@ poetry add clovers
 ## 插件获取配置
 
 配置文件存放在一个 toml 文件里，文件由你指定
+
 下面是配置一个例子
 
 clovers.toml
@@ -51,6 +52,7 @@ plugins_list = ["clovers_apscheduler"]
 意味着 clovers 会加载`./clovers/plugins`文件夹下的文件或文件夹作为插件（排除`_`开头的文件）
 
 插件获取的配置会是一个字典。
+
 为便于插件间的配置互相获取，建议在插件中使用类似下面的代码加载配置
 
 ```python
@@ -102,6 +104,7 @@ __plugin__ = plugin
 ```
 
 插件加载器会尝试获取你的模块的`__plugin__`属性，并作为插件放进适配器的插件列表里
+
 如果你想编写插件的插件，也可以不定义`__plugin__`属性,但是一般你需要使用其他插件的`__plugin__`属性
 
 ```python
@@ -172,7 +175,9 @@ async def _(event: Event):
 ### 插件的响应
 
 响应的格式应该是 clovers.core.plugin.Result 类
+
 `send_method` 控制适配器方法用什么方式发送你的数据
+
 `data` 是要发送的原始数据
 
 接下来的示例是指令为 "测试" 回应 "你好" 的 插件指令-响应任务
@@ -215,13 +220,16 @@ async def _(event: Event, finish):
 ```
 
 需要的三个参数
+
 `key` 临时任务 key 如果这个 key 被注册过，并且没有超时也没有结束，那么之前的任务会被下面的任务覆盖
+
 `extra_args` 需要的平台参数
+
 `timeout` 任务超时时间（秒）
 
 temp_handle 会被任意消息触发，请在任务内自定义检查规则。
-temp_handle 任务除了 event，你还会获得一个 Callable 参数 finish
-它的功能是结束本任务，如果你不结束，在临时任务超时前每次消息都会触发。
+
+temp_handle 任务除了 event，你还会获得一个 Callable 参数 finish，它的功能是结束本任务。如果你不结束，在临时任务超时前每次消息都会触发。
 
 **关于 handle 任务的指令格式和参数列表**
 
@@ -236,6 +244,7 @@ async def _(event: Event):
 ```
 
 字符串格式：正则匹配
+
 如果 handle 的指令参数是字符串那么它会进行正则匹配，args 会是正则字符串中的 group 列表
 
 ```python
@@ -262,6 +271,7 @@ adapter = Adapter()
 适配器的所有方法都需要自己写
 
 如果你想使用 clovers 框架，需要使用你接收到的纯文本消息触发适配器响应
+
 像这样
 
 ```python
@@ -310,6 +320,7 @@ adapter.methods["my_adapter_method"] = method
 使用上述适配器
 
 你的 `Result("text", "你好")` 会使用 send_plain_text 发送
+
 你的指令响应任务获取平台参数的 `"user_id"` 就是 sender.user_id
 
 ### 使用插件加载器 PluginLoader 向适配器注入插件
@@ -320,6 +331,7 @@ adapter.plugins = loader.plugins
 ```
 
 `plugins_list` 插件名列表,例如["plugin1","plugin2"]。从 python lib 路径下的包名加载插件
+
 `plugins_path` 插件文件夹，加载改路径下的文件或文件夹作为插件（排除`_`开头的文件）
 
 或者
@@ -333,6 +345,7 @@ if not plugin is None:
 ### 开始，结束任务
 
 一些插件会注册一些开始时，结束时运行的任务
+
 所以你需要在开始时，或结束时执行
 
 ```python
