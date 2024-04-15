@@ -21,16 +21,16 @@ _✨ 自定义的聊天平台异步机器人指令-响应插件框架 ✨_
 <summary>pip</summary>
 
 ```bash
-pip install nonebot_plugin_game_collection
+pip install clovers
 ```
 
 </details>
 
-<details open>
+<details>
 <summary>poetry</summary>
 
 ```bash
-poetry add nonebot_plugin_game_collection
+poetry add clovers
 ```
 
 </details>
