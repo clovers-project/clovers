@@ -26,7 +26,7 @@ class Event:
         self.raw_command = raw_command
         self.args = args
         self.kwargs: dict = {}
-        self.get_kwargs: dict[str, Callable[..., Coroutine]]
+        self.get_kwargs: dict[str, Callable[..., Coroutine]] = {}
 
 
 class Handle:
