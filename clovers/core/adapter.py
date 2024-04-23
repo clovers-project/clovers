@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from collections.abc import Coroutine, Callable, Awaitable
 from .plugin import Plugin, Handle, Event
 
@@ -78,16 +79,23 @@ class Adapter:
         await send(result.data, **extra)
         return 1
 
+    async def response_task_safe(self, *args):
+        try:
+            return self.response_task(*args)
+        except:
+            traceback.print_exc()
+            return 0
+
     async def response(self, adapter: str, command: str, **extra) -> int:
         method = self.methods[adapter]
         task_list = []
         for plugin in self.plugins:
             if data := plugin(command):
-                task_list += [self.response_task(method, plugin.handles[key], event, extra) for key, event in data.items()]
+                task_list += [self.response_task_safe(method, plugin.handles[key], event, extra) for key, event in data.items()]
             if not plugin.temp_check():
                 continue
             event = Event(command, [])
-            task_list += [self.response_task(method, handle, event, extra) for _, handle in plugin.temp_handles.values()]
+            task_list += [self.response_task_safe(method, handle, event, extra) for _, handle in plugin.temp_handles.values()]
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
     async def startup(self):
