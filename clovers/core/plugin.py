@@ -31,7 +31,7 @@ class Event:
 class Handle:
     func: Callable[[Event], Coroutine[None, None, Result | None]]
 
-    def __init__(self, extra_args: Iterable[str] = [], get_extra_args: Iterable[str] = []):
+    def __init__(self, extra_args: Iterable[str], get_extra_args: Iterable[str]):
         self.extra_args = extra_args
         self.get_extra_args = get_extra_args
 
@@ -85,11 +85,12 @@ class Plugin:
         self,
         commands: PluginCommands,
         extra_args: Iterable[str] = [],
+        get_extra_args: Iterable[str] = [],
     ):
         def decorator(func: Callable[..., Coroutine]):
             key = len(self.handles)
             self.commands_register(commands, key)
-            handle = Handle(extra_args)
+            handle = Handle(extra_args, get_extra_args)
             handle.func = self.handle_warpper(func)
             self.handles[key] = handle
 
@@ -98,8 +99,9 @@ class Plugin:
     def temp_handle(
         self,
         key: str,
-        extra_args: Iterable[str] = [],
         timeout: float | int = 30.0,
+        extra_args: Iterable[str] = [],
+        get_extra_args: Iterable[str] = [],
     ):
 
         def decorator(func: Callable[..., Coroutine]):
@@ -111,7 +113,7 @@ class Plugin:
                 if result := await func(self.build_event(event), finish):
                     return self.build_result(result)
 
-            handle = Handle(extra_args)
+            handle = Handle(extra_args, get_extra_args)
             handle.func = wrapper
             self.temp_handles[key] = time.time() + timeout, handle
 

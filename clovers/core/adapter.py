@@ -81,7 +81,7 @@ class Adapter:
 
     async def response_task_safe(self, *args):
         try:
-            return self.response_task(*args)
+            return await self.response_task(*args)
         except:
             traceback.print_exc()
             return 0
