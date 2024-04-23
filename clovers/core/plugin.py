@@ -31,8 +31,9 @@ class Event:
 class Handle:
     func: Callable[[Event], Coroutine[None, None, Result | None]]
 
-    def __init__(self, extra_args: Iterable[str]):
+    def __init__(self, extra_args: Iterable[str] = [], get_extra_args: Iterable[str] = []):
         self.extra_args = extra_args
+        self.get_extra_args = get_extra_args
 
     async def __call__(self, event: Event):
         return await self.func(event)
