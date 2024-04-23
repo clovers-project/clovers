@@ -62,13 +62,22 @@ class Adapter:
             kwargs_task.append(kwarg(**extra))
             extra_args.append(key)
         event.kwargs = {k: v for k, v in zip(extra_args, await asyncio.gather(*kwargs_task))}
+
         for key in handle.get_extra_args:
+            if key in event.get_kwargs:
+                continue
             if key in event.kwargs:
+
+                async def async_func():
+                    return event.kwargs[key]
+
+                event.get_kwargs[key] = async_func
                 continue
             kwarg = method.kwarg_dict.get(key) or self.method.kwarg_dict.get(key)
             if not kwarg:
                 raise AdapterError(f"未定义kwarg[{key}]方法")
-            event.kwargs[key] = lambda: kwarg(**extra)
+            event.get_kwargs[key] = lambda: kwarg(**extra)
+
         result = await handle(event)
         if not result:
             return 0

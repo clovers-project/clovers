@@ -74,7 +74,7 @@ clovers_config[config_key] = config_data
 
 ```python
 from clovers.core.config import config as clovers_config
-from clovers.core.plugin import Plugin
+from clovers.core.plugin import Plugin, Event
 from .config import Config
 
 # 获取你的配置
@@ -129,6 +129,20 @@ async def _(event: Event):
 ```
 
 适配器方法会根据你需要的参数构建 event.kwargs
+
+有时为了优化，你不需要在每次执行任务时都使用某个参数，你也可以声明获取这个参数的方法，在任务中获取。
+
+声明获取参数的方法获取到的值是一个不需要参数的异步函数，存在 get_kwargs 的相应字段里。
+
+异步函数的返回值与参数声明中获取的值完全相同。
+
+```python
+@plugin.handle({"测试"},{"user_id"}, get_extra_args = ["others"])
+async def _(event: Event):
+    print(event.kwargs["user_id"])
+    print(event.kwargs["others"]) # function
+    others = await event.kwargs["others"]()
+```
 
 ### 指令-响应任务中的 event
 
@@ -213,7 +227,7 @@ async def _(event: Event):
 **临时任意触发任务**
 
 ```python
-@plugin.temp_handle("temp_handle1", {"user_id", "group_id"}, 30)
+@plugin.temp_handle("temp_handle1", 30, {"user_id", "group_id"})
 async def _(event: Event, finish):
   if i_should_finish:
     finish()
