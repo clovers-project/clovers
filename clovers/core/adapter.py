@@ -42,6 +42,19 @@ class AdapterMethod:
 
         return decorator
 
+    def get_method(self, method_name: str):
+        try:
+            return self.kwarg_dict[method_name]
+        except KeyError:
+            raise AdapterError(f"未定义kwarg[{method_name}]方法")
+
+    def response(self, handle: Handle, event: Event, extra: dict):
+        kwargs_task = []
+        extra_args = []
+        for arg_name in handle.extra_args:
+            if arg_name in event.kwargs:
+                continue
+
 
 class Adapter:
     def __init__(self) -> None:
@@ -51,8 +64,7 @@ class Adapter:
         self.wait_for: list[Awaitable] = []
 
     async def response_task(self, method: AdapterMethod, handle: Handle, event: Event, extra: dict):
-        kwargs_task = []
-        extra_args = []
+
         for key in handle.extra_args:
             if key in event.kwargs:
                 continue
