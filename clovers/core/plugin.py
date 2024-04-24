@@ -60,18 +60,18 @@ class Plugin:
         self.build_event: Callable | None = build_event
         self.build_result: Callable | None = build_result
 
-    def handle_warpper(self, func: Callable[..., Coroutine], *args):
+    def handle_warpper(self, func: Callable[..., Coroutine]):
         if build_event := self.build_event:
-            func = lambda e, *args: func(build_event(e), *args)
+            func = lambda e: func(build_event(e))
         if build_result := self.build_result:
 
-            async def wrapper(event, *args):
-                if result := await func(event, *args):
+            async def wrapper(event):
+                if result := await func(event):
                     return build_result(result)
 
             return wrapper
         else:
-            return lambda e: func(e, *args)
+            return lambda e: func(e)
 
     def commands_register(self, commands: PluginCommands, key: int):
         if not commands:
@@ -110,12 +110,11 @@ class Plugin:
     ):
 
         def decorator(func: Callable[..., Coroutine]):
-
             def finish():
                 del self.temp_handles[key]
 
             handle = Handle(extra_args, get_extra_args)
-            handle.func = self.handle_warpper(func, finish)
+            handle.func = self.handle_warpper(lambda e: func(e, finish))
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
