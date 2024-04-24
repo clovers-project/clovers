@@ -50,9 +50,9 @@ class AdapterMethod:
             self.send_dict.setdefault(k, v)
 
     def kwarg_method(self, key: str):
-        if key in self.kwarg_dict:
+        try:
             return self.kwarg_dict[key]
-        else:
+        except KeyError:
             raise AdapterError(f"使用了未定义的 kwarg 方法：{key}")
 
     def send_method(self, key: str):
@@ -83,80 +83,63 @@ class AdapterMethod:
                     event.get_kwargs[key] = async_func
                     continue
                 event.get_kwargs[key] = lambda: self.kwarg_method(key)(**extra)
-
-
-class Adapter:
-    def __init__(self) -> None:
-        self.methods: dict[str, AdapterMethod] = {}
-        self.global_method: AdapterMethod = AdapterMethod()
-        self.plugins: list[Plugin] = []
-        self.wait_for: list[Awaitable] = []
-
-    async def response_task(self, adapter_key: str, handle: Handle, event: Event, extra: dict):
-        adapter_method = self.methods[adapter_key]
-        if handle.extra_args:
-            kwargs_task = []
-            extra_args = []
-            for key in handle.extra_args:
-                if key in event.kwargs:
-                    continue
-                kwarg = adapter_method.kwarg_dict.get(key) or self.global_method.kwarg_dict.get(key)
-                if not kwarg:
-                    raise AdapterError(f"{adapter_key} 未定义kwarg[{key}]方法")
-                kwargs_task.append(kwarg(**extra))
-                extra_args.append(key)
-
-            event.kwargs = {k: v for k, v in zip(extra_args, await asyncio.gather(*kwargs_task))}
-
-        for key in handle.get_extra_args:
-            if key in event.get_kwargs:
-                continue
-            if key in event.kwargs:
-
-                async def async_func():
-                    return event.kwargs[key]
-
-                event.get_kwargs[key] = async_func
-                continue
-            kwarg = method.kwarg_dict.get(key) or self.method.kwarg_dict.get(key)
-            if not kwarg:
-                raise AdapterError(f"未定义kwarg[{key}]方法")
-            event.get_kwargs[key] = lambda: kwarg(**extra)
-
         result = await handle(event)
         if not result:
             return 0
-        send_method = result.send_method
-        send = method.send_dict.get(send_method) or self.method.send_dict.get(send_method)
-        if not send:
-            raise AdapterError(f"使用了未定义的 send 方法:{send_method}")
-        await send(result.data, **extra)
+        await self.send_method(result.send_method)(result.data, **extra)
         return 1
 
-    async def response_task_safe(self, *args):
+    async def response_safe(self, *args):
         try:
-            return await self.response_task(*args)
+            return await self.response(*args)
         except:
             traceback.print_exc()
             return 0
 
+
+class Adapter:
+    def __init__(self) -> None:
+        self.global_method: AdapterMethod = AdapterMethod()
+        self.plugins: list[Plugin] = []
+        self.method_dict: dict[str, AdapterMethod] = {}
+        self.plugins_dict: dict[str, list[Plugin]] = {}
+        self.wait_for: list[Awaitable] = []
+
     async def response(self, adapter_key: str, command: str, **extra) -> int:
         task_list = []
-        for plugin in self.plugins:
+        adapter_method = self.method_dict[adapter_key]
+        plugins = self.plugins_dict[adapter_key]
+        for plugin in plugins:
             if data := plugin(command):
-                task_list += [self.response_task_safe(adapter_key, plugin.handles[key], event, extra) for key, event in data.items()]
+                task_list.extend(adapter_method.response_safe(plugin.handles[key], event, extra) for key, event in data.items())
             if plugin.temp_check():
                 event = Event(command, [])
-                task_list.extend(self.response_task_safe(adapter_key, handle, event, extra) for _, handle in plugin.temp_handles.values())
+                task_list.extend(adapter_method.response_safe(handle, event, extra) for _, handle in plugin.temp_handles.values())
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
     async def startup(self):
         task_list = [task for plugin in self.plugins for task in plugin.startup_tasklist]
         self.wait_for.append(asyncio.gather(*task_list))
         self.wait_for.extend(task for plugin in self.plugins for task in plugin.shutdown_tasklist)
-        self.plugins = [plugin for plugin in self.plugins if plugin.handles]
-        for method in self.methods.values():
+        # 混合全局方法
+        # 过滤没有指令响应任务的插件
+        # 检查任务需求的参数是否存在于响应器获取参数方法。
+        method_extra_args: dict[str, set[str]] = {}
+        for key, method in self.method_dict.items():
             method.remix(self.global_method)
+            self.plugins_dict[key] = []
+            method_extra_args[key] = set(method.kwarg_dict.keys())
+        for plugin in self.plugins:
+            if not plugin.handles:
+                continue
+            extra_args: set[str] = set()
+            extra_args = extra_args.union(*[set(handle.extra_args) | set(handle.get_extra_args) for handle in plugin.handles.values()])
+            for key, v in method_extra_args.items():
+                if method_miss := extra_args - v:
+                    print(f"由于适配器方法：{key} 未定义kwarg方法{method_miss}，{key}将不响应{plugin.name}")
+                else:
+                    self.plugins_dict[key].append(plugin)
+        self.plugins.clear()
 
     async def shutdown(self):
         await asyncio.gather(*self.wait_for)

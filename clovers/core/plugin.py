@@ -44,13 +44,11 @@ PluginCommands = str | set[str] | re.Pattern | None
 
 
 class Plugin:
-    NO_BUILD = lambda x: x
-
     def __init__(
         self,
         name: str = "",
-        build_event=NO_BUILD,
-        build_result=NO_BUILD,
+        build_event=None,
+        build_result=None,
     ) -> None:
         self.name: str = name
         self.handles: dict[int, Handle] = {}
@@ -59,15 +57,20 @@ class Plugin:
         self.temp_handles: dict[str, tuple[float, Handle]] = {}
         self.startup_tasklist: list[Coroutine] = []
         self.shutdown_tasklist: list[Coroutine] = []
-        self.build_event: Callable = build_event
-        self.build_result: Callable = build_result
+        self.build_event: Callable | None = build_event
+        self.build_result: Callable | None = build_result
 
     def handle_warpper(self, func: Callable[..., Coroutine]):
-        async def wrapper(event: Event) -> Result | None:
-            if result := await func(self.build_event(event)):
-                return self.build_result(result)
+        if build_event := self.build_event:
+            func = lambda e: func(build_event(e))
+        if build_result := self.build_result:
 
-        return wrapper
+            async def wrapper(event: Event) -> Result | None:
+                if result := await func(event):
+                    return build_result(result)
+
+        else:
+            wrapper = lambda e: func(e)
 
     def commands_register(self, commands: PluginCommands, key: int):
         if not commands:
@@ -176,7 +179,11 @@ class PluginLoader:
         print(f"【loading plugin】 {name} ...")
         try:
             module = importlib.import_module(name)
-            return getattr(module, "__plugin__", None)
+            plugin = getattr(module, "__plugin__", None)
+            if not isinstance(plugin, Plugin):
+                return
+            plugin.name = plugin.name or name
+            return plugin
         except ImportError:
             traceback.print_exc()
 
