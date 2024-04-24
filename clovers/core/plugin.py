@@ -63,14 +63,12 @@ class Plugin:
     def handle_warpper(self, func: Callable[..., Coroutine]):
         if build_event := self.build_event:
             func = lambda e: func(build_event(e))
+        wrapper = lambda e: func(e)
         if build_result := self.build_result:
 
-            async def wrapper(event: Event) -> Result | None:
+            async def wrapper(event):
                 if result := await func(event):
                     return build_result(result)
-
-        else:
-            wrapper = lambda e: func(e)
 
     def commands_register(self, commands: PluginCommands, key: int):
         if not commands:
