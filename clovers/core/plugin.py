@@ -1,9 +1,9 @@
 import importlib
-import traceback
 import time
 import re
 from pathlib import Path
 from collections.abc import Callable, Coroutine, Iterable, Sequence
+from .logger import logger
 
 
 class PluginError(Exception):
@@ -172,7 +172,7 @@ class PluginLoader:
 
     @staticmethod
     def load(name: str) -> Plugin | None:
-        print(f"【loading plugin】 {name} ...")
+        logger.info(f"【loading plugin】 {name} ...")
         try:
             module = importlib.import_module(name)
             plugin = getattr(module, "__plugin__", None)
@@ -180,8 +180,8 @@ class PluginLoader:
                 return
             plugin.name = plugin.name or name
             return plugin
-        except ImportError:
-            traceback.print_exc()
+        except:
+            logger.exception(name)
 
     def plugins_from_path(self):
         if self.plugins_path is None:

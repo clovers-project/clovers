@@ -1,7 +1,7 @@
 import asyncio
-import traceback
 from collections.abc import Coroutine, Callable, Awaitable
 from .plugin import Plugin, Handle, Event
+from .logger import logger
 
 
 class AdapterError(Exception):
@@ -93,7 +93,7 @@ class AdapterMethod:
         try:
             return await self.response(*args)
         except:
-            traceback.print_exc()
+            logger.exception("response")
             return 0
 
 
@@ -136,7 +136,11 @@ class Adapter:
             extra_args = extra_args.union(*[set(handle.extra_args) | set(handle.get_extra_args) for handle in plugin.handles.values()])
             for key, v in method_extra_args.items():
                 if method_miss := extra_args - v:
-                    print(f"由于适配器方法：{key} 未定义kwarg方法{method_miss}，{key}将不响应{plugin.name}")
+                    logger.warning(
+                        f'插件 "{plugin.name}" 声明了适配器 "{key}" 未定义的kwarg方法',
+                        extra={"method_miss": method_miss},
+                    )
+                    logger.debug(f'"{key}"未定义的kwarg方法:{method_miss}')
                 else:
                     self.plugins_dict[key].append(plugin)
         self.plugins.clear()
