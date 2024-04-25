@@ -1,6 +1,6 @@
 import asyncio
-from collections.abc import Coroutine, Callable, Awaitable
-from .plugin import Plugin, Handle, Event
+from collections.abc import Coroutine, Callable
+from .plugin import Handle, Event
 from .logger import logger
 
 
@@ -21,7 +21,7 @@ def kwfilter(func: Callable[..., Coroutine]):
     return wrapper
 
 
-class AdapterMethod:
+class Adapter:
     def __init__(self) -> None:
         self.kwarg_dict: dict[str, Callable[..., Coroutine]] = {}
         self.send_dict: dict[str, Callable[..., Coroutine]] = {}
@@ -42,7 +42,7 @@ class AdapterMethod:
 
         return decorator
 
-    def remix(self, method: "AdapterMethod"):
+    def remix(self, method: "Adapter"):
         """混合其他兼容方法"""
         for k, v in method.kwarg_dict.items():
             self.kwarg_dict.setdefault(k, v)
@@ -95,61 +95,3 @@ class AdapterMethod:
         except:
             logger.exception("response")
             return 0
-
-
-class Adapter:
-    def __init__(self) -> None:
-        self.global_method: AdapterMethod = AdapterMethod()
-        self.plugins: list[Plugin] = []
-        self.method_dict: dict[str, AdapterMethod] = {}
-        self.plugins_dict: dict[str, list[Plugin]] = {}
-        self.wait_for: list[Awaitable] = []
-
-    async def response(self, adapter_key: str, command: str, **extra) -> int:
-        task_list = []
-        adapter_method = self.method_dict[adapter_key]
-        plugins = self.plugins_dict[adapter_key]
-        for plugin in plugins:
-            if data := plugin(command):
-                task_list.extend(adapter_method.response_safe(plugin.handles[key], event, extra) for key, event in data.items())
-            if plugin.temp_check():
-                event = Event(command, [])
-                task_list.extend(adapter_method.response_safe(handle, event, extra) for _, handle in plugin.temp_handles.values())
-        return sum(await asyncio.gather(*task_list)) if task_list else 0
-
-    async def startup(self):
-        task_list = [task for plugin in self.plugins for task in plugin.startup_tasklist]
-        self.wait_for.append(asyncio.gather(*task_list))
-        self.wait_for.extend(task for plugin in self.plugins for task in plugin.shutdown_tasklist)
-        # 混合全局方法
-        # 过滤没有指令响应任务的插件
-        # 检查任务需求的参数是否存在于响应器获取参数方法。
-        method_extra_args: dict[str, set[str]] = {}
-        for key, method in self.method_dict.items():
-            method.remix(self.global_method)
-            self.plugins_dict[key] = []
-            method_extra_args[key] = set(method.kwarg_dict.keys())
-        for plugin in self.plugins:
-            if not plugin.handles:
-                continue
-            extra_args: set[str] = set()
-            extra_args = extra_args.union(*[set(handle.extra_args) | set(handle.get_extra_args) for handle in plugin.handles.values()])
-            for key, v in method_extra_args.items():
-                if method_miss := extra_args - v:
-                    logger.warning(
-                        f'插件 "{plugin.name}" 声明了适配器 "{key}" 未定义的kwarg方法',
-                        extra={"method_miss": method_miss},
-                    )
-                    logger.debug(f'"{key}"未定义的kwarg方法:{method_miss}')
-                else:
-                    self.plugins_dict[key].append(plugin)
-        self.plugins.clear()
-
-    async def shutdown(self):
-        await asyncio.gather(*self.wait_for)
-
-    async def __aenter__(self) -> None:
-        await self.startup()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.shutdown()
