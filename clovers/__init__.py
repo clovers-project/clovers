@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Awaitable
-from .core.plugin import Plugin, Event
+from .core.plugin import Plugin, PluginLoader, Event
 from .core.adapter import Adapter
 from .core.logger import logger
 
@@ -25,9 +25,20 @@ class Clovers:
                 task_list.extend(adapter.response_safe(handle, event, extra) for _, handle in plugin.temp_handles.values())
         return sum(await asyncio.gather(*task_list)) if task_list else 0
 
+    def load_plugin(self, name: str):
+        if self.wait_for:
+            raise RuntimeError("cannot loading plugin after clovers startup")
+        plugin = PluginLoader.load(name)
+        if plugin is None:
+            logger.error(f"未找到{name}")
+        elif plugin not in self.plugins:
+            self.plugins.append(plugin)
+            logger.info(f"{name} 加载成功")
+        else:
+            logger.info(f"{name} 已存在")
+
     async def startup(self):
-        task_list = [task for plugin in self.plugins for task in plugin.startup_tasklist]
-        self.wait_for.append(asyncio.gather(*task_list))
+        self.wait_for.extend(asyncio.create_task(task) for plugin in self.plugins for task in plugin.startup_tasklist)
         self.wait_for.extend(task for plugin in self.plugins for task in plugin.shutdown_tasklist)
         # 混合全局方法
         # 过滤没有指令响应任务的插件
