@@ -70,7 +70,7 @@ class Plugin:
 
             return wrapper
         else:
-            return lambda e: middle_func(e)
+            return middle_func
 
     def commands_register(self, commands: PluginCommands, key: int):
         if not commands:
