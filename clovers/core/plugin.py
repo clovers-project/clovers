@@ -61,7 +61,10 @@ class Plugin:
         self.build_result: Callable | None = build_result
 
     def handle_warpper(self, func: Callable[..., Coroutine]):
-        middle_func = lambda e: func(build_event(e))if (build_event := self.build_event) else func
+        if build_event := self.build_event:
+            middle_func = lambda e: func(build_event(e))
+        else:
+            middle_func = func
 
         if build_result := self.build_result:
             async def wrapper(event):
