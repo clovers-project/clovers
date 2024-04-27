@@ -30,7 +30,7 @@ class Clovers:
             raise RuntimeError("cannot loading plugin after clovers startup")
         plugin = PluginLoader.load(name)
         if plugin is None:
-            logger.error(f"未找到{name}")
+            logger.error(f"未找到 {name}")
         elif plugin not in self.plugins:
             self.plugins.append(plugin)
             logger.info(f"{name} 加载成功")
