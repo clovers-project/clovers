@@ -104,6 +104,17 @@ class Plugin:
 
         return decorator
 
+    class Finish:
+        def __init__(self, plugin: "Plugin", key: str) -> None:
+            self.plugin = plugin
+            self.key = key
+
+        def __call__(self):
+            del self.plugin.temp_handles[self.key]
+
+        def delay(self, timeout: float | int = 30.0):
+            self.plugin.temp_handles[self.key] = (time.time() + timeout, self.plugin.temp_handles[self.key][1])
+
     def temp_handle(
         self,
         key: str,
@@ -114,7 +125,7 @@ class Plugin:
 
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(extra_args, get_extra_args)
-            handle.func = self.handle_warpper(lambda e: func(e, Finish(self, key)))
+            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self, key)))
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
@@ -163,18 +174,6 @@ class Plugin:
         if not self.temp_handles:
             return False
         return True
-
-
-class Finish:
-    def __init__(self, plugin: Plugin, key: str) -> None:
-        self.plugin = plugin
-        self.key = key
-
-    def __call__(self):
-        del self.plugin.temp_handles[self.key]
-
-    def delay(self, timeout: float | int = 30.0):
-        self.plugin.temp_handles[self.key] = (time.time() + timeout, self.plugin.temp_handles[self.key][1])
 
 
 class PluginLoader:
