@@ -40,7 +40,7 @@ class Handle:
         return await self.func(event)
 
 
-PluginCommands = str | set[str] | re.Pattern | None
+PluginCommands = str | Iterable[str] | re.Pattern | None
 
 
 class Plugin:
@@ -67,6 +67,7 @@ class Plugin:
             middle_func = func
 
         if build_result := self.build_result:
+
             async def wrapper(event):
                 if result := await middle_func(event):
                     return build_result(result)
@@ -78,13 +79,13 @@ class Plugin:
     def commands_register(self, commands: PluginCommands, key: int):
         if not commands:
             self.command_dict.setdefault("", set()).add(key)
-        elif isinstance(commands, set):
-            for command in commands:
-                self.command_dict.setdefault(command, set()).add(key)
         elif isinstance(commands, str):
             self.regex_dict.setdefault(re.compile(commands), set()).add(key)
         elif isinstance(commands, re.Pattern):
             self.regex_dict.setdefault(commands, set()).add(key)
+        elif isinstance(commands, Iterable):
+            for command in commands:
+                self.command_dict.setdefault(command, set()).add(key)
         else:
             raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
 
@@ -112,11 +113,8 @@ class Plugin:
     ):
 
         def decorator(func: Callable[..., Coroutine]):
-            def finish():
-                del self.temp_handles[key]
-
             handle = Handle(extra_args, get_extra_args)
-            handle.func = self.handle_warpper(lambda e: func(e, finish))
+            handle.func = self.handle_warpper(lambda e: func(e, Finish(self, key)))
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
@@ -165,6 +163,18 @@ class Plugin:
         if not self.temp_handles:
             return False
         return True
+
+
+class Finish:
+    def __init__(self, plugin: Plugin, key: str) -> None:
+        self.plugin = plugin
+        self.key = key
+
+    def __call__(self):
+        del self.plugin.temp_handles[self.key]
+
+    def delay(self, timeout: float | int = 30.0):
+        self.plugin.temp_handles[self.key] = (time.time() + timeout, self.plugin.temp_handles[self.key][1])
 
 
 class PluginLoader:
