@@ -116,9 +116,6 @@ class Plugin:
         def __call__(self):
             del self.handles[self.key]
 
-        def finish(self):
-            del self.handles[self.key]
-
         def delay(self, timeout: float | int = 30.0):
             self.handles[self.key] = (time.time() + timeout, self.handles[self.key][1])
 
