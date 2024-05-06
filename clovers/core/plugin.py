@@ -105,15 +105,22 @@ class Plugin:
         return decorator
 
     class Finish:
-        def __init__(self, plugin: "Plugin", key: str) -> None:
-            self.plugin = plugin
+        def __init__(
+            self,
+            temp_handles: dict[str, tuple[float, Handle]],
+            key: str,
+        ) -> None:
+            self.handles = temp_handles
             self.key = key
 
         def __call__(self):
-            del self.plugin.temp_handles[self.key]
+            del self.handles[self.key]
+
+        def finish(self):
+            del self.handles[self.key]
 
         def delay(self, timeout: float | int = 30.0):
-            self.plugin.temp_handles[self.key] = (time.time() + timeout, self.plugin.temp_handles[self.key][1])
+            self.handles[self.key] = (time.time() + timeout, self.handles[self.key][1])
 
     def temp_handle(
         self,
@@ -125,7 +132,7 @@ class Plugin:
 
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(extra_args, get_extra_args)
-            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self, key)))
+            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)))
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
@@ -194,7 +201,7 @@ class PluginLoader:
         except:
             logger.exception(name)
 
-    def plugins_from_path(self):
+    def plugins_from_path(self) -> list[Plugin]:
         if self.plugins_path is None:
             return []
         plugins_path = ".".join(self.plugins_path.relative_to(Path()).parts)
@@ -206,7 +213,7 @@ class PluginLoader:
             plugins.append(self.load(f"{plugins_path}.{name}"))
         return [plugin for plugin in plugins if plugin]
 
-    def plugins_from_list(self):
+    def plugins_from_list(self) -> list[Plugin]:
         return [plugin for x in self.plugins_list if (plugin := self.load(x))]
 
     @property
