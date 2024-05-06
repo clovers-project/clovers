@@ -13,7 +13,7 @@ class Clovers:
         self.plugins_dict: dict[str, list[Plugin]] = {}
         self.wait_for: list[Awaitable] = []
 
-    async def response(self, adapter_key: str, command: str, **extra) -> int:
+    async def response(self, adapter_key: str, command: str, /, **extra) -> int:
         task_list = []
         adapter = self.adapter_dict[adapter_key]
         plugins = self.plugins_dict[adapter_key]
