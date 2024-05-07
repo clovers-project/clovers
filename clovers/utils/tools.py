@@ -40,7 +40,7 @@ def to_int(N) -> int | None:
 
 def format_number(num) -> str:
     if num < 10000:
-        return "{:,}".format(num if isinstance(num, int) else round(num, 2))
+        return "{:,}".format(round(num, 2))
     x = str(int(num))
     if 10000 <= num < 100000000:
         y = int(x[-4:])
