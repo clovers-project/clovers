@@ -6,9 +6,6 @@ from collections.abc import Callable, Coroutine, Iterable, Sequence
 from .logger import logger
 
 
-class PluginError(Exception): ...
-
-
 class Result:
     def __init__(self, send_method: str, data) -> None:
         self.send_method = send_method
@@ -111,21 +108,46 @@ class Plugin:
             for command in commands:
                 self.command_handle_keys.setdefault(command, []).append(data)
         else:
-            raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
+            raise TypeError(f"指令：{commands} 类型错误：{type(commands)}")
+
+    class Rule:
+        checker: list[Callable[..., bool]]
+
+        def __init__(self, checker: list[Callable[..., bool]] | Callable[..., bool]):
+            if isinstance(checker, list):
+                self.checker = checker
+            elif callable(checker):
+                self.checker = [checker]
+            else:
+                raise TypeError(f"checker：{checker} 类型错误：{type(checker)}")
+
+        def check(self, func: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
+            if len(self.checker) == 1:
+                checker = self.checker[0]
+            else:
+                checker = lambda event: any(checker(event) for checker in self.checker)
+
+            async def wrapper(event):
+                if checker(event):
+                    return await func(event)
+
+            return wrapper
 
     def handle(
         self,
         commands: PluginCommands,
         extra_args: Iterable[str] = [],
         get_extra_args: Iterable[str] = [],
+        rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None = None,
         priority: int = 0,
         block: bool = True,
     ):
         """
-        创建插件指令响应器
+        注册插件指令响应器
             commands: 指令
             extra_args: 额外参数
             get_extra_args: 额外参数的获取方法
+            rule: 响应规则
             priority: 优先级
             block: 是否阻断后续响应器
         """
@@ -134,7 +156,14 @@ class Plugin:
             key = len(self.handles)
             self.commands_register(commands, key, priority)
             handle = Handle(extra_args, get_extra_args, block)
-            handle.func = self.handle_warpper(func)
+            middle_func = self.handle_warpper(func)
+            if rule:
+                if isinstance(rule, self.Rule):
+                    handle.func = rule.check(middle_func)
+                else:
+                    handle.func = self.Rule(rule).check(middle_func)
+            else:
+                handle.func = middle_func
             self.handles[key] = handle
 
         return decorator
