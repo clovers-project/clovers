@@ -96,18 +96,12 @@ class Plugin:
 
             return wrapper
 
-    def handle_warpper(self, func: Callable[..., Coroutine], rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None):
+    def handle_warpper(self, func: Callable[..., Coroutine]):
         """构建插件的原始event->result响应"""
         if build_event := self.build_event:
             middle_func = lambda e: func(build_event(e))
         else:
             middle_func = func
-
-        if rule:
-            if isinstance(rule, self.Rule):
-                middle_func = rule.check(middle_func)
-            else:
-                middle_func = self.Rule(rule).check(middle_func)
 
         if build_result := self.build_result:
 
@@ -162,7 +156,12 @@ class Plugin:
             key = len(self.handles)
             self.commands_register(commands, key, priority)
             handle = Handle(extra_args, get_extra_args, block)
-            handle.func = self.handle_warpper(func, rule)
+            if rule:
+                if isinstance(rule, self.Rule):
+                    func = rule.check(func)
+                else:
+                    func = self.Rule(rule).check(func)
+            handle.func = self.handle_warpper(func)
             self.handles[key] = handle
 
         return decorator
@@ -187,7 +186,12 @@ class Plugin:
 
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(extra_args, get_extra_args, block)
-            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)), rule)
+            if rule:
+                if isinstance(rule, self.Rule):
+                    func = rule.check(func)
+                else:
+                    func = self.Rule(rule).check(func)
+            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)))
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
