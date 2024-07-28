@@ -73,12 +73,41 @@ class Plugin:
         handle_queue.sort(key=lambda x: x[3])
         self.handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
 
-    def handle_warpper(self, func: Callable[..., Coroutine]):
+    class Rule:
+        checker: list[Callable[..., bool]]
+
+        def __init__(self, checker: list[Callable[..., bool]] | Callable[..., bool]):
+            if isinstance(checker, list):
+                self.checker = checker
+            elif callable(checker):
+                self.checker = [checker]
+            else:
+                raise TypeError(f"checker：{checker} 类型错误：{type(checker)}")
+
+        def check(self, func: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
+            if len(self.checker) == 1:
+                checker = self.checker[0]
+            else:
+                checker = lambda event: any(checker(event) for checker in self.checker)
+
+            async def wrapper(event):
+                if checker(event):
+                    return await func(event)
+
+            return wrapper
+
+    def handle_warpper(self, func: Callable[..., Coroutine], rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None):
         """构建插件的原始event->result响应"""
         if build_event := self.build_event:
             middle_func = lambda e: func(build_event(e))
         else:
             middle_func = func
+
+        if rule:
+            if isinstance(rule, self.Rule):
+                middle_func = rule.check(middle_func)
+            else:
+                middle_func = self.Rule(rule).check(middle_func)
 
         if build_result := self.build_result:
 
@@ -110,29 +139,6 @@ class Plugin:
         else:
             raise TypeError(f"指令：{commands} 类型错误：{type(commands)}")
 
-    class Rule:
-        checker: list[Callable[..., bool]]
-
-        def __init__(self, checker: list[Callable[..., bool]] | Callable[..., bool]):
-            if isinstance(checker, list):
-                self.checker = checker
-            elif callable(checker):
-                self.checker = [checker]
-            else:
-                raise TypeError(f"checker：{checker} 类型错误：{type(checker)}")
-
-        def check(self, func: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
-            if len(self.checker) == 1:
-                checker = self.checker[0]
-            else:
-                checker = lambda event: any(checker(event) for checker in self.checker)
-
-            async def wrapper(event):
-                if checker(event):
-                    return await func(event)
-
-            return wrapper
-
     def handle(
         self,
         commands: PluginCommands,
@@ -156,14 +162,7 @@ class Plugin:
             key = len(self.handles)
             self.commands_register(commands, key, priority)
             handle = Handle(extra_args, get_extra_args, block)
-            middle_func = self.handle_warpper(func)
-            if rule:
-                if isinstance(rule, self.Rule):
-                    handle.func = rule.check(middle_func)
-                else:
-                    handle.func = self.Rule(rule).check(middle_func)
-            else:
-                handle.func = middle_func
+            handle.func = self.handle_warpper(func, rule)
             self.handles[key] = handle
 
         return decorator
@@ -174,6 +173,7 @@ class Plugin:
         extra_args: Iterable[str] = [],
         get_extra_args: Iterable[str] = [],
         timeout: float | int = 30.0,
+        rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None = None,
         block: bool = True,
     ):
         """
@@ -187,7 +187,7 @@ class Plugin:
 
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(extra_args, get_extra_args, block)
-            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)))
+            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)), rule)
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
