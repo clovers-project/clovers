@@ -14,16 +14,25 @@ class Clovers:
         self.wait_for: list[Awaitable] = []
 
     async def response(self, adapter_key: str, command: str, /, **extra) -> int:
-        task_list = []
         adapter = self.adapter_dict[adapter_key]
         plugins = self.plugins_dict[adapter_key]
+        count = 0
         for plugin in plugins:
-            if data := plugin(command):
-                task_list.extend(adapter.response_safe(plugin.handles[key], event, extra) for key, event in data.items())
             if plugin.temp_check():
                 event = Event(command, [])
-                task_list.extend(adapter.response_safe(handle, event, extra) for _, handle in plugin.temp_handles.values())
-        return sum(await asyncio.gather(*task_list)) if task_list else 0
+                handles = [handle for _, handle in plugin.temp_handles.values()]
+                flag = sum(await asyncio.gather(*[adapter.response(handle, event, extra) for handle in handles]))
+                if flag and any(handle.block for handle in handles):
+                    break
+            if data := plugin(command):
+                for key, event in data:
+                    handle = plugin.handles[key]
+                    flag = await adapter.response(plugin.handles[key], event, extra)
+                    count += flag
+                    if flag == 1 and handle.block:
+                        break
+
+        return count
 
     def load_plugin(self, name: str):
         if self.wait_for:
@@ -52,6 +61,7 @@ class Clovers:
         for plugin in self.plugins:
             if not plugin.handles:
                 continue
+            plugin.ready()
             extra_args: set[str] = set()
             extra_args = extra_args.union(*[set(handle.extra_args) | set(handle.get_extra_args) for handle in plugin.handles.values()])
             for adapter_key, existing in extra_args_dict.items():

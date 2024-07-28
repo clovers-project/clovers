@@ -6,9 +6,7 @@ from collections.abc import Callable, Coroutine, Iterable, Sequence
 from .logger import logger
 
 
-class PluginError(Exception):
-    def __init__(self, message: str):
-        super().__init__(message)
+class PluginError(Exception): ...
 
 
 class Result:
@@ -32,9 +30,10 @@ class Event:
 class Handle:
     func: Callable[[Event], Coroutine[None, None, Result | None]]
 
-    def __init__(self, extra_args: Iterable[str], get_extra_args: Iterable[str]):
+    def __init__(self, extra_args: Iterable[str], get_extra_args: Iterable[str], block: bool):
         self.extra_args = extra_args
         self.get_extra_args = get_extra_args
+        self.block: bool = block
 
     async def __call__(self, event: Event):
         return await self.func(event)
@@ -44,23 +43,41 @@ PluginCommands = str | Iterable[str] | re.Pattern | None
 
 
 class Plugin:
+
     def __init__(
         self,
         name: str = "",
         build_event=None,
         build_result=None,
     ) -> None:
+
         self.name: str = name
+        """插件名称"""
         self.handles: dict[int, Handle] = {}
-        self.command_dict: dict[str, set[int]] = {}
-        self.regex_dict: dict[re.Pattern, set[int]] = {}
+        """已注册的响应器"""
+        self.handles_queue: list[tuple[str, str | re.Pattern, int]] = []
+        """已注册指令响应器队列"""
+        self.command_handle_keys: dict[str, list[tuple[int, int]]] = {}
+        """指令触发的响应键列表"""
+        self.regex_handle_keys: dict[re.Pattern, list[tuple[int, int]]] = {}
+        """正则触发的响应键列表"""
         self.temp_handles: dict[str, tuple[float, Handle]] = {}
+        """临时指令响应器列表"""
         self.startup_tasklist: list[Coroutine] = []
         self.shutdown_tasklist: list[Coroutine] = []
         self.build_event: Callable | None = build_event
         self.build_result: Callable | None = build_result
 
+    def ready(self):
+        """准备插件"""
+        handle_queue = []
+        handle_queue.extend([("command", command, key, priority) for command, x in self.command_handle_keys.items() for key, priority in x])
+        handle_queue.extend([("regex", regex, key, priority) for regex, x in self.regex_handle_keys.items() for key, priority in x])
+        handle_queue.sort(key=lambda x: x[3])
+        self.handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
+
     def handle_warpper(self, func: Callable[..., Coroutine]):
+        """构建插件的原始event->result响应"""
         if build_event := self.build_event:
             middle_func = lambda e: func(build_event(e))
         else:
@@ -76,16 +93,23 @@ class Plugin:
         else:
             return middle_func
 
-    def commands_register(self, commands: PluginCommands, key: int):
+    def commands_register(self, commands: PluginCommands, key: int, priority: int):
+        """
+        指令注册器
+            commands: 指令
+            key: 响应器的key
+            priority: 优先级
+        """
+        data = (key, priority)
         if not commands:
-            self.command_dict.setdefault("", set()).add(key)
+            self.command_handle_keys.setdefault("", []).append(data)
         elif isinstance(commands, str):
-            self.regex_dict.setdefault(re.compile(commands), set()).add(key)
+            self.regex_handle_keys.setdefault(re.compile(commands), []).append(data)
         elif isinstance(commands, re.Pattern):
-            self.regex_dict.setdefault(commands, set()).add(key)
+            self.regex_handle_keys.setdefault(commands, []).append(data)
         elif isinstance(commands, Iterable):
             for command in commands:
-                self.command_dict.setdefault(command, set()).add(key)
+                self.command_handle_keys.setdefault(command, []).append(data)
         else:
             raise PluginError(f"指令：{commands} 类型错误：{type(commands)}")
 
@@ -94,13 +118,48 @@ class Plugin:
         commands: PluginCommands,
         extra_args: Iterable[str] = [],
         get_extra_args: Iterable[str] = [],
+        priority: int = 0,
+        block: bool = True,
     ):
+        """
+        创建插件指令响应器
+            commands: 指令
+            extra_args: 额外参数
+            get_extra_args: 额外参数的获取方法
+            priority: 优先级
+            block: 是否阻断后续响应器
+        """
+
         def decorator(func: Callable[..., Coroutine]):
             key = len(self.handles)
-            self.commands_register(commands, key)
-            handle = Handle(extra_args, get_extra_args)
+            self.commands_register(commands, key, priority)
+            handle = Handle(extra_args, get_extra_args, block)
             handle.func = self.handle_warpper(func)
             self.handles[key] = handle
+
+        return decorator
+
+    def temp_handle(
+        self,
+        key: str,
+        extra_args: Iterable[str] = [],
+        get_extra_args: Iterable[str] = [],
+        timeout: float | int = 30.0,
+        block: bool = True,
+    ):
+        """
+        创建插件临时指令响应器
+            key: 临时指令的key
+            extra_args: 额外参数
+            get_extra_args: 额外参数的获取方法
+            timeout: 临时指令的过期时间
+            block: 是否阻断后续响应器
+        """
+
+        def decorator(func: Callable[..., Coroutine]):
+            handle = Handle(extra_args, get_extra_args, block)
+            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)))
+            self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
 
@@ -114,25 +173,12 @@ class Plugin:
             self.key = key
 
         def __call__(self):
+            """结束临时指令响应器"""
             del self.handles[self.key]
 
         def delay(self, timeout: float | int = 30.0):
+            """延迟临时指令响应器的过期时间"""
             self.handles[self.key] = (time.time() + timeout, self.handles[self.key][1])
-
-    def temp_handle(
-        self,
-        key: str,
-        extra_args: Iterable[str] = [],
-        get_extra_args: Iterable[str] = [],
-        timeout: float | int = 30.0,
-    ):
-
-        def decorator(func: Callable[..., Coroutine]):
-            handle = Handle(extra_args, get_extra_args)
-            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)))
-            self.temp_handles[key] = time.time() + timeout, handle
-
-        return decorator
 
     def startup(self, func: Callable[[], Coroutine]):
         """注册一个启动任务"""
@@ -146,31 +192,8 @@ class Plugin:
 
         return func
 
-    def __call__(self, command: str) -> dict[int, Event] | None:
-        command_list = command.split()
-        if not command_list:
-            return
-        data = {}
-        command_start = command_list[0]
-        for cmd, keys in self.command_dict.items():
-            if not command_start.startswith(cmd):
-                continue
-            if command_start == cmd:
-                args = command_list[1:]
-            else:
-                command_list[0] = command_list[0][len(cmd) :]
-                args = command_list
-            event = Event(command, args)
-            data.update({key: event for key in keys})
-
-        for pattern, keys in self.regex_dict.items():
-            if args := re.match(pattern, command):
-                event = Event(command, args.groups())
-                data.update({key: event for key in keys})
-
-        return data
-
     def temp_check(self) -> bool:
+        """检查是否有临时指令响应器"""
         if not self.temp_handles:
             return False
         now = time.time()
@@ -178,6 +201,34 @@ class Plugin:
         if not self.temp_handles:
             return False
         return True
+
+    def __call__(self, message: str) -> list[tuple[int, Event]] | None:
+        command_list = message.split()
+        if not command_list:
+            return
+        command_start = command_list[0]
+        data = []
+        for check_type, command, key in self.handles_queue:
+            match check_type:
+                case "command":
+                    assert isinstance(command, str)
+                    if not command_start.startswith(command):
+                        continue
+                    if command_start == command:
+                        args = command_list[1:]
+                    else:
+                        command_list[0] = command_list[0][len(command) :]
+                        args = command_list
+                    event = Event(message, args)
+                    data.append((key, event))
+                case "regex":
+                    assert isinstance(command, re.Pattern)
+                    if args := re.match(command, message):
+                        event = Event(message, args.groups())
+                        data.append((key, event))
+                case _:
+                    assert False, "check_type error"
+        return data
 
 
 class PluginLoader:

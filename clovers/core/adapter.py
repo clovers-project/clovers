@@ -61,37 +61,34 @@ class Adapter:
         else:
             raise AdapterError(f"使用了未定义的 send 方法：{key}")
 
-    async def response(self, handle: Handle, event: Event, extra: dict):
-        if handle.extra_args:
-            kwargs_task = []
-            extra_args = []
-            for key in handle.extra_args:
-                if key in event.kwargs:
-                    continue
-                kwargs_task.append(self.kwarg_method(key)(**extra))
-                extra_args.append(key)
-            event.kwargs.update({k: v for k, v in zip(extra_args, await asyncio.gather(*kwargs_task))})
-        if handle.get_extra_args:
-            for key in handle.get_extra_args:
-                if key in event.get_kwargs:
-                    continue
-                if key in event.kwargs:
-
-                    async def async_func():
-                        return event.kwargs[key]
-
-                    event.get_kwargs[key] = async_func
-                    continue
-                event.get_kwargs[key] = lambda: self.kwarg_method(key)(**extra)
-        result = await handle(event)
-        if not result:
-            return 0
-        await self.send_method(result.send_method)(result.data, **extra)
-        return 1
-
-    async def response_safe(self, *args):
+    async def response(self, handle: Handle, event: Event, extra):
         try:
-            return await self.response(*args)
+            if handle.extra_args:
+                kwargs_task = []
+                extra_args = []
+                for key in handle.extra_args:
+                    if key in event.kwargs:
+                        continue
+                    kwargs_task.append(self.kwarg_method(key)(**extra))
+                    extra_args.append(key)
+                event.kwargs.update({k: v for k, v in zip(extra_args, await asyncio.gather(*kwargs_task))})
+            if handle.get_extra_args:
+                for key in handle.get_extra_args:
+                    if key in event.get_kwargs:
+                        continue
+                    if key in event.kwargs:
+
+                        async def async_func():
+                            return event.kwargs[key]
+
+                        event.get_kwargs[key] = async_func
+                        continue
+                    event.get_kwargs[key] = lambda: self.kwarg_method(key)(**extra)
+            result = await handle(event)
+            if not result:
+                return 0
+            await self.send_method(result.send_method)(result.data, **extra)
+            return 1
         except:
             logger.exception("response")
             return 0
