@@ -186,12 +186,13 @@ class Plugin:
 
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(extra_args, get_extra_args, block)
+            middle_func = lambda e: func(e, self.Finish(self.temp_handles, key))
             if rule:
                 if isinstance(rule, self.Rule):
-                    func = rule.check(func)
+                    middle_func = rule.check(middle_func)
                 else:
-                    func = self.Rule(rule).check(func)
-            handle.func = self.handle_warpper(lambda e: func(e, self.Finish(self.temp_handles, key)))
+                    middle_func = self.Rule(rule).check(middle_func)
+            handle.func = self.handle_warpper(middle_func)
             self.temp_handles[key] = time.time() + timeout, handle
 
         return decorator
