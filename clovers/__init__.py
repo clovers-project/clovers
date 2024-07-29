@@ -32,7 +32,7 @@ class Clovers:
                     if flag is None:
                         continue
                     count += 1
-                    if flag is True:
+                    if flag:
                         break
 
         return count
