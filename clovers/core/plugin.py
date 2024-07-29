@@ -94,7 +94,7 @@ class Plugin:
             if len(self.checker) == 1:
                 checker = self.checker[0]
             else:
-                checker = lambda event: any(checker(event) for checker in self.checker)
+                checker = lambda event: all(checker(event) for checker in self.checker)
 
             async def wrapper(event):
                 if checker(event):
