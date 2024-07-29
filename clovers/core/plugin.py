@@ -44,12 +44,18 @@ class Plugin:
     def __init__(
         self,
         name: str = "",
+        priority: int = 0,
+        block: bool = True,
         build_event=None,
         build_result=None,
     ) -> None:
 
         self.name: str = name
         """插件名称"""
+        self.priority: int = priority
+        """插件优先级"""
+        self.block: bool = block
+        """是否阻断后续插件"""
         self.handles: dict[int, Handle] = {}
         """已注册的响应器"""
         self.handles_queue: list[tuple[str, str | re.Pattern, int]] = []

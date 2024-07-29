@@ -25,15 +25,21 @@ class Clovers:
                 if flags:
                     count += len(flags)
                     if any(flags):
-                        return count
+                        if plugin.block:
+                            break
+                        continue
             if data := plugin(command):
+                inner_count = 0
                 for key, event in data:
                     flag = await adapter.response(plugin.handles[key], event, extra)
                     if flag is None:
                         continue
-                    count += 1
+                    inner_count += 1
                     if flag:
-                        return count
+                        break
+                count += inner_count
+                if inner_count > 0 and plugin.block:
+                    break
         return count
 
     def load_plugin(self, name: str):
@@ -49,6 +55,7 @@ class Clovers:
             logger.info(f"{name} 已存在")
 
     async def startup(self):
+        self.plugins.sort(key=lambda plugin: plugin.priority)
         self.wait_for.extend(asyncio.create_task(task) for plugin in self.plugins for task in plugin.startup_tasklist)
         self.wait_for.extend(task for plugin in self.plugins for task in plugin.shutdown_tasklist)
         # 混合全局方法
