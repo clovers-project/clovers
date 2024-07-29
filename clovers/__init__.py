@@ -20,16 +20,19 @@ class Clovers:
         for plugin in plugins:
             if plugin.temp_check():
                 event = Event(command, [])
-                handles = [handle for _, handle in plugin.temp_handles.values()]
-                flag = sum(await asyncio.gather(*[adapter.response(handle, event, extra) for handle in handles]))
-                if flag and any(handle.block for handle in handles):
-                    break
+                flags = await asyncio.gather(*[adapter.response(handle, event, extra) for _, handle in plugin.temp_handles.values()])
+                flags = [flag for flag in flags if not flag is None]
+                if flags:
+                    count += len(flags)
+                    if any(flags):
+                        continue
             if data := plugin(command):
                 for key, event in data:
-                    handle = plugin.handles[key]
                     flag = await adapter.response(plugin.handles[key], event, extra)
-                    count += flag
-                    if flag == 1 and handle.block:
+                    if flag is None:
+                        continue
+                    count += 1
+                    if flag is True:
                         break
 
         return count

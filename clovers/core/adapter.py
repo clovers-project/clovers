@@ -86,9 +86,9 @@ class Adapter:
                     event.get_kwargs[key] = lambda: self.kwarg_method(key)(**extra)
             result = await handle(event)
             if not result:
-                return 0
+                return
             await self.send_method(result.send_method)(result.data, **extra)
-            return 1
+            return handle.block
         except:
             logger.exception("response")
-            return 0
+            return
