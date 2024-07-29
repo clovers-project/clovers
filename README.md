@@ -217,7 +217,7 @@ def build_result(result):
 
 plugin = Plugin(build_result=build_result)
 
-@plugin.handle({"测试"},{"user_id"})
+@plugin.handle(["测试"])
 async def _(event: Event):
     return "你好"
 ```
@@ -227,7 +227,7 @@ async def _(event: Event):
 **临时任意触发任务**
 
 ```python
-@plugin.temp_handle("temp_handle1", 30, {"user_id", "group_id"})
+@plugin.temp_handle("temp_handle1", 30, ["user_id", "group_id"])
 async def _(event: Event, finish):
   if i_should_finish:
     finish()
