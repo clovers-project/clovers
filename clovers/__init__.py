@@ -25,7 +25,7 @@ class Clovers:
                 if flags:
                     count += len(flags)
                     if any(flags):
-                        continue
+                        return count
             if data := plugin(command):
                 for key, event in data:
                     flag = await adapter.response(plugin.handles[key], event, extra)
@@ -33,8 +33,7 @@ class Clovers:
                         continue
                     count += 1
                     if flag:
-                        break
-
+                        return count
         return count
 
     def load_plugin(self, name: str):
