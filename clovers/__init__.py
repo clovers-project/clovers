@@ -31,8 +31,8 @@ class Clovers:
                         continue
             if data := plugin(command):
                 inner_count = 0
-                for key, event in data:
-                    flag = await adapter.response(plugin.handles[key], event, extra)
+                for handle, event in data:
+                    flag = await adapter.response(handle, event, extra)
                     if flag is None:
                         continue
                     inner_count += 1
@@ -57,23 +57,20 @@ class Clovers:
 
     async def startup(self):
         self.plugins.sort(key=lambda plugin: plugin.priority)
-        self.wait_for.extend(asyncio.create_task(task) for plugin in self.plugins for task in plugin.startup_tasklist)
-        self.wait_for.extend(task for plugin in self.plugins for task in plugin.shutdown_tasklist)
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
         # 混合全局方法
-        # 过滤没有指令响应任务的插件
-        # 检查任务需求的参数是否存在于响应器获取参数方法。
         extra_args_dict: dict[str, set[str]] = {}
         for adapter_key, adapter in self.adapter_dict.items():
             adapter.remix(self.global_adapter)
             extra_args_dict[adapter_key] = set(adapter.kwarg_dict.keys())
             self.plugins_dict[adapter_key] = []
-
+        # 过滤没有指令响应任务的插件
+        # 检查任务需求的参数是否存在于响应器获取参数方法。
         for plugin in self.plugins:
-            if not plugin.handles:
+            if not plugin.ready():
                 continue
-            plugin.ready()
             extra_args: set[str] = set()
-            extra_args = extra_args.union(*[set(handle.extra_args) | set(handle.get_extra_args) for handle in plugin.handles.values()])
+            extra_args = extra_args.union(*[set(handle.extra_args) | set(handle.get_extra_args) for handle in plugin.handles])
             for adapter_key, existing in extra_args_dict.items():
                 if method_miss := extra_args - existing:
                     logger.warning(
@@ -83,10 +80,10 @@ class Clovers:
                     logger.debug(f'"{adapter_key}"未定义的kwarg方法:{method_miss}')
                 else:
                     self.plugins_dict[adapter_key].append(plugin)
-        self.plugins.clear()
         self.running = True
 
     async def shutdown(self):
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
         await asyncio.gather(*self.wait_for)
 
     async def __aenter__(self) -> None:

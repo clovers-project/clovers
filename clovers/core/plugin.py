@@ -77,6 +77,8 @@ class Plugin:
 
     def ready(self):
         """准备插件"""
+        if not self._handles:
+            return False
         handle_queue = []
         handle_queue.extend(
             [("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x]
@@ -84,6 +86,12 @@ class Plugin:
         handle_queue.extend([("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x])
         handle_queue.sort(key=lambda x: x[3])
         self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
+        return True
+
+    @property
+    def handles(self):
+        """获取已注册的响应器"""
+        return (handle for handle in self._handles.values())
 
     class Rule:
         checker: list[Callable[..., bool]]
@@ -248,7 +256,7 @@ class Plugin:
             return False
         return True
 
-    def __call__(self, message: str) -> list[tuple[int, Event]] | None:
+    def __call__(self, message: str) -> list[tuple[Handle, Event]] | None:
         command_list = message.split()
         if not command_list:
             return
@@ -266,14 +274,14 @@ class Plugin:
                         command_list[0] = command_list[0][len(command) :]
                         args = command_list
                     event = Event(message, args)
-                    data.append((key, event))
+                    data.append((self._handles[key], event))
                 case "regex":
                     assert isinstance(command, re.Pattern)
                     if args := re.match(command, message):
                         event = Event(message, args.groups())
-                        data.append((key, event))
+                        data.append((self._handles[key], event))
                 case _:
-                    assert False, "check_type error"
+                    assert False, f"check_type {check_type} is not supported"
         return data
 
 
