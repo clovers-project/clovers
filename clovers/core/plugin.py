@@ -56,28 +56,34 @@ class Plugin:
         """插件优先级"""
         self.block: bool = block
         """是否阻断后续插件"""
-        self.handles: dict[int, Handle] = {}
-        """已注册的响应器"""
-        self.handles_queue: list[tuple[str, str | re.Pattern, int]] = []
-        """已注册指令响应器队列"""
-        self.command_handle_keys: dict[str, list[tuple[int, int]]] = {}
-        """指令触发的响应键列表"""
-        self.regex_handle_keys: dict[re.Pattern, list[tuple[int, int]]] = {}
-        """正则触发的响应键列表"""
         self.temp_handles: dict[str, tuple[float, Handle]] = {}
-        """临时指令响应器列表"""
-        self.startup_tasklist: list[Coroutine] = []
-        self.shutdown_tasklist: list[Coroutine] = []
+        """临时任务列表"""
+        self.startup_tasklist: list[Callable[[], Coroutine]] = []
+        """启动任务列表"""
+        self.shutdown_tasklist: list[Callable[[], Coroutine]] = []
+        """关闭任务列表"""
         self.build_event: Callable | None = build_event
+        """构建event"""
         self.build_result: Callable | None = build_result
+        """构建result"""
+        self._handles: dict[int, Handle] = {}
+        """已注册的响应器"""
+        self._handles_queue: list[tuple[str, str | re.Pattern, int]] = []
+        """已注册指令响应器队列"""
+        self._command_handle_keys: dict[str, list[tuple[int, int]]] = {}
+        """指令触发的响应键列表"""
+        self._regex_handle_keys: dict[re.Pattern, list[tuple[int, int]]] = {}
+        """正则触发的响应键列表"""
 
     def ready(self):
         """准备插件"""
         handle_queue = []
-        handle_queue.extend([("command", command, key, priority) for command, x in self.command_handle_keys.items() for key, priority in x])
-        handle_queue.extend([("regex", regex, key, priority) for regex, x in self.regex_handle_keys.items() for key, priority in x])
+        handle_queue.extend(
+            [("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x]
+        )
+        handle_queue.extend([("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x])
         handle_queue.sort(key=lambda x: x[3])
-        self.handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
+        self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
 
     class Rule:
         checker: list[Callable[..., bool]]
@@ -128,14 +134,14 @@ class Plugin:
         """
         data = (key, priority)
         if not commands:
-            self.command_handle_keys.setdefault("", []).append(data)
+            self._command_handle_keys.setdefault("", []).append(data)
         elif isinstance(commands, str):
-            self.regex_handle_keys.setdefault(re.compile(commands), []).append(data)
+            self._regex_handle_keys.setdefault(re.compile(commands), []).append(data)
         elif isinstance(commands, re.Pattern):
-            self.regex_handle_keys.setdefault(commands, []).append(data)
+            self._regex_handle_keys.setdefault(commands, []).append(data)
         elif isinstance(commands, Iterable):
             for command in commands:
-                self.command_handle_keys.setdefault(command, []).append(data)
+                self._command_handle_keys.setdefault(command, []).append(data)
         else:
             raise TypeError(f"指令：{commands} 类型错误：{type(commands)}")
 
@@ -159,7 +165,7 @@ class Plugin:
         """
 
         def decorator(func: Callable[..., Coroutine]):
-            key = len(self.handles)
+            key = len(self._handles)
             self.commands_register(commands, key, priority)
             handle = Handle(extra_args, get_extra_args, block)
             if rule:
@@ -168,7 +174,7 @@ class Plugin:
                 else:
                     func = self.Rule(rule).check(func)
             handle.func = self.handle_warpper(func)
-            self.handles[key] = handle
+            self._handles[key] = handle
 
         return decorator
 
@@ -222,13 +228,13 @@ class Plugin:
 
     def startup(self, func: Callable[[], Coroutine]):
         """注册一个启动任务"""
-        self.startup_tasklist.append(func())
+        self.startup_tasklist.append(func)
 
         return func
 
     def shutdown(self, func: Callable[[], Coroutine]):
         """注册一个结束任务"""
-        self.shutdown_tasklist.append(func())
+        self.shutdown_tasklist.append(func)
 
         return func
 
@@ -248,7 +254,7 @@ class Plugin:
             return
         command_start = command_list[0]
         data = []
-        for check_type, command, key in self.handles_queue:
+        for check_type, command, key in self._handles_queue:
             match check_type:
                 case "command":
                     assert isinstance(command, str)
