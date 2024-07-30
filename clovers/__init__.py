@@ -12,6 +12,7 @@ class Clovers:
         self.adapter_dict: dict[str, Adapter] = {}
         self.plugins_dict: dict[str, list[Plugin]] = {}
         self.wait_for: list[Awaitable] = []
+        self.running: bool = False
 
     async def response(self, adapter_key: str, command: str, /, **extra) -> int:
         adapter = self.adapter_dict[adapter_key]
@@ -43,7 +44,7 @@ class Clovers:
         return count
 
     def load_plugin(self, name: str):
-        if self.wait_for:
+        if self.running:
             raise RuntimeError("cannot loading plugin after clovers startup")
         plugin = PluginLoader.load(name)
         if plugin is None:
@@ -83,6 +84,7 @@ class Clovers:
                 else:
                     self.plugins_dict[adapter_key].append(plugin)
         self.plugins.clear()
+        self.running = True
 
     async def shutdown(self):
         await asyncio.gather(*self.wait_for)
