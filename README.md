@@ -1,10 +1,10 @@
 <div align="center">
 
-# clovers
-
 <a href="https://v2.nonebot.dev/store">
   <img src="https://raw.githubusercontent.com/clovers-project/clovers.github.io/master/docs/icon.png" width="180" height="180" alt="clovers">
 </a>
+
+# clovers
 
 _✨ 高度自定义的聊天平台 Python 异步机器人指令-响应插件框架 ✨_
 
