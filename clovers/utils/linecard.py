@@ -1,6 +1,5 @@
 import sys
 import re
-import logging
 from pathlib import Path
 from collections.abc import Iterable
 from io import BytesIO
@@ -8,9 +7,6 @@ from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from PIL.ImageFont import FreeTypeFont
 from PIL.Image import Image as IMG
-
-
-logger = logging.getLogger("linecard")
 
 match sys.platform:
     case "win32":
@@ -24,10 +20,11 @@ match sys.platform:
 
 
 class FontManager:
+    """
+    字体管理器
+    """
+
     def __init__(self, font_name: str, fallback: list[str], size: Iterable[int] | None = None) -> None:
-        """
-        字体管理器
-        """
         path = self.find_font(font_name)
         if not path:
             raise ValueError(f"Font:{font_name} not found")
@@ -39,7 +36,6 @@ class FontManager:
         for fallback_name in self.fallback:
             fallback_path = self.find_font(fallback_name)
             if not fallback_path:
-                logger.warning(f"Font:{fallback_name} not found")
                 continue
             self.fallback_cmap[fallback_path.absolute()] = TTFont(fallback_path, fontNumber=0).getBestCmap()
 
@@ -65,14 +61,13 @@ class FontManager:
             if not font_name == font_file.stem.lower():
                 return False
             try:
-                font = TTFont(font_file, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
-            except Exception as e:
-                logger.exception(e)
+                TTFont(font_file, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
+            except:
                 return False
             return True
 
         try:
-            font = TTFont(font_name, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
+            TTFont(font_name, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
             return Path(font_name)
         except:
             pass
