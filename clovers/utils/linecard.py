@@ -5,7 +5,6 @@ from pathlib import Path
 from collections.abc import Iterable
 from io import BytesIO
 from fontTools.ttLib import TTFont
-
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from PIL.ImageFont import FreeTypeFont
 from PIL.Image import Image as IMG
@@ -34,7 +33,7 @@ class FontManager:
             raise ValueError(f"Font:{font_name} not found")
         self.path = path.absolute()
         self.font_name: str = font_name
-        self.cmap = TTFont(path, recalcBBoxes=False, recalcTimestamp=False).getBestCmap()
+        self.cmap = TTFont(path, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0).getBestCmap()
         self.fallback: list[str] = fallback
         self.fallback_cmap = {}
         for fallback_name in self.fallback:
@@ -57,18 +56,26 @@ class FontManager:
         return ImageFont.truetype(font=name, size=size, encoding="utf-8")
 
     @staticmethod
-    def find_font(font_name, search_path=Path(FONT_PATH).absolute()):
+    def find_font(font_name: str, search_path=Path(FONT_PATH).absolute()):
         def check_font(font_file: Path, font_name: str):
             suffix = font_file.suffix.lower()
-            if not (suffix.endswith((".ttf", ".otf", ".ttc")) and font_name == font_file.stem.lower()):
+            if not suffix.endswith((".ttf", ".otf", ".ttc")):
+                return False
+            font_name = font_name.lower()
+            if not font_name == font_file.stem.lower():
                 return False
             try:
                 font = TTFont(font_file, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
             except Exception as e:
                 logger.exception(e)
                 return False
+            return True
 
-            return False
+        try:
+            font = TTFont(font_name, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
+            return Path(font_name)
+        except:
+            pass
 
         for file in search_path.iterdir():
             if check_font(file, font_name):
