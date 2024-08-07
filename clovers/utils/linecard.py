@@ -1,4 +1,6 @@
+import sys
 import re
+import logging
 from pathlib import Path
 from collections.abc import Iterable
 from io import BytesIO
@@ -8,26 +10,70 @@ from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from PIL.ImageFont import FreeTypeFont
 from PIL.Image import Image as IMG
 
-import matplotlib.font_manager as fm
+
+logger = logging.getLogger("linecard")
+
+match sys.platform:
+    case "win32":
+        FONT_PATH = "C:/Windows/Fonts"
+    case "darwin":
+        FONT_PATH = "/Library/Fonts"
+    case "linux":
+        FONT_PATH = "/usr/share/fonts"
+    case _:
+        raise ValueError("Unsupported platform")
 
 
 class FontManager:
     def __init__(self, font_name: str, fallback: list[str], size: Iterable[int] | None = None) -> None:
+        """
+        字体管理器
+        """
+        path = self.find_font(font_name)
+        if not path:
+            raise ValueError(f"Font:{font_name} not found")
+        self.font_path = path
         self.font_name: str = font_name
+        self.cmap = TTFont(path, recalcBBoxes=False, recalcTimestamp=False).getBestCmap()
         self.fallback: list[str] = fallback
-        self.cmap = TTFont(fm.findfont(fm.FontProperties(family=font_name)), fontNumber=0).getBestCmap()
         self.fallback_cmap = {}
-        for font in self.fallback:
-            font_path = fm.findfont(fm.FontProperties(family=font))
-            self.fallback_cmap[font_path] = TTFont(font_path, fontNumber=0).getBestCmap()
+        for fallback_name in self.fallback:
+            fallback_path = self.find_font(fallback_name)
+            if not fallback_path:
+                logger.warning(f"Font:{fallback_name} not found")
+                continue
+            self.fallback_cmap[fallback_path.absolute()] = TTFont(fallback_path, fontNumber=0).getBestCmap()
 
         self.font_def = {k: self.new_font(font_name, k) for k in size} if size else {}
+
+    @property
+    def fallback_paths(self) -> list[str]:
+        return list(self.fallback_cmap.keys())
 
     def font(self, size: int):
         return self.font_def.get(size) or self.new_font(self.font_name, size)
 
     def new_font(self, name: str, size: int):
         return ImageFont.truetype(font=name, size=size, encoding="utf-8")
+
+    @staticmethod
+    def find_font(font_name, search_path=Path(FONT_PATH).absolute()):
+        def check_font(font_file: Path, font_name: str):
+            suffix = font_file.suffix.lower()
+            if not (suffix.endswith((".ttf", ".otf", ".ttc")) and font_name == font_file.stem.lower()):
+                return False
+            try:
+                font = TTFont(font_file, recalcBBoxes=False, recalcTimestamp=False, fontNumber=0)
+            except Exception as e:
+                logger.exception(e)
+                return False
+
+            return False
+
+        for file in search_path.iterdir():
+            if check_font(file, font_name):
+                return file
+        return None
 
 
 def linecard_to_png(text: str, font_manager: FontManager, **kwargs):
@@ -191,7 +237,7 @@ def linecard(
                             if ord_char in fallback_cmap:
                                 inner_font = ImageFont.truetype(
                                     font=fallback_font,
-                                    size=tag.font.size,
+                                    size=int(tag.font.size),
                                     encoding="utf-8",
                                 )
                                 break
