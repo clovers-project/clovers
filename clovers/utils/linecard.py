@@ -32,7 +32,7 @@ class FontManager:
         path = self.find_font(font_name)
         if not path:
             raise ValueError(f"Font:{font_name} not found")
-        self.font_path = path
+        self.path = path.absolute()
         self.font_name: str = font_name
         self.cmap = TTFont(path, recalcBBoxes=False, recalcTimestamp=False).getBestCmap()
         self.fallback: list[str] = fallback
