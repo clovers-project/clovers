@@ -281,7 +281,7 @@ class Plugin:
                         event = Event(message, args.groups())
                         data.append((self._handles[key], event))
                 case _:
-                    assert False, f"check_type {check_type} is not supported"
+                    assert False, f"check_type {check_type} are not supported"
         return data
 
 
