@@ -23,6 +23,7 @@ def kwfilter(func: Callable[..., Coroutine]):
 
 class Adapter:
     def __init__(self) -> None:
+        self.name: str = ""
         self.kwarg_dict: dict[str, Callable[..., Coroutine]] = {}
         self.send_dict: dict[str, Callable[..., Coroutine]] = {}
 

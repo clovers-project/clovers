@@ -1,9 +1,6 @@
-import importlib
 import time
 import re
-from pathlib import Path
 from collections.abc import Callable, Coroutine, Iterable, Sequence
-from .logger import logger
 
 
 class Result:
@@ -283,41 +280,3 @@ class Plugin:
                 case _:
                     assert False, f"check_type {check_type} are not supported"
         return data
-
-
-class PluginLoader:
-    def __init__(self, plugins_path: str | Path | None = None, plugins_list: list[str] = []) -> None:
-        self.plugins_path: Path | None = None if plugins_path is None else Path(plugins_path)
-        self.plugins_list: list = plugins_list
-
-    @staticmethod
-    def load(name: str) -> Plugin | None:
-        logger.info(f"【loading plugin】 {name} ...")
-        try:
-            module = importlib.import_module(name)
-            plugin = getattr(module, "__plugin__", None)
-            if not isinstance(plugin, Plugin):
-                return
-            plugin.name = plugin.name or name
-            return plugin
-        except:
-            logger.exception(name)
-
-    def plugins_from_path(self) -> list[Plugin]:
-        if self.plugins_path is None:
-            return []
-        plugins_path = ".".join(self.plugins_path.relative_to(Path()).parts)
-        plugins = []
-        for x in self.plugins_path.iterdir():
-            name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
-            if name.startswith("_"):
-                continue
-            plugins.append(self.load(f"{plugins_path}.{name}"))
-        return [plugin for plugin in plugins if plugin]
-
-    def plugins_from_list(self) -> list[Plugin]:
-        return [plugin for x in self.plugins_list if (plugin := self.load(x))]
-
-    @property
-    def plugins(self) -> list[Plugin]:
-        return self.plugins_from_path() + self.plugins_from_list()

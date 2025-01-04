@@ -1,6 +1,9 @@
 import asyncio
+import importlib
+from pathlib import Path
 from collections.abc import Awaitable
-from .core.plugin import Plugin, PluginLoader, Event
+from typing import Literal
+from .core.plugin import Plugin, Event
 from .core.adapter import Adapter
 from .core.logger import logger
 
@@ -43,18 +46,6 @@ class Clovers:
                     break
         return count
 
-    def load_plugin(self, name: str):
-        if self.running:
-            raise RuntimeError("cannot loading plugin after clovers startup")
-        plugin = PluginLoader.load(name)
-        if plugin is None:
-            logger.error(f"未找到 {name}")
-        elif plugin not in self.plugins:
-            self.plugins.append(plugin)
-            logger.info(f"{name} 加载成功")
-        else:
-            logger.info(f"{name} 已存在")
-
     async def startup(self):
         self.plugins.sort(key=lambda plugin: plugin.priority)
         self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
@@ -91,3 +82,50 @@ class Clovers:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.shutdown()
+
+    def load_plugin(self, name: str):
+        if self.running:
+            raise RuntimeError(f"cannot loading plugin after clovers startup")
+        logger.info(f"【loading plugin】 {name} ...")
+        plugin = self.load_module(name, "__plugin__")
+        if plugin is None or not isinstance(plugin, Plugin):
+            logger.info(f"{name} 已初始化")
+        elif plugin not in self.plugins:
+            plugin.name = plugin.name or name
+            self.plugins.append(plugin)
+            logger.info(f"{name} 加载成功")
+        else:
+            logger.info(f"{name} 已存在")
+
+    def load_adapter(self, name: str):
+        if self.running:
+            raise RuntimeError(f"cannot loading adapter after clovers startup")
+        logger.info(f"【loading adapter】 {name} ...")
+        adapter = self.load_module(name, "__adapter__")
+        if adapter is None or not isinstance(adapter, Adapter):
+            logger.info(f"{name} 已初始化")
+        elif adapter not in self.adapter_dict:
+            adapter.name = adapter.name or name
+            self.adapter_dict[adapter.name] = adapter
+
+    @staticmethod
+    def load_module(name: str, attr: str | None = None):
+        try:
+            module = importlib.import_module(name)
+            if attr:
+                return getattr(module, attr, None)
+            return module
+        except:
+            logger.exception(name)
+
+    @staticmethod
+    def list_modules(path: str | Path) -> list[str]:
+        path = Path(path) if isinstance(path, str) else path
+        import_path = ".".join(path.relative_to(Path()).parts)
+        namelist = []
+        for x in path.iterdir():
+            name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
+            if name.startswith("_"):
+                continue
+            namelist.append(f"{import_path}.{name}")
+        return namelist
