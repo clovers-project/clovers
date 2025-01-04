@@ -82,35 +82,42 @@ class Clovers:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.shutdown()
 
-    def load_plugin(self, name: str):
+    def register_plugin(self, plugin: Plugin):
         if self.running:
-            raise RuntimeError(f"cannot loading plugin after clovers startup")
+            raise RuntimeError("Cannot register plugin after startup")
+        if plugin.name in self.plugins:
+            logger.warning(f"plugin {plugin.name} already loaded")
+        else:
+            self.plugins.append(plugin)
+
+    def load_plugin(self, name: str):
         logger.info(f"【loading plugin】 {name} ...")
         plugin = self.load_module(name, "__plugin__")
-        if plugin is None or not isinstance(plugin, Plugin):
-            logger.info(f"{name} 已初始化")
-        elif plugin not in self.plugins:
+        if isinstance(plugin, Plugin):
             plugin.name = plugin.name or name
-            self.plugins.append(plugin)
-            logger.info(f"{name} 加载成功")
-        else:
-            logger.info(f"{name} 已存在")
+            self.register_plugin(plugin)
 
     def load_plugins(self, namelist: list[str]):
         for name in namelist:
             self.load_plugin(name)
+
+    def register_adapter(self, adapter: Adapter):
+        if self.running:
+            raise RuntimeError("Cannot register adapter after running")
+        if adapter.name in self.adapter_dict:
+            self.adapter_dict[adapter.name].remix(adapter)
+            logger.info(f"{adapter.name} remixed")
+        else:
+            self.adapter_dict[adapter.name] = adapter
 
     def load_adapter(self, name: str):
         if self.running:
             raise RuntimeError(f"cannot loading adapter after clovers startup")
         logger.info(f"【loading adapter】 {name} ...")
         adapter = self.load_module(name, "__adapter__")
-        if adapter is None or not isinstance(adapter, Adapter):
-            logger.info(f"{name} 已初始化")
-        elif adapter.name in self.adapter_dict:
-            self.adapter_dict[adapter.name].remix(adapter)
-        else:
-            self.adapter_dict[adapter.name] = adapter
+        if isinstance(adapter, Adapter):
+            adapter.name = adapter.name or name
+            self.register_adapter(adapter)
 
     def load_adapters(self, namelist: list[str]):
         for name in namelist:
