@@ -2,7 +2,6 @@ import asyncio
 import importlib
 from pathlib import Path
 from collections.abc import Awaitable
-from typing import Literal
 from .core.plugin import Plugin, Event
 from .core.adapter import Adapter
 from .core.logger import logger
@@ -97,6 +96,10 @@ class Clovers:
         else:
             logger.info(f"{name} 已存在")
 
+    def load_plugins(self, namelist: list[str]):
+        for name in namelist:
+            self.load_plugin(name)
+
     def load_adapter(self, name: str):
         if self.running:
             raise RuntimeError(f"cannot loading adapter after clovers startup")
@@ -104,9 +107,14 @@ class Clovers:
         adapter = self.load_module(name, "__adapter__")
         if adapter is None or not isinstance(adapter, Adapter):
             logger.info(f"{name} 已初始化")
-        elif adapter not in self.adapter_dict:
-            adapter.name = adapter.name or name
+        elif adapter.name in self.adapter_dict:
+            self.adapter_dict[adapter.name].remix(adapter)
+        else:
             self.adapter_dict[adapter.name] = adapter
+
+    def load_adapters(self, namelist: list[str]):
+        for name in namelist:
+            self.load_adapter(name)
 
     @staticmethod
     def load_module(name: str, attr: str | None = None):
