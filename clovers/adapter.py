@@ -72,6 +72,7 @@ class Adapter:
                     properties.append(key)
                 event.properties.update({k: v for k, v in zip(properties, await asyncio.gather(*properties_task))})
             event.calls = self.calls_lib
+            event.extra = extra
             result = await handle(event)
             if not result:
                 return
