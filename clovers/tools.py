@@ -3,10 +3,13 @@ from pathlib import Path
 
 
 def load_module(name: str, attr: str | None = None):
-    module = importlib.import_module(name)
-    if attr:
-        return getattr(module, attr, None)
-    return module
+    try:
+        module = importlib.import_module(name)
+        if attr:
+            return getattr(module, attr, None)
+        return module
+    except:
+        return
 
 
 def list_modules(path: str | Path) -> list[str]:
