@@ -100,7 +100,11 @@ class Clovers:
 
     def load_plugin(self, name: str):
         logger.info(f"【loading plugin】 {name} ...")
-        plugin = load_module(name, "__plugin__")
+        try:
+            plugin = load_module(name, "__plugin__")
+        except Exception as e:
+            logger.exception(f"plugin {name} load failed", exc_info=e)
+            return
         if isinstance(plugin, Plugin):
             plugin.name = plugin.name or name
             self.register_plugin(plugin)
@@ -118,7 +122,11 @@ class Clovers:
 
     def load_adapter(self, name: str):
         logger.info(f"【loading adapter】 {name} ...")
-        adapter = load_module(name, "__adapter__")
+        try:
+            adapter = load_module(name, "__adapter__")
+        except Exception as e:
+            logger.exception(f"plugin {name} load failed", exc_info=e)
+            return
         if isinstance(adapter, Adapter):
             adapter.name = adapter.name or name
             self.register_adapter(adapter)
