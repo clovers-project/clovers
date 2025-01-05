@@ -1,6 +1,8 @@
 import time
 import re
 from collections.abc import Callable, Coroutine, Iterable, Sequence
+from typing import Any
+from .typing import MethodLib, Task
 
 
 class Result:
@@ -17,23 +19,28 @@ class Event:
     ):
         self.raw_command = raw_command
         self.args = args
-        self.kwargs: dict = {}
-        self.get_kwargs: dict[str, Callable[..., Coroutine]] = {}
+        self.properties: dict = {}
+        self.calls: MethodLib = {}
+        self.extra: dict = {}
+
+    async def call(self, key, *args):
+        """调用适配器方法，只接受位置参数"""
+        if key in self.calls:
+            return await self.calls[key](*args, **self.extra)
 
 
 class Handle:
     func: Callable[[Event], Coroutine[None, None, Result | None]]
 
-    def __init__(self, extra_args: Iterable[str], get_extra_args: Iterable[str], block: bool):
-        self.extra_args = extra_args
-        self.get_extra_args = get_extra_args
-        self.block: bool = block
+    def __init__(self, properties: Iterable[str], block: bool):
+        self.properties = properties
+        self.block = block
 
     async def __call__(self, event: Event):
         return await self.func(event)
 
 
-PluginCommands = str | Iterable[str] | re.Pattern | None
+type PluginCommands = str | Iterable[str] | re.Pattern | None
 
 
 class Plugin:
@@ -55,13 +62,13 @@ class Plugin:
         """是否阻断后续插件"""
         self.temp_handles: dict[str, tuple[float, Handle]] = {}
         """临时任务列表"""
-        self.startup_tasklist: list[Callable[[], Coroutine]] = []
+        self.startup_tasklist: list[Task] = []
         """启动任务列表"""
-        self.shutdown_tasklist: list[Callable[[], Coroutine]] = []
+        self.shutdown_tasklist: list[Task] = []
         """关闭任务列表"""
-        self.build_event: Callable | None = build_event
+        self.build_event: Callable[[Event], Any] | None = build_event
         """构建event"""
-        self.build_result: Callable | None = build_result
+        self.build_result: Callable[[Any], Result] | None = build_result
         """构建result"""
         self._handles: dict[int, Handle] = {}
         """已注册的响应器"""
@@ -153,8 +160,7 @@ class Plugin:
     def handle(
         self,
         commands: PluginCommands,
-        extra_args: Iterable[str] = [],
-        get_extra_args: Iterable[str] = [],
+        properties: Iterable[str] = [],
         rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None = None,
         priority: int = 0,
         block: bool = True,
@@ -162,8 +168,7 @@ class Plugin:
         """
         注册插件指令响应器
             commands: 指令
-            extra_args: 额外参数
-            get_extra_args: 额外参数的获取方法
+            properties: 额外参数
             rule: 响应规则
             priority: 优先级
             block: 是否阻断后续响应器
@@ -172,7 +177,7 @@ class Plugin:
         def decorator(func: Callable[..., Coroutine]):
             key = len(self._handles)
             self.commands_register(commands, key, priority)
-            handle = Handle(extra_args, get_extra_args, block)
+            handle = Handle(properties, block)
             if rule:
                 if isinstance(rule, self.Rule):
                     func = rule.check(func)
@@ -186,8 +191,7 @@ class Plugin:
     def temp_handle(
         self,
         key: str,
-        extra_args: Iterable[str] = [],
-        get_extra_args: Iterable[str] = [],
+        properties: Iterable[str] = [],
         timeout: float | int = 30.0,
         rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None = None,
         block: bool = True,
@@ -195,14 +199,13 @@ class Plugin:
         """
         创建插件临时指令响应器
             key: 临时指令的key
-            extra_args: 额外参数
-            get_extra_args: 额外参数的获取方法
+            properties: 额外参数
             timeout: 临时指令的过期时间
             block: 是否阻断后续响应器
         """
 
         def decorator(func: Callable[..., Coroutine]):
-            handle = Handle(extra_args, get_extra_args, block)
+            handle = Handle(properties, block)
             middle_func = lambda e: func(e, self.Finish(self.temp_handles, key))
             if rule:
                 if isinstance(rule, self.Rule):
