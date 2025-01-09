@@ -44,6 +44,7 @@ class Leaf:
     async def shutdown(self):
         self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
         await asyncio.gather(*self.wait_for)
+        self.running = False
 
     async def __aenter__(self) -> None:
         await self.startup()
