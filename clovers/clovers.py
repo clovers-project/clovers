@@ -86,7 +86,6 @@ class Clovers:
         self.adapters: dict[str, Adapter] = {}
 
     def leaf(self, key: str):
-        self.plugins.sort(key=lambda plugin: plugin.priority)
         leaf = Leaf(self.adapters[key])
         leaf.adapter.name = key
         leaf.adapter.remix(self.adapter)
