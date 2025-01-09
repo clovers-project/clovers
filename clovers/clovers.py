@@ -19,6 +19,7 @@ class Leaf:
         self.running = False
 
     async def startup(self):
+        self.plugins.sort(key=lambda plugin: plugin.priority)
         self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
         # 过滤没有指令响应任务的插件
         # 检查任务需求的参数是否存在于响应器获取参数方法。
