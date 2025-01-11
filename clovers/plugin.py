@@ -25,8 +25,7 @@ class Event:
 
     async def call(self, key, *args):
         """调用适配器方法，只接受位置参数"""
-        if key in self.calls:
-            return await self.calls[key](*args, **self.extra)
+        return await self.calls[key](*args, **self.extra)
 
 
 class Handle:
