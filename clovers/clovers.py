@@ -23,7 +23,7 @@ class Leaf:
         self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
         # 过滤没有指令响应任务的插件
         # 检查任务需求的参数是否存在于响应器获取参数方法。
-        adapter_properties = set(self.adapter.propertys_lib.keys())
+        adapter_properties = set(self.adapter.properties_lib.keys())
         plugins = []
         for plugin in self.plugins:
             if not plugin.ready():

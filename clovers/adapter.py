@@ -19,7 +19,7 @@ def kwfilter(func: Callable[..., Coroutine]):
 class Adapter:
     def __init__(self, name: str = "") -> None:
         self.name: str = name
-        self.propertys_lib: MethodLib = {}
+        self.properties_lib: MethodLib = {}
         self.sends_lib: MethodLib = {}
         self.calls_lib: MethodLib = {}
 
@@ -30,7 +30,7 @@ class Adapter:
             method = kwfilter(func)
             if method_name not in self.calls_lib:
                 self.calls_lib[method_name] = method
-            self.propertys_lib[method_name] = method
+            self.properties_lib[method_name] = method
 
         return decorator
 
@@ -55,10 +55,12 @@ class Adapter:
 
     def remix(self, method: "Adapter"):
         """混合其他兼容方法"""
-        for k, v in method.propertys_lib.items():
-            self.propertys_lib.setdefault(k, v)
+        for k, v in method.properties_lib.items():
+            self.properties_lib.setdefault(k, v)
         for k, v in method.sends_lib.items():
             self.sends_lib.setdefault(k, v)
+        for k, v in method.calls_lib.items():
+            self.calls_lib.setdefault(k, v)
 
     async def response(self, handle: Handle, event: Event, extra):
         try:
@@ -68,7 +70,7 @@ class Adapter:
                 for key in handle.properties:
                     if key in event.properties:
                         continue
-                    properties_task.append(self.propertys_lib[key](**extra))
+                    properties_task.append(self.properties_lib[key](**extra))
                     properties.append(key)
                 event.properties.update({k: v for k, v in zip(properties, await asyncio.gather(*properties_task))})
             event.calls = self.calls_lib
