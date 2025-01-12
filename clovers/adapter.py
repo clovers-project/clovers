@@ -53,13 +53,13 @@ class Adapter:
 
         return decorator
 
-    def remix(self, method: "Adapter"):
+    def remix(self, adapter: "Adapter"):
         """混合其他兼容方法"""
-        for k, v in method.properties_lib.items():
+        for k, v in adapter.properties_lib.items():
             self.properties_lib.setdefault(k, v)
-        for k, v in method.sends_lib.items():
+        for k, v in adapter.sends_lib.items():
             self.sends_lib.setdefault(k, v)
-        for k, v in method.calls_lib.items():
+        for k, v in adapter.calls_lib.items():
             self.calls_lib.setdefault(k, v)
 
     async def response(self, handle: Handle, event: Event, extra):

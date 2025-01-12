@@ -13,7 +13,8 @@ class Leaf:
     running: bool
 
     def __init__(self, adapter: Adapter) -> None:
-        self.adapter = adapter
+        self.adapter = Adapter()
+        self.adapter.remix(adapter)
         self.plugins = []
         self.wait_for = []
         self.running = False
