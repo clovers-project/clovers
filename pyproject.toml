@@ -1,14 +1,13 @@
-[tool.poetry]
+[project]
 name = "clovers"
 version = "0.3.4"
 description = ""
-authors = ["KarisAya <1048827424@qq.com>"]
+authors = [{ name = "KarisAya", email = "1048827424@qq.com" }]
 readme = "README.md"
+requires-python = ">=3.12,<4.0.0"
+dependencies = ["toml (>=0.10.2,<0.11.0)"]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-toml = "^0.10.2"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
