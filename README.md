@@ -10,7 +10,8 @@ _✨ 高度自定义的聊天平台 Python 异步机器人指令-响应插件框
 [![pypi](https://img.shields.io/pypi/v/clovers.svg)](https://pypi.python.org/pypi/clovers)
 [![pypi download](https://img.shields.io/pypi/dm/clovers)](https://pypi.python.org/pypi/clovers)
 [![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
-[![LICENSE](https://img.shields.io/github/license/KarisAya/clovers.svg)](./LICENSE)
+[![Github](https://img.shields.io/badge/GitHub-Clovers-00CC33?logo=github)](https://github.com/clovers-project/clovers)
+[![LICENSE](https://img.shields.io/github/license/clovers-project/clovers.svg)](./LICENSE)
 
 [使用文档](https://clovers-project.github.io/)
 
