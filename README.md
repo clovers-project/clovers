@@ -1,23 +1,16 @@
 <div align="center">
 
-<a href="https://v2.nonebot.dev/store">
-  <img src="https://raw.githubusercontent.com/clovers-project/clovers.github.io/master/docs/icon.png" width="180" height="180" alt="clovers">
-</a>
+<a href="https://clovers-project.github.io/"><img src="./icon.svg" width="180" height="180" alt="clovers"></a>
 
 # clovers
 
 _✨ 高度自定义的聊天平台 Python 异步机器人指令-响应插件框架 ✨_
 
-<img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="python">
-<a href="./LICENSE">
-  <img src="https://img.shields.io/github/license/KarisAya/clovers.svg" alt="license">
-</a>
-<a href="https://pypi.python.org/pypi/clovers">
-  <img src="https://img.shields.io/pypi/v/clovers.svg" alt="pypi">
-</a>
-<a href="https://pypi.python.org/pypi/clovers">
-  <img src="https://img.shields.io/pypi/dm/clovers" alt="pypi download">
-</a>
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![pypi](https://img.shields.io/pypi/v/clovers.svg)](https://pypi.python.org/pypi/clovers)
+[![pypi download](https://img.shields.io/pypi/dm/clovers)](https://pypi.python.org/pypi/clovers)
+[![Poetry](https://img.shields.io/endpoint?url=https://python-poetry.org/badge/v0.json)](https://python-poetry.org/)
+[![LICENSE](https://img.shields.io/github/license/KarisAya/clovers.svg)](./LICENSE)
 
 [使用文档](https://clovers-project.github.io/)
 
