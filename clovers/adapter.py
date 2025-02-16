@@ -6,9 +6,11 @@ from .logger import logger
 
 
 def kwfilter(func: Callable[..., Coroutine]):
-    kw = set(func.__code__.co_varnames)
-    if not kw:
+
+    co_argcount = func.__code__.co_argcount
+    if co_argcount == 0:
         return lambda *args, **kwargs: func()
+    kw = set(func.__code__.co_varnames[:co_argcount])
 
     async def wrapper(*args, **kwargs):
         return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
