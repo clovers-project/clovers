@@ -1,23 +1,72 @@
 import asyncio
-from collections.abc import Awaitable
-from .plugin import Plugin, Event
-from .adapter import Adapter
+from importlib import import_module
+from pathlib import Path
+from .core import Plugin, Event, Adapter
+from .typing import RunningTask
 from .logger import logger
-from .tools import load_module
+
+
+def import_path(path: str | Path):
+    path = Path(path) if isinstance(path, str) else path
+    return ".".join(path.relative_to(Path()).parts)
+
+
+def list_modules(path: str | Path) -> list[str]:
+    path = Path(path) if isinstance(path, str) else path
+    import_path = ".".join(path.relative_to(Path()).parts)
+    namelist = []
+    for x in path.iterdir():
+        name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
+        if name.startswith("_"):
+            continue
+        namelist.append(f"{import_path}.{name}")
+    return namelist
 
 
 class Leaf:
     adapter: Adapter
     plugins: list[Plugin]
-    wait_for: list[Awaitable]
+    wait_for: list[RunningTask]
     running: bool
 
-    def __init__(self, adapter: Adapter) -> None:
-        self.adapter = Adapter(adapter.name)
-        self.adapter.remix(adapter)
+    def __init__(self, name: str) -> None:
+        self.adapter = Adapter(name)
         self.plugins = []
         self.wait_for = []
         self.running = False
+
+    def load_adapter(self, name: str | Path, is_path=False):
+        if is_path or isinstance(name, Path):
+            import_name = import_path(name)
+        else:
+            import_name = name
+        logger.info(f"[loading adapter] {import_name} ...")
+        try:
+            adapter = getattr(import_module(import_name), "__adapter__", None)
+            assert isinstance(adapter, Adapter)
+        except Exception as e:
+            logger.exception(f"adapter {import_name} load failed", exc_info=e)
+            return
+        self.adapter.remix(adapter)
+
+    def load_plugin(self, name: str | Path, is_path=False):
+        if is_path or isinstance(name, Path):
+            import_name = import_path(name)
+        else:
+            import_name = name
+        logger.info(f"[loading plugin][{self.adapter.name}] {import_name} ...")
+        try:
+            plugin = getattr(import_module(import_name), "__plugin__", None)
+            assert isinstance(plugin, Plugin)
+        except Exception as e:
+            logger.exception(f"plugin {import_name} load failed", exc_info=e)
+            return
+        key = plugin.name or import_name
+        if plugin in self.plugins:
+            logger.warning(f"plugin {key} already loaded")
+        else:
+            plugin.name = key
+            self.plugins.append(plugin)
 
     async def startup(self):
         self.plugins.sort(key=lambda plugin: plugin.priority)
@@ -79,60 +128,3 @@ class Leaf:
                 if inner_count > 0 and plugin.block:
                     break
         return count
-
-
-class Clovers:
-    def __init__(self) -> None:
-        self.adapter: Adapter = Adapter()
-        self.plugins: list[Plugin] = []
-        self.adapters: dict[str, Adapter] = {}
-
-    def leaf(self, key: str):
-        leaf = Leaf(self.adapters[key])
-        leaf.adapter.name = key
-        leaf.adapter.remix(self.adapter)
-        leaf.plugins.extend(self.plugins)
-        return leaf
-
-    def register_plugin(self, plugin: Plugin):
-        if plugin.name in self.plugins:
-            logger.warning(f"plugin {plugin.name} already loaded")
-        else:
-            self.plugins.append(plugin)
-
-    def load_plugin(self, name: str):
-        logger.info(f"【loading plugin】 {name} ...")
-        try:
-            plugin = load_module(name, "__plugin__")
-        except Exception as e:
-            logger.exception(f"plugin {name} load failed", exc_info=e)
-            return
-        if isinstance(plugin, Plugin):
-            plugin.name = plugin.name or name
-            self.register_plugin(plugin)
-
-    def load_plugins(self, namelist: list[str]):
-        for name in namelist:
-            self.load_plugin(name)
-
-    def register_adapter(self, adapter: Adapter):
-        if adapter.name in self.adapters:
-            self.adapters[adapter.name].remix(adapter)
-            logger.info(f"{adapter.name} remixed")
-        else:
-            self.adapters[adapter.name] = adapter
-
-    def load_adapter(self, name: str):
-        logger.info(f"【loading adapter】 {name} ...")
-        try:
-            adapter = load_module(name, "__adapter__")
-        except Exception as e:
-            logger.exception(f"plugin {name} load failed", exc_info=e)
-            return
-        if isinstance(adapter, Adapter):
-            adapter.name = adapter.name or name
-            self.register_adapter(adapter)
-
-    def load_adapters(self, namelist: list[str]):
-        for name in namelist:
-            self.load_adapter(name)

@@ -1,8 +1,9 @@
 import time
+import asyncio
 import re
-from collections.abc import Callable, Coroutine, Iterable, Sequence
-from typing import Any
-from .typing import MethodLib, Task
+from typing import Any, Callable, Coroutine, Iterable, Sequence
+from .typing import Method, MethodLib, Task
+from .logger import logger
 
 
 class Result:
@@ -83,10 +84,8 @@ class Plugin:
         if not self._handles:
             return False
         handle_queue = []
-        handle_queue.extend(
-            [("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x]
-        )
-        handle_queue.extend([("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x])
+        handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
+        handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[3])
         self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
         return True
@@ -233,13 +232,13 @@ class Plugin:
             """延迟临时指令响应器的过期时间"""
             self.handles[self.key] = (time.time() + timeout, self.handles[self.key][1])
 
-    def startup(self, func: Callable[[], Coroutine]):
+    def startup(self, func: Task):
         """注册一个启动任务"""
         self.startup_tasklist.append(func)
 
         return func
 
-    def shutdown(self, func: Callable[[], Coroutine]):
+    def shutdown(self, func: Task):
         """注册一个结束任务"""
         self.shutdown_tasklist.append(func)
 
@@ -282,3 +281,84 @@ class Plugin:
                 case _:
                     assert False, f"check_type {check_type} are not supported"
         return data
+
+
+def kwfilter(func: Method) -> Method:
+
+    co_argcount = func.__code__.co_argcount
+    if co_argcount == 0:
+        return lambda *args, **kwargs: func()
+    kw = set(func.__code__.co_varnames[:co_argcount])
+
+    async def wrapper(*args, **kwargs):
+        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
+
+    return wrapper
+
+
+class Adapter:
+    def __init__(self, name: str = "") -> None:
+        self.name: str = name
+        self.properties_lib: MethodLib = {}
+        self.sends_lib: MethodLib = {}
+        self.calls_lib: MethodLib = {}
+
+    def property_method(self, method_name: str) -> Callable:
+        """添加一个获取参数方法"""
+
+        def decorator(func: Method):
+            method = kwfilter(func)
+            if method_name not in self.calls_lib:
+                self.calls_lib[method_name] = method
+            self.properties_lib[method_name] = method
+
+        return decorator
+
+    def send_method(self, method_name: str) -> Callable:
+        """添加一个发送消息方法"""
+
+        def decorator(func: Method):
+            method = kwfilter(func)
+            if method_name not in self.calls_lib:
+                self.calls_lib[method_name] = method
+            self.sends_lib[method_name] = method
+
+        return decorator
+
+    def call_method(self, method_name: str):
+        """添加一个调用方法"""
+
+        def decorator(func: Method):
+            self.calls_lib[method_name] = kwfilter(func)
+
+        return decorator
+
+    def remix(self, adapter: "Adapter"):
+        """混合其他兼容方法"""
+        for k, v in adapter.properties_lib.items():
+            self.properties_lib.setdefault(k, v)
+        for k, v in adapter.sends_lib.items():
+            self.sends_lib.setdefault(k, v)
+        for k, v in adapter.calls_lib.items():
+            self.calls_lib.setdefault(k, v)
+
+    async def response(self, handle: Handle, event: Event, extra):
+        try:
+            if handle.properties:
+                properties_task = []
+                properties = []
+                for key in handle.properties:
+                    if key in event.properties:
+                        continue
+                    properties_task.append(self.properties_lib[key](**extra))
+                    properties.append(key)
+                event.properties.update({k: v for k, v in zip(properties, await asyncio.gather(*properties_task))})
+            event.calls = self.calls_lib
+            event.extra = extra
+            result = await handle(event)
+            if not result:
+                return
+            await self.sends_lib[result.send_method](result.data, **extra)
+            return handle.block
+        except:
+            logger.exception("response")
