@@ -79,6 +79,20 @@ class Plugin:
         self._regex_handle_keys: dict[re.Pattern, list[tuple[int, int]]] = {}
         """正则触发的响应键列表"""
 
+    def __str__(self) -> str:
+        handle_queue = []
+        handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
+        handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
+        handle_queue.sort(key=lambda x: x[2])
+        info = []
+        info.append(f"<Plugin {self.name}>")
+        info.extend(
+            f'\t<Handle key="{key}" priority="{priority}" check_type="{check_type}" command="{command}" />'
+            for check_type, command, key, priority in handle_queue
+        )
+        info.append(f"</Plugin>")
+        return "\n".join(info)
+
     def ready(self):
         """准备插件"""
         if not self._handles:
@@ -104,7 +118,7 @@ class Plugin:
             elif callable(checker):
                 self.checker = [checker]
             else:
-                raise TypeError(f"checker：{checker} 类型错误：{type(checker)}")
+                raise TypeError(f"Checker: {checker} has an invalid type: {type(checker)}")
 
         def check(self, func: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
             if len(self.checker) == 1:
@@ -113,27 +127,21 @@ class Plugin:
                 checker = lambda event: all(checker(event) for checker in self.checker)
 
             async def wrapper(event):
-                if checker(event):
-                    return await func(event)
+                return await func(event) if checker(event) else None
 
             return wrapper
 
     def handle_warpper(self, func: Callable[..., Coroutine]):
         """构建插件的原始event->result响应"""
-        if build_event := self.build_event:
-            middle_func = lambda e: func(build_event(e))
-        else:
-            middle_func = func
-
-        if build_result := self.build_result:
-
-            async def wrapper(event):
-                if result := await middle_func(event):
-                    return build_result(result)
-
-            return wrapper
-        else:
+        middle_func = lambda e: func(build_event(e)) if (build_event := self.build_event) else func(e)
+        if not self.build_result:
             return middle_func
+        build_result = self.build_result
+
+        async def wrapper(event):
+            return build_result(result) if (result := await middle_func(event)) else None
+
+        return wrapper
 
     def commands_register(self, commands: PluginCommands, key: int, priority: int):
         """
@@ -153,7 +161,7 @@ class Plugin:
             for command in commands:
                 self._command_handle_keys.setdefault(command, []).append(data)
         else:
-            raise TypeError(f"指令：{commands} 类型错误：{type(commands)}")
+            raise TypeError(f"Command: {commands} has an invalid type: {type(commands)}")
 
     def handle(
         self,
@@ -332,6 +340,12 @@ class Adapter:
             self.calls_lib[method_name] = kwfilter(func)
 
         return decorator
+
+    def update(self, adapter: "Adapter"):
+        """更新兼容方法"""
+        self.properties_lib.update(adapter.properties_lib)
+        self.sends_lib.update(adapter.sends_lib)
+        self.calls_lib.update(adapter.calls_lib)
 
     def remix(self, adapter: "Adapter"):
         """混合其他兼容方法"""

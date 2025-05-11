@@ -78,13 +78,10 @@ class Leaf:
         for plugin in self.plugins:
             if not plugin.ready():
                 continue
-            plugin_properties: set[str] = set().union(*[set(handle.properties) for handle in plugin.handles])
+            plugin_properties = {p for handle in plugin.handles for p in handle.properties}
             if method_miss := plugin_properties - adapter_properties:
-                logger.warning(
-                    f'插件 "{plugin.name}" 声明了适配器 "{self.adapter.name}" 未定义的 property 方法',
-                    extra={"method_miss": method_miss},
-                )
-                logger.debug(f'"{self.adapter.name}"未定义的 property 方法:{method_miss}')
+                logger.warning(f'Plugin "{plugin.name}" requires method not defined by Adapter "{self.adapter.name}"')
+                logger.debug(f'Undefined property methods in "{self.adapter.name}": {method_miss}', extra={"method_miss": method_miss})
                 continue
             plugins.append(plugin)
         self.plugins.clear()
