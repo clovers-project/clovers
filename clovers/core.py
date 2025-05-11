@@ -60,8 +60,6 @@ class Plugin:
         """插件优先级"""
         self.block: bool = block
         """是否阻断后续插件"""
-        self.temp_handles: dict[str, tuple[float, Handle]] = {}
-        """临时任务列表"""
         self.startup_tasklist: list[Task] = []
         """启动任务列表"""
         self.shutdown_tasklist: list[Task] = []
@@ -70,19 +68,26 @@ class Plugin:
         """构建event"""
         self.build_result: Callable[[Any], Result] | None = build_result
         """构建result"""
+        self.temp_handles_dict: dict[str, tuple[float, Handle]] = {}
+        """临时任务列表"""
         self._handles: dict[int, Handle] = {}
         """已注册的响应器"""
-        self._handles_queue: list[tuple[str, str | re.Pattern, int]] = []
-        """已注册指令响应器队列"""
         self._command_handle_keys: dict[str, list[tuple[int, int]]] = {}
         """指令触发的响应键列表"""
         self._regex_handle_keys: dict[re.Pattern, list[tuple[int, int]]] = {}
         """正则触发的响应键列表"""
+        self._handles_queue: list[tuple[str, str | re.Pattern, int]] = []
+        """已注册指令响应器队列"""
+        self._keyword_handle_keys: dict[Any, list[tuple[int, int]]] = {}
+        """键触发的响应器队列"""
+        self._keyword_handles_dict: dict[Any, list[int]] = {}
+        """键触发的响应器列表"""
 
     def __str__(self) -> str:
         handle_queue = []
         handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
+        handle_queue.extend(("keyword", keyword, key, priority) for keyword, x in self._keyword_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[2])
         info = []
         info.append(f"<Plugin {self.name}>")
@@ -102,6 +107,9 @@ class Plugin:
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[3])
         self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
+        self._keyword_handles_dict = {
+            key: [i for i, _ in sorted(queue, key=lambda x: x[1])] for key, queue in self._keyword_handle_keys.items()
+        }
         return True
 
     @property
@@ -131,17 +139,25 @@ class Plugin:
 
             return wrapper
 
-    def handle_warpper(self, func: Callable[..., Coroutine]):
+    type Ruleable = list[Callable[..., bool]] | Callable[..., bool] | Rule | None
+
+    def handle_warpper(self, rule: Ruleable = None):
         """构建插件的原始event->result响应"""
-        middle_func = lambda e: func(build_event(e)) if (build_event := self.build_event) else func(e)
-        if not self.build_result:
-            return middle_func
-        build_result = self.build_result
 
-        async def wrapper(event):
-            return build_result(result) if (result := await middle_func(event)) else None
+        def decorator(func: Callable[..., Coroutine]):
+            if rule:
+                func = rule.check(func) if isinstance(rule, self.Rule) else self.Rule(rule).check(func)
+            middle_func = func if (build_event := self.build_event) is None else lambda e: func(build_event(e))
+            if not self.build_result:
+                return middle_func
+            build_result = self.build_result
 
-        return wrapper
+            async def wrapper(event):
+                return build_result(result) if (result := await middle_func(event)) else None
+
+            return wrapper
+
+        return decorator
 
     def commands_register(self, commands: PluginCommands, key: int, priority: int):
         """
@@ -167,7 +183,7 @@ class Plugin:
         self,
         commands: PluginCommands,
         properties: Iterable[str] = [],
-        rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None = None,
+        rule: Ruleable = None,
         priority: int = 0,
         block: bool = True,
     ):
@@ -181,16 +197,39 @@ class Plugin:
         """
 
         def decorator(func: Callable[..., Coroutine]):
-            key = len(self._handles)
-            self.commands_register(commands, key, priority)
+            handle_key = len(self._handles)
+            self.commands_register(commands, handle_key, priority)
             handle = Handle(properties, block)
-            if rule:
-                if isinstance(rule, self.Rule):
-                    func = rule.check(func)
-                else:
-                    func = self.Rule(rule).check(func)
-            handle.func = self.handle_warpper(func)
-            self._handles[key] = handle
+            handle.func = self.handle_warpper(rule)(func)
+            self._handles[handle_key] = handle
+            return handle.func
+
+        return decorator
+
+    def keyword_handle(
+        self,
+        keyword,
+        properties: Iterable[str] = [],
+        rule: Ruleable = None,
+        priority: int = 0,
+        block: bool = False,
+    ):
+        """
+        创建键触发响应器
+            key: 触发键
+            properties: 额外参数
+            rule: 响应规则
+            priority: 优先级
+            block: 是否阻断后续响应器
+        """
+
+        def decorator(func: Callable[..., Coroutine]):
+            handle_key = len(self._handles)
+            self._keyword_handle_keys.setdefault(keyword, []).append((handle_key, priority))
+            handle = Handle(properties, block)
+            handle.func = self.handle_warpper(rule)(func)
+            self._handles[handle_key] = handle
+            return handle.func
 
         return decorator
 
@@ -199,7 +238,7 @@ class Plugin:
         key: str,
         properties: Iterable[str] = [],
         timeout: float | int = 30.0,
-        rule: list[Callable[..., bool]] | Callable[..., bool] | Rule | None = None,
+        rule: Ruleable = None,
         block: bool = True,
     ):
         """
@@ -207,19 +246,16 @@ class Plugin:
             key: 临时指令的key
             properties: 额外参数
             timeout: 临时指令的过期时间
+            rule: 响应规则
             block: 是否阻断后续响应器
         """
 
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(properties, block)
-            middle_func = lambda e: func(e, self.Finish(self.temp_handles, key))
-            if rule:
-                if isinstance(rule, self.Rule):
-                    middle_func = rule.check(middle_func)
-                else:
-                    middle_func = self.Rule(rule).check(middle_func)
-            handle.func = self.handle_warpper(middle_func)
-            self.temp_handles[key] = time.time() + timeout, handle
+            middle_func = lambda e: func(e, self.Finish(self.temp_handles_dict, key))
+            handle.func = self.handle_warpper(rule)(middle_func)
+            self.temp_handles_dict[key] = time.time() + timeout, handle
+            return handle.func
 
         return decorator
 
@@ -254,15 +290,22 @@ class Plugin:
 
     def temp_check(self) -> bool:
         """检查是否有临时指令响应器"""
-        if not self.temp_handles:
+        if not self.temp_handles_dict:
             return False
         now = time.time()
-        self.temp_handles = {k: v for k, v in self.temp_handles.items() if v[0] > now}
-        if not self.temp_handles:
+        self.temp_handles_dict = {k: v for k, v in self.temp_handles_dict.items() if v[0] > now}
+        if not self.temp_handles_dict:
             return False
         return True
 
-    def __call__(self, message: str) -> list[tuple[Handle, Event]] | None:
+    def keyword_match(self, key) -> list[tuple[Handle, Event]] | None:
+        if key not in self._keyword_handles_dict:
+            return
+        index_lst = self._keyword_handles_dict[key]
+        event = Event("", [])
+        return [(self._handles[i], event) for i in index_lst]
+
+    def match(self, message: str) -> list[tuple[Handle, Event]] | None:
         command_list = message.split()
         if not command_list:
             return
@@ -311,6 +354,12 @@ class Adapter:
         self.sends_lib: MethodLib = {}
         self.calls_lib: MethodLib = {}
 
+    def extract_message(self, **extra) -> str | None:
+        raise NotImplementedError
+
+    def extract_key(self, **extra) -> Any | None:
+        return None
+
     def property_method(self, method_name: str) -> Callable:
         """添加一个获取参数方法"""
 
@@ -319,6 +368,7 @@ class Adapter:
             if method_name not in self.calls_lib:
                 self.calls_lib[method_name] = method
             self.properties_lib[method_name] = method
+            return func
 
         return decorator
 
@@ -330,6 +380,7 @@ class Adapter:
             if method_name not in self.calls_lib:
                 self.calls_lib[method_name] = method
             self.sends_lib[method_name] = method
+            return func
 
         return decorator
 
@@ -338,6 +389,7 @@ class Adapter:
 
         def decorator(func: Method):
             self.calls_lib[method_name] = kwfilter(func)
+            return func
 
         return decorator
 

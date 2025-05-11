@@ -99,29 +99,75 @@ class Leaf:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.shutdown()
 
-    async def response(self, command: str, /, **extra) -> int:
+    async def response(self, **extra) -> int:
+        message = self.adapter.extract_message(**extra)
         count = 0
-        for plugin in self.plugins:
-            if plugin.temp_check():
-                event = Event(command, [])
-                flags = await asyncio.gather(*[self.adapter.response(handle, event, extra) for _, handle in plugin.temp_handles.values()])
-                flags = [flag for flag in flags if not flag is None]
-                if flags:
-                    count += len(flags)
-                    if any(flags):
-                        if plugin.block:
+        if message is not None:
+            temp_event = None
+            for plugin in self.plugins:
+                if plugin.temp_check():
+                    temp_event = temp_event or Event(message, [])
+                    flags = [
+                        flag
+                        for flag in await asyncio.gather(
+                            *(
+                                self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
+                                for _, handle in plugin.temp_handles_dict.values()
+                            )
+                        )
+                        if not flag is None
+                    ]
+                    if flags:
+                        count += len(flags)
+                        if any(flags):
+                            if plugin.block:
+                                break
+                            else:
+                                continue
+                if data := plugin.match(message):
+                    inner_count = 0
+                    for handle, event in data:
+                        flag = await self.adapter.response(handle, event, extra)
+                        if flag is None:
+                            continue
+                        inner_count += 1
+                        if flag:
                             break
-                        continue
-            if data := plugin(command):
-                inner_count = 0
-                for handle, event in data:
-                    flag = await self.adapter.response(handle, event, extra)
-                    if flag is None:
-                        continue
-                    inner_count += 1
-                    if flag:
+                    count += inner_count
+                    if inner_count > 0 and plugin.block:
                         break
-                count += inner_count
-                if inner_count > 0 and plugin.block:
-                    break
+        elif keyword := self.adapter.extract_key(**extra):
+            temp_event = None
+            for plugin in self.plugins:
+                if plugin.temp_check():
+                    temp_event = temp_event or Event("", [])
+                    flags = [
+                        flag
+                        for flag in await asyncio.gather(
+                            *(
+                                self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
+                                for _, handle in plugin.temp_handles_dict.values()
+                            )
+                        )
+                        if not flag is None
+                    ]
+                    if flags:
+                        count += len(flags)
+                        if any(flags):
+                            if plugin.block:
+                                break
+                            else:
+                                continue
+                if data := plugin.keyword_match(keyword):
+                    inner_count = 0
+                    for handle, event in data:
+                        flag = await self.adapter.response(handle, event, extra)
+                        if flag is None:
+                            continue
+                        inner_count += 1
+                        if flag:
+                            break
+                    count += inner_count
+                    if inner_count > 0 and plugin.block:
+                        break
         return count
