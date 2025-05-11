@@ -1,7 +1,9 @@
 import asyncio
+import abc
 from importlib import import_module
 from pathlib import Path
 from .core import Plugin, Event, Adapter
+from typing import Any
 from .typing import RunningTask
 from .logger import logger
 
@@ -23,7 +25,8 @@ def list_modules(path: str | Path) -> list[str]:
     return namelist
 
 
-class Leaf:
+class Leaf(abc.ABC):
+
     adapter: Adapter
     plugins: list[Plugin]
     wait_for: list[RunningTask]
@@ -99,75 +102,92 @@ class Leaf:
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.shutdown()
 
-    async def response(self, **extra) -> int:
-        message = self.adapter.extract_message(**extra)
+    async def response_message(self, message: str, /, **extra):
         count = 0
-        if message is not None:
-            temp_event = None
-            for plugin in self.plugins:
-                if plugin.temp_check():
-                    temp_event = temp_event or Event(message, [])
-                    flags = [
-                        flag
-                        for flag in await asyncio.gather(
-                            *(
-                                self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
-                                for _, handle in plugin.temp_handles_dict.values()
-                            )
+        temp_event = None
+        for plugin in self.plugins:
+            if plugin.temp_check():
+                temp_event = temp_event or Event(message, [])
+                flags = [
+                    flag
+                    for flag in await asyncio.gather(
+                        *(
+                            self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
+                            for _, handle in plugin.temp_handles_dict.values()
                         )
-                        if not flag is None
-                    ]
-                    if flags:
-                        count += len(flags)
-                        if any(flags):
-                            if plugin.block:
-                                break
-                            else:
-                                continue
-                if data := plugin.match(message):
-                    inner_count = 0
-                    for handle, event in data:
-                        flag = await self.adapter.response(handle, event, extra)
-                        if flag is None:
-                            continue
-                        inner_count += 1
-                        if flag:
+                    )
+                    if not flag is None
+                ]
+                if flags:
+                    count += len(flags)
+                    if any(flags):
+                        if plugin.block:
                             break
-                    count += inner_count
-                    if inner_count > 0 and plugin.block:
-                        break
-        elif keyword := self.adapter.extract_key(**extra):
-            temp_event = None
-            for plugin in self.plugins:
-                if plugin.temp_check():
-                    temp_event = temp_event or Event("", [])
-                    flags = [
-                        flag
-                        for flag in await asyncio.gather(
-                            *(
-                                self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
-                                for _, handle in plugin.temp_handles_dict.values()
-                            )
-                        )
-                        if not flag is None
-                    ]
-                    if flags:
-                        count += len(flags)
-                        if any(flags):
-                            if plugin.block:
-                                break
-                            else:
-                                continue
-                if data := plugin.keyword_match(keyword):
-                    inner_count = 0
-                    for handle, event in data:
-                        flag = await self.adapter.response(handle, event, extra)
-                        if flag is None:
+                        else:
                             continue
-                        inner_count += 1
-                        if flag:
-                            break
-                    count += inner_count
-                    if inner_count > 0 and plugin.block:
+            if data := plugin.command_match(message):
+                inner_count = 0
+                for handle, event in data:
+                    flag = await self.adapter.response(handle, event, extra)
+                    if flag is None:
+                        continue
+                    inner_count += 1
+                    if flag:
                         break
+                count += inner_count
+                if inner_count > 0 and plugin.block:
+                    break
         return count
+
+    async def response_key(self, key, /, **extra) -> int:
+        count = 0
+        temp_event = None
+        for plugin in self.plugins:
+            if plugin.temp_check():
+                temp_event = temp_event or Event("", [])
+                flags = [
+                    flag
+                    for flag in await asyncio.gather(
+                        *(
+                            self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
+                            for _, handle in plugin.temp_handles_dict.values()
+                        )
+                    )
+                    if not flag is None
+                ]
+                if flags:
+                    count += len(flags)
+                    if any(flags):
+                        if plugin.block:
+                            break
+                        else:
+                            continue
+            if data := plugin.key_match(key):
+                inner_count = 0
+                for handle, event in data:
+                    flag = await self.adapter.response(handle, event, extra)
+                    if flag is None:
+                        continue
+                    inner_count += 1
+                    if flag:
+                        break
+                count += inner_count
+                if inner_count > 0 and plugin.block:
+                    break
+        return count
+
+    @staticmethod
+    @abc.abstractmethod
+    def extract_message(**extra) -> str | None:
+        raise NotImplementedError
+
+    @staticmethod
+    def extract_key(**extra) -> Any | None:
+        return None
+
+    async def response(self, **extra) -> int:
+        if (message := self.extract_message(**extra)) is not None:
+            return await self.response_message(message, **extra)
+        elif (key := self.extract_key(**extra)) is not None:
+            return await self.response_key(key, **extra)
+        return 0

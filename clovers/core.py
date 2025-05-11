@@ -78,16 +78,16 @@ class Plugin:
         """正则触发的响应键列表"""
         self._handles_queue: list[tuple[str, str | re.Pattern, int]] = []
         """已注册指令响应器队列"""
-        self._keyword_handle_keys: dict[Any, list[tuple[int, int]]] = {}
+        self._key_handle_keys: dict[Any, list[tuple[int, int]]] = {}
         """键触发的响应器队列"""
-        self._keyword_handles_dict: dict[Any, list[int]] = {}
+        self._key_handles_dict: dict[Any, list[int]] = {}
         """键触发的响应器列表"""
 
     def __str__(self) -> str:
         handle_queue = []
         handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
-        handle_queue.extend(("keyword", keyword, key, priority) for keyword, x in self._keyword_handle_keys.items() for key, priority in x)
+        handle_queue.extend(("key", keyword, key, priority) for keyword, x in self._key_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[2])
         info = []
         info.append(f"<Plugin {self.name}>")
@@ -107,9 +107,7 @@ class Plugin:
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[3])
         self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
-        self._keyword_handles_dict = {
-            key: [i for i, _ in sorted(queue, key=lambda x: x[1])] for key, queue in self._keyword_handle_keys.items()
-        }
+        self._key_handles_dict = {key: [i for i, _ in sorted(queue, key=lambda x: x[1])] for key, queue in self._key_handle_keys.items()}
         return True
 
     @property
@@ -206,9 +204,9 @@ class Plugin:
 
         return decorator
 
-    def keyword_handle(
+    def key_handle(
         self,
-        keyword,
+        key,
         properties: Iterable[str] = [],
         rule: Ruleable = None,
         priority: int = 0,
@@ -225,7 +223,7 @@ class Plugin:
 
         def decorator(func: Callable[..., Coroutine]):
             handle_key = len(self._handles)
-            self._keyword_handle_keys.setdefault(keyword, []).append((handle_key, priority))
+            self._key_handle_keys.setdefault(key, []).append((handle_key, priority))
             handle = Handle(properties, block)
             handle.func = self.handle_warpper(rule)(func)
             self._handles[handle_key] = handle
@@ -298,14 +296,14 @@ class Plugin:
             return False
         return True
 
-    def keyword_match(self, key) -> list[tuple[Handle, Event]] | None:
-        if key not in self._keyword_handles_dict:
+    def key_match(self, key) -> list[tuple[Handle, Event]] | None:
+        if key not in self._key_handles_dict:
             return
-        index_lst = self._keyword_handles_dict[key]
+        index_lst = self._key_handles_dict[key]
         event = Event("", [])
         return [(self._handles[i], event) for i in index_lst]
 
-    def match(self, message: str) -> list[tuple[Handle, Event]] | None:
+    def command_match(self, message: str) -> list[tuple[Handle, Event]] | None:
         command_list = message.split()
         if not command_list:
             return
@@ -353,12 +351,6 @@ class Adapter:
         self.properties_lib: MethodLib = {}
         self.sends_lib: MethodLib = {}
         self.calls_lib: MethodLib = {}
-
-    def extract_message(self, **extra) -> str | None:
-        raise NotImplementedError
-
-    def extract_key(self, **extra) -> Any | None:
-        return None
 
     def property_method(self, method_name: str) -> Callable:
         """添加一个获取参数方法"""
