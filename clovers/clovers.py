@@ -177,10 +177,10 @@ class Leaf(abc.ABC):
         return count
 
     @abc.abstractmethod
-    def extract_message(**extra) -> str | None:
+    def extract_message(self, **extra) -> str | None:
         raise NotImplementedError
 
-    def extract_key(**extra) -> Any | None:
+    def extract_key(self, **extra) -> Any | None:
         return None
 
     async def response(self, **extra) -> int:
