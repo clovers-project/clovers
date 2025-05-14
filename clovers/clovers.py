@@ -176,12 +176,10 @@ class Leaf(abc.ABC):
                     break
         return count
 
-    @staticmethod
     @abc.abstractmethod
     def extract_message(**extra) -> str | None:
         raise NotImplementedError
 
-    @staticmethod
     def extract_key(**extra) -> Any | None:
         return None
 
