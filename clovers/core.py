@@ -82,6 +82,7 @@ class Plugin:
         """键触发的响应器队列"""
         self._key_handles_dict: dict[Any, list[int]] = {}
         """键触发的响应器列表"""
+        self._ready: bool = False
 
     def __str__(self) -> str:
         handle_queue = []
@@ -102,12 +103,15 @@ class Plugin:
         """准备插件"""
         if not self._handles:
             return False
+        if self._ready:
+            return True
         handle_queue = []
         handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[3])
         self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
         self._key_handles_dict = {key: [i for i, _ in sorted(queue, key=lambda x: x[1])] for key, queue in self._key_handle_keys.items()}
+        self._ready = True
         return True
 
     @property

@@ -71,11 +71,12 @@ class Leaf(abc.ABC):
             plugin.name = key
             self.plugins.append(plugin)
 
-    async def startup(self):
-        self.plugins.sort(key=lambda plugin: plugin.priority)
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
-        # 过滤没有指令响应任务的插件
-        # 检查任务需求的参数是否存在于响应器获取参数方法。
+    def plugins_ready(self):
+        """
+        过滤没有指令响应任务的插件
+        检查任务需求的参数是否存在于响应器获取参数方法。
+        """
+
         adapter_properties = set(self.adapter.properties_lib.keys())
         plugins = []
         for plugin in self.plugins:
@@ -89,6 +90,11 @@ class Leaf(abc.ABC):
             plugins.append(plugin)
         self.plugins.clear()
         self.plugins.extend(plugins)
+
+    async def startup(self):
+        self.plugins.sort(key=lambda plugin: plugin.priority)
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
+        self.plugins_ready()
         self.running = True
 
     async def shutdown(self):
