@@ -189,3 +189,11 @@ class Leaf(abc.ABC):
         elif (key := self.extract_key(**extra)) is not None:
             return await self.response_key(key, **extra)
         return 0
+
+    async def run(self) -> None:
+        """
+        async with self:
+            while self.running:
+                asyncio.create_task(self.response(**kwargs))
+        """
+        raise NotImplementedError
