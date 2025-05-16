@@ -9,7 +9,7 @@ from .logger import logger
 
 
 def import_path(path: str | Path):
-    path = Path(path) if isinstance(path, str) else path
+    path = Path(path).resolve() if isinstance(path, str) else path.resolve()
     return ".".join(path.relative_to(Path()).parts)
 
 
@@ -25,73 +25,23 @@ def list_modules(path: str | Path) -> list[str]:
     return namelist
 
 
-class Client(abc.ABC):
+class PluginCore(abc.ABC):
+    """
+    插件核心：此处管理插件的加载和准备，是各种实现的基础
+    """
+
+    name: str
     plugins: list[Plugin]
-    wait_for: list[RunningTask]
-    running: bool
 
-    def __init__(self) -> None:
+    def __init__(self):
         self.plugins = []
-        self.wait_for = []
-        self.running = False
-
-    @abc.abstractmethod
-    def plugins_ready(self):
-        raise NotImplementedError
-
-    async def startup(self):
-        self.plugins.sort(key=lambda plugin: plugin.priority)
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
-        self.plugins_ready()
-        self.running = True
-
-    async def shutdown(self):
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
-        await asyncio.gather(*self.wait_for)
-        self.running = False
-
-    async def __aenter__(self) -> None:
-        await self.startup()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.shutdown()
-
-    async def run(self) -> None:
-        """
-        async with self:
-            while self.running:
-                asyncio.create_task(self.response(**kwargs))
-        """
-        raise NotImplementedError
-
-
-class Leaf(Client):
-    adapter: Adapter
-
-    def __init__(self, name: str) -> None:
-        super().__init__()
-        self.adapter = Adapter(name)
-
-    def load_adapter(self, name: str | Path, is_path=False):
-        if is_path or isinstance(name, Path):
-            import_name = import_path(name)
-        else:
-            import_name = name
-        logger.info(f"[loading adapter] {import_name} ...")
-        try:
-            adapter = getattr(import_module(import_name), "__adapter__", None)
-            assert isinstance(adapter, Adapter)
-        except Exception as e:
-            logger.exception(f"adapter {import_name} load failed", exc_info=e)
-            return
-        self.adapter.remix(adapter)
 
     def load_plugin(self, name: str | Path, is_path=False):
         if is_path or isinstance(name, Path):
             import_name = import_path(name)
         else:
             import_name = name
-        logger.info(f"[loading plugin][{self.adapter.name}] {import_name} ...")
+        logger.info(f"[loading plugin][{self.name}] {import_name} ...")
         try:
             plugin = getattr(import_module(import_name), "__plugin__", None)
             assert isinstance(plugin, Plugin)
@@ -101,16 +51,91 @@ class Leaf(Client):
         key = plugin.name or import_name
         if plugin in self.plugins:
             logger.warning(f"plugin {key} already loaded")
-        else:
-            plugin.name = key
-            self.plugins.append(plugin)
+            return
+        plugin.name = key
+        self.plugins.append(plugin)
 
+    @abc.abstractmethod
     def plugins_ready(self):
         """
-        过滤没有指令响应任务的插件
-        检查任务需求的参数是否存在于响应器获取参数方法。
+        实现插件的准备逻辑，一般为执行 plugin.ready() 时进行一些处理
         """
+        raise NotImplementedError
 
+
+class Client(PluginCore):
+    """clovers客户端基类"""
+
+    wait_for: list[RunningTask]
+    running: bool
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self.name = name
+        self.wait_for = []
+        self.running = False
+
+    async def startup(self):
+        if self.running:
+            raise RuntimeError("Client is already running")
+        self.plugins.sort(key=lambda plugin: plugin.priority)
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
+        self.plugins_ready()
+        self.running = True
+
+    async def shutdown(self):
+        if not self.running:
+            raise RuntimeError("Client is not running")
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
+        await asyncio.gather(*self.wait_for)
+        self.wait_for.clear()
+        self.running = False
+
+    async def __aenter__(self) -> None:
+        await self.startup()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.shutdown()
+
+    @abc.abstractmethod
+    async def run(self) -> None:
+        """
+        Run the client
+        .. code-block:: python3
+            '''
+            async with self:
+                while self.running:
+                    pass
+            '''
+        """
+        raise NotImplementedError
+
+
+class Leaf(PluginCore):
+    """clovers 响应处理基类"""
+
+    adapter: Adapter
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self.name = name
+        self.adapter = Adapter(name)
+
+    def load_adapter(self, name: str | Path, is_path=False):
+        if is_path or isinstance(name, Path):
+            import_name = import_path(name)
+        else:
+            import_name = name
+        logger.info(f"[loading adapter][{self.name}] {import_name} ...")
+        try:
+            adapter = getattr(import_module(import_name), "__adapter__", None)
+            assert isinstance(adapter, Adapter)
+        except Exception as e:
+            logger.exception(f"adapter {import_name} load failed", exc_info=e)
+            return
+        self.adapter.remix(adapter)
+
+    def plugins_ready(self):
         adapter_properties = set(self.adapter.properties_lib.keys())
         plugins = []
         for plugin in self.plugins:
@@ -212,3 +237,11 @@ class Leaf(Client):
         elif (key := self.extract_key(**extra)) is not None:
             return await self.response_key(key, **extra)
         return 0
+
+
+class LeafClient(Leaf, Client):
+    """
+    单适配器响应客户端
+        只作为类型示范，不建议继承这个类，因为这个类没有实现任何方法。
+        如果你需要实现单适配器响应客户端请直接继承(Leaf, Client)
+    """
