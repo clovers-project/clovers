@@ -25,18 +25,52 @@ def list_modules(path: str | Path) -> list[str]:
     return namelist
 
 
-class Leaf(abc.ABC):
-
-    adapter: Adapter
+class Client(abc.ABC):
     plugins: list[Plugin]
     wait_for: list[RunningTask]
     running: bool
 
-    def __init__(self, name: str) -> None:
-        self.adapter = Adapter(name)
+    def __init__(self) -> None:
         self.plugins = []
         self.wait_for = []
         self.running = False
+
+    @abc.abstractmethod
+    def plugins_ready(self):
+        raise NotImplementedError
+
+    async def startup(self):
+        self.plugins.sort(key=lambda plugin: plugin.priority)
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
+        self.plugins_ready()
+        self.running = True
+
+    async def shutdown(self):
+        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
+        await asyncio.gather(*self.wait_for)
+        self.running = False
+
+    async def __aenter__(self) -> None:
+        await self.startup()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self.shutdown()
+
+    async def run(self) -> None:
+        """
+        async with self:
+            while self.running:
+                asyncio.create_task(self.response(**kwargs))
+        """
+        raise NotImplementedError
+
+
+class Leaf(Client):
+    adapter: Adapter
+
+    def __init__(self, name: str) -> None:
+        super().__init__()
+        self.adapter = Adapter(name)
 
     def load_adapter(self, name: str | Path, is_path=False):
         if is_path or isinstance(name, Path):
@@ -90,23 +124,6 @@ class Leaf(abc.ABC):
             plugins.append(plugin)
         self.plugins.clear()
         self.plugins.extend(plugins)
-
-    async def startup(self):
-        self.plugins.sort(key=lambda plugin: plugin.priority)
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
-        self.plugins_ready()
-        self.running = True
-
-    async def shutdown(self):
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
-        await asyncio.gather(*self.wait_for)
-        self.running = False
-
-    async def __aenter__(self) -> None:
-        await self.startup()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.shutdown()
 
     async def response_message(self, message: str, /, **extra):
         count = 0
@@ -195,11 +212,3 @@ class Leaf(abc.ABC):
         elif (key := self.extract_key(**extra)) is not None:
             return await self.response_key(key, **extra)
         return 0
-
-    async def run(self) -> None:
-        """
-        async with self:
-            while self.running:
-                asyncio.create_task(self.response(**kwargs))
-        """
-        raise NotImplementedError
