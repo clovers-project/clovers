@@ -3,34 +3,19 @@ import abc
 from importlib import import_module
 from pathlib import Path
 from .core import Plugin, Event, Adapter
+from .utils import import_path
 from typing import Any
 from .typing import RunningTask
 from .logger import logger
 
 
-def import_path(path: str | Path):
-    path = Path(path).resolve() if isinstance(path, str) else path.resolve()
-    return ".".join(path.relative_to(Path()).parts)
-
-
-def list_modules(path: str | Path) -> list[str]:
-    path = Path(path) if isinstance(path, str) else path
-    import_path = ".".join(path.relative_to(Path()).parts)
-    namelist = []
-    for x in path.iterdir():
-        name = x.stem if x.is_file() and x.name.endswith(".py") else x.name
-        if name.startswith("_"):
-            continue
-        namelist.append(f"{import_path}.{name}")
-    return namelist
-
-
-class PluginCore(abc.ABC):
+class CloversCore(abc.ABC):
     """
-    插件核心：此处管理插件的加载和准备，是各种实现的基础
+    四叶草核心：此处管理插件的加载和准备，是各种实现的基础
     """
 
-    name: str
+    name: str = "CloversObject"
+    """项目名称，需要在子类初始化时设置"""
     plugins: list[Plugin]
 
     def __init__(self):
@@ -63,15 +48,14 @@ class PluginCore(abc.ABC):
         raise NotImplementedError
 
 
-class Client(PluginCore):
+class Client(CloversCore):
     """clovers客户端基类"""
 
     wait_for: list[RunningTask]
     running: bool
 
-    def __init__(self, name: str) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.name = name
         self.wait_for = []
         self.running = False
 
@@ -111,8 +95,8 @@ class Client(PluginCore):
         raise NotImplementedError
 
 
-class Leaf(PluginCore):
-    """clovers 响应处理基类"""
+class Leaf(CloversCore):
+    """clovers 适配器响应处理基类"""
 
     adapter: Adapter
 
