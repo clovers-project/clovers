@@ -9,13 +9,12 @@ from .typing import RunningTask
 from .logger import logger
 
 
-class CloversCore(abc.ABC):
+class CloversCore:
     """
     四叶草核心：此处管理插件的加载和准备，是各种实现的基础
     """
 
     name: str = "CloversObject"
-    """项目名称，需要在子类初始化时设置"""
     plugins: list[Plugin]
 
     def __init__(self):
@@ -40,15 +39,14 @@ class CloversCore(abc.ABC):
         plugin.name = key
         self.plugins.append(plugin)
 
-    @abc.abstractmethod
     def plugins_ready(self):
         """
         实现插件的准备逻辑，一般为执行 plugin.ready() 时进行一些处理
         """
-        raise NotImplementedError
+        self.plugins = [plugin for plugin in self.plugins if plugin.ready()]
 
 
-class Client(CloversCore):
+class Client(abc.ABC, CloversCore):
     """clovers客户端基类"""
 
     wait_for: list[RunningTask]
@@ -95,7 +93,7 @@ class Client(CloversCore):
         raise NotImplementedError
 
 
-class Leaf(CloversCore):
+class Leaf(abc.ABC, CloversCore):
     """clovers 适配器响应处理基类"""
 
     adapter: Adapter
@@ -226,6 +224,4 @@ class Leaf(CloversCore):
 class LeafClient(Leaf, Client):
     """
     单适配器响应客户端
-        只作为类型示范，不建议继承这个类，因为这个类没有实现任何方法。
-        如果你需要实现单适配器响应客户端请直接继承(Leaf, Client)
     """
