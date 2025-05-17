@@ -407,14 +407,15 @@ class Adapter:
     async def response(self, handle: Handle, event: Event, extra):
         try:
             if handle.properties:
-                properties_task = []
-                properties = []
+                coros = []
+                keys = []
                 for key in handle.properties:
                     if key in event.properties:
                         continue
-                    properties_task.append(self.properties_lib[key](**extra))
-                    properties.append(key)
-                event.properties.update({k: v for k, v in zip(properties, await asyncio.gather(*properties_task))})
+                    coros.append(self.properties_lib[key](**extra))
+                    keys.append(key)
+                    print(f"{keys[-1]=},{coros[-1]=}")
+                event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
             event.calls = self.calls_lib
             event.extra = extra
             result = await handle(event)
