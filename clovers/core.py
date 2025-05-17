@@ -414,7 +414,6 @@ class Adapter:
                         continue
                     coros.append(self.properties_lib[key](**extra))
                     keys.append(key)
-                    print(f"{keys[-1]=},{coros[-1]=}")
                 event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
             event.calls = self.calls_lib
             event.extra = extra
