@@ -24,7 +24,6 @@ next_level = 0
 for line in result.stdout.split("\n"):
     if line.startswith("```"):
         skip = not skip
-        continue
     if not skip:
         if line.startswith("# "):
             next_level = 1
@@ -54,6 +53,6 @@ for line in result.stdout.split("\n"):
             new_line.append("文件级属性")
             new_line.append("\n")
         current_level = next_level
-        new_line.append(line)
+    new_line.append(line)
 
 Path("document.md").write_text("\n".join(new_line), encoding="utf8")
