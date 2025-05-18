@@ -7,12 +7,31 @@ from .logger import logger
 
 
 class Result:
+    """插件响应结果
+
+    Attributes:
+        send_method (str): 响应方法
+        data (Any): 响应数据
+    """
+
     def __init__(self, send_method: str, data) -> None:
+
         self.send_method = send_method
         self.data = data
 
 
 class Event:
+    """触发响应的事件
+
+    Attributes:
+        raw_command (str): 触发插件的消息原文
+        command (str): 插件的触发指令
+        args (list[str]): 参数
+        properties (dict): 需要的额外属性，由插件声明
+        calls (MethodLib): 响应此插件的适配器提供的 call 方法
+        extra (dict): 额外数据储存位置，仅在事件链内传递
+    """
+
     def __init__(
         self,
         raw_command: str,
@@ -29,8 +48,19 @@ class Event:
         return await self.calls[key](*args, **self.extra)
 
 
+type Handler = Callable[[Event], Coroutine[None, None, Result | None]]
+
+
 class Handle:
-    func: Callable[[Event], Coroutine[None, None, Result | None]]
+    """插件任务
+
+    Attributes:
+        func (Handler): 处理器函数
+        priority (int, optional): 优先级. Defaults to 0.
+        block (bool, optional): 是否阻止后续任务. Defaults to False.
+    """
+
+    func: Handler
 
     def __init__(self, properties: Iterable[str], block: bool):
         self.properties = properties
@@ -44,6 +74,15 @@ type PluginCommands = str | Iterable[str] | re.Pattern | None
 
 
 class Plugin:
+    """插件类
+
+    Attributes:
+        name (str, optional): 插件名称. Defaults to "".
+        priority (int, optional): 插件优先级. Defaults to 0.
+        block (bool, optional): 是否阻止后续任务. Defaults to False.
+        build_event (Callable[[Event], Any], optional): 构建事件. Defaults to None.
+        build_result (Callable[[Any], Result], optional): 构建结果. Defaults to None.
+    """
 
     def __init__(
         self,
@@ -120,9 +159,17 @@ class Plugin:
         return (handle for handle in self._handles.values())
 
     class Rule:
+        """响应器规则
+
+        Attributes:
+            checker (Plugin.Rule.Ruleable): 响应器检查器
+        """
+
         checker: list[Callable[..., bool]]
 
-        def __init__(self, checker: list[Callable[..., bool]] | Callable[..., bool]):
+        type Ruleable = list[Callable[..., bool]] | Callable[..., bool]
+
+        def __init__(self, checker: Ruleable):
             if isinstance(checker, list):
                 self.checker = checker
             elif callable(checker):
@@ -131,6 +178,8 @@ class Plugin:
                 raise TypeError(f"Checker: {checker} has an invalid type: {type(checker)}")
 
         def check(self, func: Callable[..., Coroutine]) -> Callable[..., Coroutine]:
+            """对函数进行检查装饰"""
+
             if len(self.checker) == 1:
                 checker = self.checker[0]
             else:
@@ -141,12 +190,10 @@ class Plugin:
 
             return wrapper
 
-    type Ruleable = list[Callable[..., bool]] | Callable[..., bool] | Rule | None
-
-    def handle_warpper(self, rule: Ruleable = None):
+    def handle_warpper(self, rule: Rule.Ruleable | Rule | None = None):
         """构建插件的原始event->result响应"""
 
-        def decorator(func: Callable[..., Coroutine]):
+        def decorator(func: Callable[..., Coroutine]) -> Handler:
             if rule:
                 func = rule.check(func) if isinstance(rule, self.Rule) else self.Rule(rule).check(func)
             middle_func = func if (build_event := self.build_event) is None else lambda e: func(build_event(e))
@@ -162,11 +209,14 @@ class Plugin:
         return decorator
 
     def commands_register(self, commands: PluginCommands, key: int, priority: int):
-        """
-        指令注册器
-            commands: 指令
-            key: 响应器的key
-            priority: 优先级
+        """指令注册器
+
+        将指令注册进插件
+
+        Args:
+            commands (PluginCommands): 指令
+            key (int): 响应器的key
+            priority (int): 优先级
         """
         data = (key, priority)
         if not commands:
@@ -185,17 +235,18 @@ class Plugin:
         self,
         commands: PluginCommands,
         properties: Iterable[str] = [],
-        rule: Ruleable = None,
+        rule: Rule.Ruleable | Rule | None = None,
         priority: int = 0,
         block: bool = True,
     ):
-        """
-        注册插件指令响应器
-            commands: 指令
-            properties: 额外参数
-            rule: 响应规则
-            priority: 优先级
-            block: 是否阻断后续响应器
+        """注册插件指令响应器
+
+        Args:
+            commands (PluginCommands): 指令
+            properties (Iterable[str]): 声明需要额外参数
+            rule (Rule.Ruleable | Rule | None): 响应规则
+            priority (int): 优先级
+            block (bool): 是否阻断后续响应器
         """
 
         def decorator(func: Callable[..., Coroutine]):
@@ -212,17 +263,18 @@ class Plugin:
         self,
         key,
         properties: Iterable[str] = [],
-        rule: Ruleable = None,
+        rule: Rule.Ruleable | Rule | None = None,
         priority: int = 0,
         block: bool = False,
     ):
-        """
-        创建键触发响应器
-            key: 触发键
-            properties: 额外参数
-            rule: 响应规则
-            priority: 优先级
-            block: 是否阻断后续响应器
+        """创建键触发响应器
+
+        Args:
+            key (Any): 触发键
+            properties (Iterable[str]): 声明需要额外参数
+            rule (Rule.Ruleable | Rule | None): 响应规则
+            priority (int): 优先级
+            block (bool): 是否阻断后续响应器
         """
 
         def decorator(func: Callable[..., Coroutine]):
@@ -240,16 +292,17 @@ class Plugin:
         key: str,
         properties: Iterable[str] = [],
         timeout: float | int = 30.0,
-        rule: Ruleable = None,
+        rule: Rule.Ruleable | Rule | None = None,
         block: bool = True,
     ):
-        """
-        创建插件临时指令响应器
-            key: 临时指令的key
-            properties: 额外参数
-            timeout: 临时指令的过期时间
-            rule: 响应规则
-            block: 是否阻断后续响应器
+        """创建插件临时响应器
+
+        Args:
+            key (str): 临时指令的key
+            properties (Iterable[str]): 声明需要额外参数
+            timeout (float | int): 临时指令的过期时间
+            rule (Rule.Ruleable | Rule | None): 响应规则
+            block (bool): 是否阻断后续响应器
         """
 
         def decorator(func: Callable[..., Coroutine]):
@@ -262,6 +315,8 @@ class Plugin:
         return decorator
 
     class Finish:
+        """临时响应结束类"""
+
         def __init__(
             self,
             temp_handles: dict[str, tuple[float, Handle]],
@@ -337,6 +392,7 @@ class Plugin:
 
 
 def kwfilter(func: Method) -> Method:
+    """方法参数过滤器"""
 
     co_argcount = func.__code__.co_argcount
     if co_argcount == 0:
@@ -350,13 +406,22 @@ def kwfilter(func: Method) -> Method:
 
 
 class Adapter:
+    """响应器类
+
+    Attributes:
+        name (str, optional): 响应器名称. Defaults to "".
+        properties_lib (MethodLib): 获取参数方法库
+        sends_lib (MethodLib): 发送消息方法库
+        calls_lib (MethodLib): 调用方法库
+    """
+
     def __init__(self, name: str = "") -> None:
         self.name: str = name
         self.properties_lib: MethodLib = {}
         self.sends_lib: MethodLib = {}
         self.calls_lib: MethodLib = {}
 
-    def property_method(self, method_name: str) -> Callable:
+    def property_method(self, method_name: str):
         """添加一个获取参数方法"""
 
         def decorator(func: Method):
@@ -368,7 +433,7 @@ class Adapter:
 
         return decorator
 
-    def send_method(self, method_name: str) -> Callable:
+    def send_method(self, method_name: str):
         """添加一个发送消息方法"""
 
         def decorator(func: Method):
@@ -404,7 +469,15 @@ class Adapter:
         for k, v in adapter.calls_lib.items():
             self.calls_lib.setdefault(k, v)
 
-    async def response(self, handle: Handle, event: Event, extra):
+    async def response(self, handle: Handle, event: Event, extra: dict):
+        """使用适配器响应任务
+
+        Args:
+            handle (Handle): 触发的插件任务
+            event (Event): 触发响应的事件
+            extra (dict): 适配器需要的额外参数
+        """
+
         try:
             if handle.properties:
                 coros = []

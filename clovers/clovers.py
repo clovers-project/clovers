@@ -10,8 +10,13 @@ from .logger import logger
 
 
 class CloversCore:
-    """
-    四叶草核心：此处管理插件的加载和准备，是各种实现的基础
+    """四叶草核心
+
+    此处管理插件的加载和准备，是各种实现的基础
+
+    Attributes:
+        name (str): 项目名
+        plugins (list[Plugin]): 项目管理的插件列表
     """
 
     name: str = "CloversObject"
@@ -21,6 +26,12 @@ class CloversCore:
         self.plugins = []
 
     def load_plugin(self, name: str | Path, is_path=False):
+        """加载 clovers 插件
+
+        Args:
+            name (str | Path): 插件的包名或路径
+            is_path (bool, optional): 是否为路径
+        """
         if is_path or isinstance(name, Path):
             import_name = import_path(name)
         else:
@@ -40,14 +51,20 @@ class CloversCore:
         self.plugins.append(plugin)
 
     def plugins_ready(self):
-        """
+        """准备插件
+
         实现插件的准备逻辑，一般为执行 plugin.ready() 时进行一些处理
         """
         self.plugins = [plugin for plugin in self.plugins if plugin.ready()]
 
 
 class Client(abc.ABC, CloversCore):
-    """clovers客户端基类"""
+    """clovers 客户端基类
+
+    Attributes:
+        wait_for (list[RunningTask]): 运行中的任务列表
+        running (bool): 客户端运行状态
+    """
 
     wait_for: list[RunningTask]
     running: bool
@@ -58,6 +75,10 @@ class Client(abc.ABC, CloversCore):
         self.running = False
 
     async def startup(self):
+        """启动客户端
+
+        如不在 async with 上下文中则要手动调用 startup() 方法，
+        """
         if self.running:
             raise RuntimeError("Client is already running")
         self.plugins.sort(key=lambda plugin: plugin.priority)
@@ -66,6 +87,10 @@ class Client(abc.ABC, CloversCore):
         self.running = True
 
     async def shutdown(self):
+        """关闭客户端
+
+        如不在 async with 上下文中则要手动调用 shutdown() 方法，
+        """
         if not self.running:
             raise RuntimeError("Client is not running")
         self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
@@ -82,7 +107,8 @@ class Client(abc.ABC, CloversCore):
     @abc.abstractmethod
     async def run(self) -> None:
         """
-        Run the client
+        运行 Clovers Client ，需要在子类中实现。
+
         .. code-block:: python3
             '''
             async with self:
@@ -94,7 +120,10 @@ class Client(abc.ABC, CloversCore):
 
 
 class Leaf(abc.ABC, CloversCore):
-    """clovers 适配器响应处理基类"""
+    """clovers 响应处理器基类
+    Attributes:
+        adapter (Adapter): 对接响应的适配器
+    """
 
     adapter: Adapter
 
@@ -104,6 +133,15 @@ class Leaf(abc.ABC, CloversCore):
         self.adapter = Adapter(name)
 
     def load_adapter(self, name: str | Path, is_path=False):
+        """加载 clovers 适配器
+
+        会把目标适配器的方法注册到 self.adapter 中，如有适配器中已有同名方法则忽略
+
+        Args:
+            name (str | Path): 适配器的包名或路径
+            is_path (bool, optional): 是否为路径
+        """
+
         if is_path or isinstance(name, Path):
             import_name = import_path(name)
         else:
@@ -133,6 +171,15 @@ class Leaf(abc.ABC, CloversCore):
         self.plugins.extend(plugins)
 
     async def response_message(self, message: str, /, **extra):
+        """响应消息
+
+        Args:
+            message (str): 消息内容
+            **extra: 额外的参数
+
+        Returns:
+            int: 响应数量
+        """
         count = 0
         temp_event = None
         for plugin in self.plugins:
@@ -170,6 +217,16 @@ class Leaf(abc.ABC, CloversCore):
         return count
 
     async def response_key(self, key, /, **extra) -> int:
+        """响应事件键
+
+        Args:
+            key: 事件键
+            **extra: 额外的参数
+
+        Returns:
+            int: 响应数量
+        """
+
         count = 0
         temp_event = None
         for plugin in self.plugins:
@@ -208,12 +265,49 @@ class Leaf(abc.ABC, CloversCore):
 
     @abc.abstractmethod
     def extract_message(self, **extra) -> str | None:
+        """提取消息
+
+        根据传入的事件参数提取消息
+
+        Args:
+            **extra: 额外的参数
+
+        Returns:
+            str | None: 消息
+        """
+
         raise NotImplementedError
 
     def extract_key(self, **extra) -> Any | None:
+        """提取事件键
+
+        根据传入的事件参数提取事件键
+
+        Args:
+            **extra: 额外的参数
+
+        Returns:
+            Any | None: 事件键
+        """
+
         return None
 
     async def response(self, **extra) -> int:
+        """响应事件
+
+        根据传入的事件参数响应事件。
+
+        如果提取到了消息，则触发消息响应，如果提取到了事件，则触发事件响应。
+
+        否则不会触发响应。
+
+        Args:
+            **extra: 额外的参数
+
+        Returns:
+            int: 响应数量
+        """
+
         if (message := self.extract_message(**extra)) is not None:
             return await self.response_message(message, **extra)
         elif (key := self.extract_key(**extra)) is not None:
