@@ -5,6 +5,24 @@ from typing import Any, Callable, Coroutine, Iterable, Sequence
 from .typing import Method, MethodLib, Task
 from .logger import logger
 
+type Handler = Callable[[Event], Coroutine[None, None, Result | None]]
+
+type PluginCommands = str | Iterable[str] | re.Pattern | None
+
+
+def kwfilter(func: Method) -> Method:
+    """方法参数过滤器"""
+
+    co_argcount = func.__code__.co_argcount
+    if co_argcount == 0:
+        return lambda *args, **kwargs: func()
+    kw = set(func.__code__.co_varnames[:co_argcount])
+
+    async def wrapper(*args, **kwargs):
+        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
+
+    return wrapper
+
 
 class Result:
     """插件响应结果
@@ -48,9 +66,6 @@ class Event:
         return await self.calls[key](*args, **self.extra)
 
 
-type Handler = Callable[[Event], Coroutine[None, None, Result | None]]
-
-
 class Handle:
     """插件任务
 
@@ -68,9 +83,6 @@ class Handle:
 
     async def __call__(self, event: Event):
         return await self.func(event)
-
-
-type PluginCommands = str | Iterable[str] | re.Pattern | None
 
 
 class Plugin:
@@ -389,20 +401,6 @@ class Plugin:
                 case _:
                     assert False, f"check_type {check_type} are not supported"
         return data
-
-
-def kwfilter(func: Method) -> Method:
-    """方法参数过滤器"""
-
-    co_argcount = func.__code__.co_argcount
-    if co_argcount == 0:
-        return lambda *args, **kwargs: func()
-    kw = set(func.__code__.co_varnames[:co_argcount])
-
-    async def wrapper(*args, **kwargs):
-        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
-
-    return wrapper
 
 
 class Adapter:
