@@ -131,6 +131,22 @@ class Plugin:
         self._ready: bool = False
         """插件是否就绪"""
 
+    def filter(self, properties: set[str]) -> "Plugin":
+        """按指定属性过滤 Handle 生成新的plugin实例
+
+        Args:
+            properties (set[str]): 属性集
+        """
+        plugin = Plugin(
+            name=self.name,
+            priority=self.priority,
+            block=self.block,
+            build_event=self.build_event,
+            build_result=self.build_result,
+        )
+        plugin._handles = {key: handle for key, handle in self._handles.items() if handle.properties.issuperset(properties)}
+        return self
+
     def __str__(self) -> str:
         handle_queue = []
         handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
@@ -434,11 +450,14 @@ class Adapter:
             event (Event): 触发响应的事件
             extra (dict): 适配器需要的额外参数
         """
+
         try:
             if handle.properties:
                 coros = []
                 keys = []
-                for key in handle.properties - event.properties.keys():
+                for key in handle.properties:
+                    if key in event.properties:
+                        continue
                     coros.append(self.properties_lib[key](**extra))
                     keys.append(key)
                 event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
