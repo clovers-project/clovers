@@ -1,11 +1,16 @@
 import time
 import asyncio
 import re
+from importlib import import_module
+from pathlib import Path
+from .utils import import_path
 from typing import Any, Callable, Coroutine, Iterable, Sequence
 from .typing import Method, MethodLib, Task
 from .logger import logger
 
-type Handler = Callable[[Event], Coroutine[None, None, Result | None]]
+type HandlerFunction = Callable[[Event], Coroutine[None, None, Result | None]]
+
+type MiddleHandlerFunction = Callable[[Any], Coroutine[None, None, Any | None]]
 
 type PluginCommands = str | Iterable[str] | re.Pattern | None
 
@@ -28,14 +33,16 @@ class Result:
     """插件响应结果
 
     Attributes:
-        send_method (str): 响应方法
+        key (str): 响应方法
         data (Any): 响应数据
     """
 
-    def __init__(self, send_method: str, data) -> None:
-
-        self.send_method = send_method
+    def __init__(self, key: str, data) -> None:
+        self.key = key
         self.data = data
+
+    def __str__(self) -> str:
+        return f"<Result {self.key} {self.data}/>"
 
 
 class Event:
@@ -49,39 +56,133 @@ class Event:
         extra (dict): 额外数据储存位置，仅在事件链内传递
     """
 
-    def __init__(
-        self,
-        message: str,
-        args: Sequence[str],
-    ):
+    calls: MethodLib
+    extra: dict
+
+    def __init__(self, message: str, args: Sequence[str], properties: dict):
         self.message = message
         self.args = args
-        self.properties: dict = {}
-        self.calls: MethodLib = {}
-        self.extra: dict = {}
+        self.properties = properties
 
-    async def call(self, key, *args):
-        """调用适配器方法，只接受位置参数"""
-        return await self.calls[key](*args, **self.extra)
+    def call(self, key, *args):
+        """执行适配器调用方法，只接受位置参数"""
+        return self.calls[key](*args, **self.extra)
+
+    def __str__(self) -> str:
+        return f"<Event {self.message}/>"
 
 
-class Handle:
-    """插件任务
+class BaseHandle:
+    """插件任务基类
 
     Attributes:
         func (Handler): 处理器函数
-        priority (int, optional): 优先级. Defaults to 0.
-        block (bool, optional): 是否阻止后续任务. Defaults to False.
+        properties (set[str]): 声明属性
+        block (tuple[bool, bool]): 是否阻止后续插件, 是否阻止后续任务
     """
 
-    func: Handler
-
-    def __init__(self, properties: Iterable[str], block: bool):
+    def __init__(
+        self,
+        properties: Iterable[str],
+        block: tuple[bool, bool],
+        func: HandlerFunction,
+    ):
         self.properties = set(properties)
         self.block = block
+        self.func = func
 
-    async def __call__(self, event: Event):
-        return await self.func(event)
+
+class Handle(BaseHandle):
+    """指令任务
+
+    Attributes:
+        commands (PluginCommands): 触发命令
+        priority (int): 任务优先级
+
+        func (Handler): 处理器函数
+        properties (set[str]): 声明属性
+        block (tuple[bool, bool]): 是否阻止后续插件, 是否阻止后续任务
+    """
+
+    def __init__(
+        self,
+        commands: PluginCommands,
+        priority: int,
+        properties: Iterable[str],
+        block: tuple[bool, bool],
+        func: HandlerFunction,
+    ):
+        super().__init__(properties, block, func)
+        self.register(commands)
+        self.priority = priority
+
+    def match(self, message: str) -> Sequence[str] | None: ...
+
+    def register(self, commands: PluginCommands) -> Iterable[str] | re.Pattern | None:
+        self.commands = commands
+        if not commands:
+            self.match = lambda message: message.split()
+        elif isinstance(commands, str):
+            self.match = self.match_regex(re.compile(commands))
+        elif isinstance(commands, re.Pattern):
+            self.match = self.match_regex(commands)
+        elif isinstance(commands, Iterable):
+            self.match = self.match_commands(commands)
+        else:
+            raise TypeError(f"Command: {commands} has an invalid type: {type(commands)}")
+
+    def __str__(self) -> str:
+        return f"<Handle priority='{self.priority} 'block='{self.block}' command='{self.commands}'/>"
+
+    def match_regex(self, commands: re.Pattern):
+        def _match(message: str):
+            if args := commands.match(message):
+                return args.groups()
+
+        return _match
+
+    def match_commands(self, commands: Iterable[str]):
+
+        def _match(message: str):
+            for command in commands:
+                if message.startswith(command):
+                    return message.lstrip(command).split()
+
+        return _match
+
+
+class TempHandle(BaseHandle):
+    """临时任务
+
+    Attributes:
+        timeout (float): 超时时间
+
+        func (Handler): 处理器函数
+        properties (set[str]): 声明属性
+        block (tuple[bool, bool]): 是否阻止后续插件, 是否阻止后续任务
+    """
+
+    def __init__(
+        self,
+        timeout: float,
+        properties: Iterable[str],
+        block: tuple[bool, bool],
+        func: Callable[[Any, "TempHandle"], Coroutine],
+        wrapper: Callable[[MiddleHandlerFunction], HandlerFunction],
+    ):
+        super().__init__(properties, block, wrapper(lambda e: func(e, self)))
+        self.delay(timeout)
+
+    def __str__(self) -> str:
+        return f"<TempHandle expiration='{self.expiration}/>"
+
+    def finish(self):
+        """结束任务"""
+        self.expiration = 0
+
+    def delay(self, timeout: float | int = 30.0):
+        """延长任务"""
+        self.expiration = timeout + time.time()
 
 
 class Plugin:
@@ -118,51 +219,20 @@ class Plugin:
         """构建event"""
         self.build_result: Callable[[Any], Result] | None = build_result
         """构建result"""
-        self.temp_handles_dict: dict[str, tuple[float, Handle]] = {}
-        """临时任务列表"""
-        self._handles: dict[int, Handle] = {}
+        self.handles: set[Handle] = set()
         """已注册的响应器"""
-        self._command_handle_keys: dict[str, list[tuple[int, int]]] = {}
-        """指令触发的响应键列表"""
-        self._regex_handle_keys: dict[re.Pattern, list[tuple[int, int]]] = {}
-        """正则触发的响应键列表"""
-        self._handles_queue: list[tuple[str, str | re.Pattern, int]] = []
-        """已注册指令响应器队列"""
-        self._ready: bool = False
-        """插件是否就绪"""
 
-    def __str__(self) -> str:
-        handle_queue = []
-        handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
-        handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
-        handle_queue.sort(key=lambda x: x[2])
-        info = []
-        info.append(f"<Plugin {self.name}>")
-        info.extend(
-            f'\t<Handle key="{key}" priority="{priority}" check_type="{check_type}" command="{command}" />'
-            for check_type, command, key, priority in handle_queue
-        )
-        info.append(f"</Plugin>")
-        return "\n".join(info)
+    def startup(self, func: Task):
+        """注册一个启动任务"""
+        self.startup_tasklist.append(func)
 
-    def ready(self):
-        """准备插件"""
-        if not self._handles:
-            return False
-        if self._ready:
-            return True
-        handle_queue = []
-        handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
-        handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
-        handle_queue.sort(key=lambda x: x[3])
-        self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
-        self._ready = True
-        return True
+        return func
 
-    @property
-    def handles(self):
-        """获取已注册的响应器"""
-        return (handle for handle in self._handles.values())
+    def shutdown(self, func: Task):
+        """注册一个结束任务"""
+        self.shutdown_tasklist.append(func)
+
+        return func
 
     class Rule:
         """响应器规则
@@ -199,7 +269,7 @@ class Plugin:
     def handle_warpper(self, rule: Rule.Ruleable | Rule | None = None):
         """构建插件的原始event->result响应"""
 
-        def decorator(func: Callable[..., Coroutine]) -> Handler:
+        def decorator(func: MiddleHandlerFunction) -> HandlerFunction:
             if rule:
                 func = rule.check(func) if isinstance(rule, self.Rule) else self.Rule(rule).check(func)
             middle_func = func if (build_event := self.build_event) is None else lambda e: func(build_event(e))
@@ -213,29 +283,6 @@ class Plugin:
             return wrapper
 
         return decorator
-
-    def commands_register(self, commands: PluginCommands, key: int, priority: int):
-        """指令注册器
-
-        将指令注册进插件
-
-        Args:
-            commands (PluginCommands): 指令
-            key (int): 响应器的key
-            priority (int): 优先级
-        """
-        data = (key, priority)
-        if not commands:
-            self._command_handle_keys.setdefault("", []).append(data)
-        elif isinstance(commands, str):
-            self._regex_handle_keys.setdefault(re.compile(commands), []).append(data)
-        elif isinstance(commands, re.Pattern):
-            self._regex_handle_keys.setdefault(commands, []).append(data)
-        elif isinstance(commands, Iterable):
-            for command in commands:
-                self._command_handle_keys.setdefault(command, []).append(data)
-        else:
-            raise TypeError(f"Command: {commands} has an invalid type: {type(commands)}")
 
     def handle(
         self,
@@ -256,18 +303,20 @@ class Plugin:
         """
 
         def decorator(func: Callable[..., Coroutine]):
-            handle_key = len(self._handles)
-            self.commands_register(commands, handle_key, priority)
-            handle = Handle(properties, block)
-            handle.func = self.handle_warpper(rule)(func)
-            self._handles[handle_key] = handle
+            handle = Handle(
+                commands,
+                priority,
+                properties,
+                (self.block, block),
+                self.handle_warpper(rule)(func),
+            )
+            self.handles.add(handle)
             return handle.func
 
         return decorator
 
     def temp_handle(
         self,
-        key: str,
         properties: Iterable[str] = [],
         timeout: float | int = 30.0,
         rule: Rule.Ruleable | Rule | None = None,
@@ -276,90 +325,27 @@ class Plugin:
         """创建插件临时响应器
 
         Args:
-            key (str): 临时指令的key
             properties (Iterable[str]): 声明需要额外参数
-            timeout (float | int): 临时指令的过期时间
+            timeout (float | int): 临时指令的持续时间
             rule (Rule.Ruleable | Rule | None): 响应规则
             block (bool): 是否阻断后续响应器
         """
 
         def decorator(func: Callable[..., Coroutine]):
-            handle = Handle(properties, block)
-            middle_func = lambda e: func(e, self.Finish(self.temp_handles_dict, key))
-            handle.func = self.handle_warpper(rule)(middle_func)
-            self.temp_handles_dict[key] = time.time() + timeout, handle
+            handle = TempHandle(
+                timeout,
+                properties,
+                (self.block, block),
+                func,
+                self.handle_warpper(rule),
+            )
+            self.temp_handles.append(handle)
             return handle.func
 
         return decorator
 
-    class Finish:
-        """临时响应结束类"""
-
-        def __init__(
-            self,
-            temp_handles: dict[str, tuple[float, Handle]],
-            key: str,
-        ) -> None:
-            self.handles = temp_handles
-            self.key = key
-
-        def __call__(self):
-            """结束临时指令响应器"""
-            del self.handles[self.key]
-
-        def delay(self, timeout: float | int = 30.0):
-            """延迟临时指令响应器的过期时间"""
-            self.handles[self.key] = (time.time() + timeout, self.handles[self.key][1])
-
-    def startup(self, func: Task):
-        """注册一个启动任务"""
-        self.startup_tasklist.append(func)
-
-        return func
-
-    def shutdown(self, func: Task):
-        """注册一个结束任务"""
-        self.shutdown_tasklist.append(func)
-
-        return func
-
-    def temp_check(self) -> bool:
-        """检查是否有临时指令响应器"""
-        if not self.temp_handles_dict:
-            return False
-        now = time.time()
-        self.temp_handles_dict = {k: v for k, v in self.temp_handles_dict.items() if v[0] > now}
-        if not self.temp_handles_dict:
-            return False
-        return True
-
-    def command_match(self, message: str) -> list[tuple[Handle, Event]] | None:
-        command_list = message.split()
-        if not command_list:
-            return
-        command_start = command_list[0]
-        data = []
-        for check_type, command, key in self._handles_queue:
-            match check_type:
-                case "command":
-                    assert isinstance(command, str)
-                    if not command_start.startswith(command):
-                        continue
-                    if command_start == command:
-                        args = command_list[1:]
-                    else:
-                        command_list[0] = command_list[0][len(command) :]
-                        args = command_list
-                    event = Event(message, args)
-                    data.append((self._handles[key], event))
-                case "regex":
-                    assert isinstance(command, re.Pattern)
-                    if args := re.match(command, message):
-                        event = Event(message, args.groups())
-                        data.append((self._handles[key], event))
-                case _:
-                    assert False, f"check_type {check_type} are not supported"
-        return data
+    def set_temp_handles(self, temp_handles: list[TempHandle]):
+        self.temp_handles = temp_handles
 
 
 class Adapter:
@@ -411,6 +397,14 @@ class Adapter:
 
         return decorator
 
+    def send(self, result: Result, **extra):
+        """执行适配器发送方法"""
+        return self.sends_lib[result.key](result.data, **extra)
+
+    def property(self, key, **extra):
+        """执行适配器获取属性方法"""
+        return self.properties_lib[key](**extra)
+
     def update(self, adapter: "Adapter"):
         """更新兼容方法"""
         self.properties_lib.update(adapter.properties_lib)
@@ -426,28 +420,116 @@ class Adapter:
         for k, v in adapter.calls_lib.items():
             self.calls_lib.setdefault(k, v)
 
-    async def response(self, handle: Handle, event: Event, extra: dict):
+    async def response(self, handle: BaseHandle, event: Event, extra: dict):
         """使用适配器响应任务
 
         Args:
-            handle (Handle): 触发的插件任务
+            handle (BaseHandle): 触发的插件任务
             event (Event): 触发响应的事件
             extra (dict): 适配器需要的额外参数
         """
-        try:
-            if handle.properties:
-                coros = []
-                keys = []
-                for key in handle.properties - event.properties.keys():
-                    coros.append(self.properties_lib[key](**extra))
-                    keys.append(key)
-                event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
-            event.calls = self.calls_lib
-            event.extra = extra
-            result = await handle(event)
-            if not result:
-                return
-            await self.sends_lib[result.send_method](result.data, **extra)
+        if handle.properties:
+            keys = list(handle.properties - event.properties.keys())
+            coros = [self.property(key, **extra) for key in keys]
+            event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
+        if result := await handle.func(event):
+            await self.send(result, **extra)
             return handle.block
-        except:
-            logger.exception("response")
+
+
+class CloversCore:
+    """四叶草核心
+
+    此处管理插件的加载和准备，是各种实现的基础
+
+    Attributes:
+        name (str): 项目名
+        plugins (list[Plugin]): 项目管理的插件列表
+    """
+
+    name: str = "CloversObject"
+
+    @property
+    def plugins(self):
+        return (plugin for plugin in self._plugins)
+
+    @plugins.setter
+    def plugins(self, plugins: Iterable[Plugin]):
+        if self._ready:
+            raise RuntimeError("cannot set plugins after ready")
+        self._plugins.clear()
+        self._plugins.extend(plugins)
+
+    def __init__(self):
+        self._plugins: list[Plugin] = []
+        """插件优先级和插件列表"""
+        self._handles_queue: list[tuple[list[TempHandle], list[list[Handle]]]] = []
+        """已注册响应器队列"""
+        self._ready: bool = False
+        """插件是否就绪"""
+
+    def load_plugin(self, name: str | Path, is_path=False):
+        """加载 clovers 插件
+
+        Args:
+            name (str | Path): 插件的包名或路径
+            is_path (bool, optional): 是否为路径
+        """
+        if is_path or isinstance(name, Path):
+            import_name = import_path(name)
+        else:
+            import_name = name
+        logger.info(f"[loading plugin][{self.name}] {import_name} ...")
+        try:
+            plugin = getattr(import_module(import_name), "__plugin__", None)
+            assert isinstance(plugin, Plugin)
+        except Exception as e:
+            logger.exception(f"plugin {import_name} load failed", exc_info=e)
+            return
+        key = plugin.name or import_name
+        if plugin in self.plugins:
+            logger.warning(f"plugin {key} already loaded")
+            return
+        plugin.name = key
+        self._plugins.append(plugin)
+
+    def handles_filter(self, handle: Handle) -> bool:
+        """任务过滤器
+
+        Args:
+            handle (Handle): 响应任务
+
+        Returns:
+            bool: 是否通过过滤
+        """
+        return True
+
+    def plugins_filter(self, plugin: Plugin) -> bool:
+        """插件过滤器
+
+        Args:
+            plugin (Plugin): 插件
+
+        Returns:
+            bool: 是否通过过滤
+        """
+
+        return True
+
+    def ready_for_plugins(self):
+        if self._ready:
+            raise RuntimeError(f"{self.name} already ready")
+        _temp_handles: dict[int, list[TempHandle]] = {}
+        _handles: dict[int, list[Handle]] = {}
+        self._plugins = [plugin for plugin in self._plugins if self.plugins_filter(plugin)]
+        for plugin in self._plugins:
+            plugin.set_temp_handles(_temp_handles.setdefault(plugin.priority, []))
+            _handles.setdefault(plugin.priority, []).extend(plugin.handles)
+        for key in sorted(_handles.keys()):
+            _sub_handles: dict[int, list[Handle]] = {}
+            for handle in _handles[key]:
+                if self.handles_filter(handle):
+                    _sub_handles.setdefault(handle.priority, []).append(handle)
+            sub_keys = sorted(_sub_handles.keys())
+            self._handles_queue.append((_temp_handles[key], [_sub_handles[k] for k in sub_keys]))
+        self._ready = True
