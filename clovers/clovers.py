@@ -4,7 +4,6 @@ from importlib import import_module
 from pathlib import Path
 from .core import Plugin, Event, Adapter
 from .utils import import_path
-from typing import Any
 from .typing import RunningTask
 from .logger import logger
 
@@ -216,53 +215,6 @@ class Leaf(abc.ABC, CloversCore):
                     break
         return count
 
-    async def response_key(self, key, /, **extra) -> int:
-        """响应事件键
-
-        Args:
-            key: 事件键
-            **extra: 额外的参数
-
-        Returns:
-            int: 响应数量
-        """
-
-        count = 0
-        temp_event = None
-        for plugin in self.plugins:
-            if plugin.temp_check():
-                temp_event = temp_event or Event("", [])
-                flags = [
-                    flag
-                    for flag in await asyncio.gather(
-                        *(
-                            self.adapter.response(handle, temp_event, extra)  # 同时执行临时任务
-                            for _, handle in plugin.temp_handles_dict.values()
-                        )
-                    )
-                    if not flag is None
-                ]
-                if flags:
-                    count += len(flags)
-                    if any(flags):
-                        if plugin.block:
-                            break
-                        else:
-                            continue
-            if data := plugin.key_match(key):
-                inner_count = 0
-                for handle, event in data:
-                    flag = await self.adapter.response(handle, event, extra)
-                    if flag is None:
-                        continue
-                    inner_count += 1
-                    if flag:
-                        break
-                count += inner_count
-                if inner_count > 0 and plugin.block:
-                    break
-        return count
-
     @abc.abstractmethod
     def extract_message(self, **extra) -> str | None:
         """提取消息
@@ -277,20 +229,6 @@ class Leaf(abc.ABC, CloversCore):
         """
 
         raise NotImplementedError
-
-    def extract_key(self, **extra) -> Any | None:
-        """提取事件键
-
-        根据传入的事件参数提取事件键
-
-        Args:
-            **extra: 额外的参数
-
-        Returns:
-            Any | None: 事件键
-        """
-
-        return None
 
     async def response(self, **extra) -> int:
         """响应事件
@@ -310,9 +248,8 @@ class Leaf(abc.ABC, CloversCore):
 
         if (message := self.extract_message(**extra)) is not None:
             return await self.response_message(message, **extra)
-        elif (key := self.extract_key(**extra)) is not None:
-            return await self.response_key(key, **extra)
-        return 0
+        else:
+            return 0
 
 
 class LeafClient(Leaf, Client):

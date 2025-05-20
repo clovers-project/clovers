@@ -42,8 +42,7 @@ class Event:
     """触发响应的事件
 
     Attributes:
-        raw_command (str): 触发插件的消息原文
-        command (str): 插件的触发指令
+        message (str): 触发插件的消息原文
         args (list[str]): 参数
         properties (dict): 需要的额外属性，由插件声明
         calls (MethodLib): 响应此插件的适配器提供的 call 方法
@@ -52,10 +51,10 @@ class Event:
 
     def __init__(
         self,
-        raw_command: str,
+        message: str,
         args: Sequence[str],
     ):
-        self.raw_command = raw_command
+        self.message = message
         self.args = args
         self.properties: dict = {}
         self.calls: MethodLib = {}
@@ -129,17 +128,21 @@ class Plugin:
         """正则触发的响应键列表"""
         self._handles_queue: list[tuple[str, str | re.Pattern, int]] = []
         """已注册指令响应器队列"""
-        self._key_handle_keys: dict[Any, list[tuple[int, int]]] = {}
-        """键触发的响应器队列"""
-        self._key_handles_dict: dict[Any, list[int]] = {}
-        """键触发的响应器列表"""
         self._ready: bool = False
+        """插件是否就绪"""
+
+    def filter(self, properties: set[str]) -> "Plugin":
+        """按指定属性过滤 Handle 生成新的plugin实例
+
+        Args:
+            properties (set[str]): 属性集
+        """
+        return self
 
     def __str__(self) -> str:
         handle_queue = []
         handle_queue.extend(("command", command, key, priority) for command, x in self._command_handle_keys.items() for key, priority in x)
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
-        handle_queue.extend(("key", keyword, key, priority) for keyword, x in self._key_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[2])
         info = []
         info.append(f"<Plugin {self.name}>")
@@ -161,7 +164,6 @@ class Plugin:
         handle_queue.extend(("regex", regex, key, priority) for regex, x in self._regex_handle_keys.items() for key, priority in x)
         handle_queue.sort(key=lambda x: x[3])
         self._handles_queue = [(check_type, command, key) for check_type, command, key, _ in handle_queue]
-        self._key_handles_dict = {key: [i for i, _ in sorted(queue, key=lambda x: x[1])] for key, queue in self._key_handle_keys.items()}
         self._ready = True
         return True
 
@@ -271,34 +273,6 @@ class Plugin:
 
         return decorator
 
-    def key_handle(
-        self,
-        key,
-        properties: Iterable[str] = [],
-        rule: Rule.Ruleable | Rule | None = None,
-        priority: int = 0,
-        block: bool = False,
-    ):
-        """创建键触发响应器
-
-        Args:
-            key (Any): 触发键
-            properties (Iterable[str]): 声明需要额外参数
-            rule (Rule.Ruleable | Rule | None): 响应规则
-            priority (int): 优先级
-            block (bool): 是否阻断后续响应器
-        """
-
-        def decorator(func: Callable[..., Coroutine]):
-            handle_key = len(self._handles)
-            self._key_handle_keys.setdefault(key, []).append((handle_key, priority))
-            handle = Handle(properties, block)
-            handle.func = self.handle_warpper(rule)(func)
-            self._handles[handle_key] = handle
-            return handle.func
-
-        return decorator
-
     def temp_handle(
         self,
         key: str,
@@ -366,13 +340,6 @@ class Plugin:
         if not self.temp_handles_dict:
             return False
         return True
-
-    def key_match(self, key) -> list[tuple[Handle, Event]] | None:
-        if key not in self._key_handles_dict:
-            return
-        index_lst = self._key_handles_dict[key]
-        event = Event("", [])
-        return [(self._handles[i], event) for i in index_lst]
 
     def command_match(self, message: str) -> list[tuple[Handle, Event]] | None:
         command_list = message.split()
