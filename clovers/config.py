@@ -52,6 +52,3 @@ class Config(dict):
     def environ(cls):
         """获取默认配置"""
         return cls.load(CONFIG_FILE)
-
-
-config = Config.environ()
