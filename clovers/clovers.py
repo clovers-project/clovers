@@ -3,7 +3,7 @@ import asyncio
 import abc
 from importlib import import_module
 from pathlib import Path
-from clovers.core import Handle
+from clovers.core import BaseHandle
 from .core import Event, Adapter, CloversCore
 from .utils import import_path
 from .typing import RunningTask
@@ -123,7 +123,7 @@ class Leaf(abc.ABC, CloversCore):
                 if response_handles := [(handle, args) for handle in handles if (args := handle.match(message))]:
                     yield response_handles
 
-    def handles_filter(self, handle: Handle) -> bool:
+    def handles_filter(self, handle: BaseHandle) -> bool:
         if method_miss := handle.properties - self.adapter.properties_lib.keys():
             logger.warning(f'{handle} requires method not defined by Adapter "{self.adapter.name}"')
             logger.debug(f'Undefined property methods in "{self.adapter.name}": {method_miss}', extra={"method_miss": method_miss})
@@ -159,7 +159,7 @@ class Leaf(abc.ABC, CloversCore):
                     blocks = [block for block in blocks if block is not None]
                     if blocks:
                         count += len(blocks)
-                        if (True, True) in blocks:
+                        if (True, True) in blocks or (True, False) in blocks:
                             return count
                         elif (False, True) in blocks:
                             continue
@@ -174,7 +174,7 @@ class Leaf(abc.ABC, CloversCore):
                 blocks = [block for block in blocks if block]
                 if blocks:
                     count += len(blocks)
-                    if (True, True) in blocks:
+                    if (True, True) in blocks or (True, False) in blocks:
                         return count
                     elif (False, True) in blocks:
                         break

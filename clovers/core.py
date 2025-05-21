@@ -12,7 +12,7 @@ type HandlerFunction = Callable[[Event], Coroutine[None, None, Result | None]]
 
 type MiddleHandlerFunction = Callable[[Any], Coroutine[None, None, Any | None]]
 
-type PluginCommands = str | Iterable[str] | re.Pattern | None
+type PluginCommand = str | Iterable[str] | re.Pattern[str] | None
 
 
 def kwfilter(func: Method) -> Method:
@@ -106,9 +106,9 @@ class Handle(BaseHandle):
 
     def __init__(
         self,
-        commands: PluginCommands,
-        priority: int,
+        commands: PluginCommand,
         properties: Iterable[str],
+        priority: int,
         block: tuple[bool, bool],
         func: HandlerFunction,
     ):
@@ -116,39 +116,42 @@ class Handle(BaseHandle):
         self.register(commands)
         self.priority = priority
 
-    def match(self, message: str) -> Sequence[str] | None: ...
+    def match(self, message: str) -> Sequence[str] | None:
+        raise NotImplementedError
 
-    def register(self, commands: PluginCommands) -> Iterable[str] | re.Pattern | None:
-        self.commands = commands
-        if not commands:
-            self.match = lambda message: message.split()
-        elif isinstance(commands, str):
-            self.match = self.match_regex(re.compile(commands))
-        elif isinstance(commands, re.Pattern):
-            self.match = self.match_regex(commands)
-        elif isinstance(commands, Iterable):
-            self.match = self.match_commands(commands)
+    def register(self, command: PluginCommand) -> Iterable[str] | re.Pattern | None:
+        if not command:
+            self.command = ""
+            self.match = self.match_none
+        elif isinstance(command, str):
+            self.patttrn = re.compile(command)
+            self.command = self.patttrn.pattern
+            self.match = self.match_regex
+        elif isinstance(command, re.Pattern):
+            self.command = command.pattern
+            self.patttrn = command
+            self.match = self.match_regex
+        elif isinstance(command, Iterable):
+            self.commands = sorted(set(command), key=lambda x: len(x))
+            self.match = self.match_commands
         else:
-            raise TypeError(f"Command: {commands} has an invalid type: {type(commands)}")
+            raise TypeError(f"Handle: {command} has an invalid type: {type(command)}")
 
     def __str__(self) -> str:
-        return f"<Handle priority='{self.priority} 'block='{self.block}' command='{self.commands}'/>"
+        return f"<Handle command='{self.command}' properties='{self.properties}' priority='{self.priority} 'block='{self.block}'/>"
 
-    def match_regex(self, commands: re.Pattern):
-        def _match(message: str):
-            if args := commands.match(message):
-                return args.groups()
+    @staticmethod
+    def match_none(message: str):
+        return message.split()
 
-        return _match
+    def match_regex(self, message: str):
+        if args := self.patttrn.match(message):
+            return args.groups()
 
-    def match_commands(self, commands: Iterable[str]):
-
-        def _match(message: str):
-            for command in commands:
-                if message.startswith(command):
-                    return message.lstrip(command).split()
-
-        return _match
+    def match_commands(self, message: str):
+        for command in self.commands:
+            if message.startswith(command):
+                return message.lstrip(command).split()
 
 
 class TempHandle(BaseHandle):
@@ -286,7 +289,7 @@ class Plugin:
 
     def handle(
         self,
-        commands: PluginCommands,
+        commands: PluginCommand,
         properties: Iterable[str] = [],
         rule: Rule.Ruleable | Rule | None = None,
         priority: int = 0,
@@ -305,8 +308,8 @@ class Plugin:
         def decorator(func: Callable[..., Coroutine]):
             handle = Handle(
                 commands,
-                priority,
                 properties,
+                priority,
                 (self.block, block),
                 self.handle_warpper(rule)(func),
             )
@@ -346,6 +349,16 @@ class Plugin:
 
     def set_temp_handles(self, temp_handles: list[TempHandle]):
         self.temp_handles = temp_handles
+
+    def __str__(self) -> str:
+        lst = [f"<Plugin {self.name}>"]
+        for handle in self.handles:
+            lst.append(f"\t{handle}")
+        if temp_handles := getattr(self, "temp_handles", None):
+            for handle in temp_handles:
+                lst.append(f"\t{handle}")
+        lst.append("/>")
+        return "\n".join(lst)
 
 
 class Adapter:
@@ -436,6 +449,17 @@ class Adapter:
             await self.send(result, **extra)
             return handle.block
 
+    def __str__(self) -> str:
+        lst = [f"<Adapter {self.name}>"]
+        for method_name in self.sends_lib.keys():
+            lst.append(f"\t<SendMethod {method_name}\n>")
+        for method_name in self.calls_lib.keys():
+            lst.append(f"\t<CallMethod {method_name}\n>")
+        for method_name in self.properties_lib.keys():
+            lst.append(f"\t<PropertyMethod {method_name}\n>")
+        lst.append("/>")
+        return "\n".join(lst)
+
 
 class CloversCore:
     """四叶草核心
@@ -493,7 +517,7 @@ class CloversCore:
         plugin.name = key
         self._plugins.append(plugin)
 
-    def handles_filter(self, handle: Handle) -> bool:
+    def handles_filter(self, handle: BaseHandle) -> bool:
         """任务过滤器
 
         Args:
