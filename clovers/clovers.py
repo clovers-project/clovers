@@ -125,8 +125,9 @@ class Leaf(CloversCore):
 
     def handles_filter(self, handle: BaseHandle) -> bool:
         if method_miss := handle.properties - self.adapter.properties_lib.keys():
-            logger.warning(f'{handle} requires method not defined by Adapter "{self.adapter.name}"')
-            logger.debug(f'Undefined property methods in "{self.adapter.name}": {method_miss}', extra={"method_miss": method_miss})
+            logger.warning(f"Handle ignored: Adapter({self.adapter.name}) is missing required methods: {method_miss}")
+            debug_info = {"handle": handle, "method_miss": method_miss}
+            logger.debug(repr(debug_info), extra=debug_info)
             return False
         else:
             return True
