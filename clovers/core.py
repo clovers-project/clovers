@@ -128,11 +128,12 @@ class Handle(BaseHandle):
             self.command = self.patttrn.pattern
             self.match = self.match_regex
         elif isinstance(command, re.Pattern):
-            self.command = command.pattern
             self.patttrn = command
+            self.command = self.patttrn.pattern
             self.match = self.match_regex
         elif isinstance(command, Iterable):
             self.commands = sorted(set(command), key=lambda x: len(x))
+            self.command = "|".join(self.commands)
             self.match = self.match_commands
         else:
             raise TypeError(f"Handle: {command} has an invalid type: {type(command)}")
