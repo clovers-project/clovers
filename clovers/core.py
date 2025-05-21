@@ -1,6 +1,7 @@
 import time
 import asyncio
 import re
+import abc
 from importlib import import_module
 from pathlib import Path
 from .utils import import_path
@@ -29,7 +30,19 @@ def kwfilter(func: Method) -> Method:
     return wrapper
 
 
-class Result:
+class Info(abc.ABC):
+
+    @property
+    @abc.abstractmethod
+    def info(self) -> dict[str, Any]:
+        """信息"""
+        raise NotImplementedError
+
+    def __str__(self) -> str:
+        return str({self.__class__: self.info})
+
+
+class Result(Info):
     """插件响应结果
 
     Attributes:
@@ -41,11 +54,12 @@ class Result:
         self.key = key
         self.data = data
 
-    def __str__(self) -> str:
-        return f"<Result {self.key} {self.data}/>"
+    @property
+    def info(self):
+        return {"key": self.key, "data": self.data}
 
 
-class Event:
+class Event(Info):
     """触发响应的事件
 
     Attributes:
@@ -64,15 +78,16 @@ class Event:
         self.args = args
         self.properties = properties
 
+    @property
+    def info(self) -> dict:
+        return {"message": self.message, "args": self.args}
+
     def call(self, key, *args):
         """执行适配器调用方法，只接受位置参数"""
         return self.calls[key](*args, **self.extra)
 
-    def __str__(self) -> str:
-        return f"<Event {self.message}/>"
 
-
-class BaseHandle:
+class BaseHandle(Info):
     """插件任务基类
 
     Attributes:
@@ -116,6 +131,10 @@ class Handle(BaseHandle):
         self.register(commands)
         self.priority = priority
 
+    @property
+    def info(self):
+        return {"command": self.command, "properties": self.properties, "priority": self.priority, "block": self.block}
+
     def match(self, message: str) -> Sequence[str] | None:
         raise NotImplementedError
 
@@ -137,9 +156,6 @@ class Handle(BaseHandle):
             self.match = self.match_commands
         else:
             raise TypeError(f"Handle: {command} has an invalid type: {type(command)}")
-
-    def __str__(self) -> str:
-        return f"<Handle command='{self.command}' properties='{self.properties}' priority='{self.priority} 'block='{self.block}'/>"
 
     @staticmethod
     def match_none(message: str):
@@ -177,8 +193,9 @@ class TempHandle(BaseHandle):
         super().__init__(properties, block, wrapper(lambda e: func(e, self)))
         self.delay(timeout)
 
-    def __str__(self) -> str:
-        return f"<TempHandle expiration='{self.expiration}/>"
+    @property
+    def info(self):
+        return {"expiration": self.expiration, "properties": self.properties, "block": self.block}
 
     def finish(self):
         """结束任务"""
@@ -189,7 +206,7 @@ class TempHandle(BaseHandle):
         self.expiration = timeout + time.time()
 
 
-class Plugin:
+class Plugin(Info):
     """插件类
 
     Attributes:
@@ -225,6 +242,10 @@ class Plugin:
         """构建result"""
         self.handles: set[Handle] = set()
         """已注册的响应器"""
+
+    @property
+    def info(self):
+        return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self.handles}
 
     def startup(self, func: Task):
         """注册一个启动任务"""
@@ -351,18 +372,8 @@ class Plugin:
     def set_temp_handles(self, temp_handles: list[TempHandle]):
         self.temp_handles = temp_handles
 
-    def __str__(self) -> str:
-        lst = [f"<Plugin {self.name}>"]
-        for handle in self.handles:
-            lst.append(f"\t{handle}")
-        if temp_handles := getattr(self, "temp_handles", None):
-            for handle in temp_handles:
-                lst.append(f"\t{handle}")
-        lst.append("/>")
-        return "\n".join(lst)
 
-
-class Adapter:
+class Adapter(Info):
     """响应器类
 
     Attributes:
@@ -377,6 +388,15 @@ class Adapter:
         self.properties_lib: MethodLib = {}
         self.sends_lib: MethodLib = {}
         self.calls_lib: MethodLib = {}
+
+    @property
+    def info(self):
+        return {
+            "name": self.name,
+            "SendMethod": list(self.sends_lib.keys()),
+            "PropertyMethod": list(self.properties_lib.keys()),
+            "CallMethod": list(self.calls_lib.keys()),
+        }
 
     def property_method(self, method_name: str):
         """添加一个获取参数方法"""
@@ -411,14 +431,6 @@ class Adapter:
 
         return decorator
 
-    def send(self, result: Result, **extra):
-        """执行适配器发送方法"""
-        return self.sends_lib[result.key](result.data, **extra)
-
-    def property(self, key, **extra):
-        """执行适配器获取属性方法"""
-        return self.properties_lib[key](**extra)
-
     def update(self, adapter: "Adapter"):
         """更新兼容方法"""
         self.properties_lib.update(adapter.properties_lib)
@@ -434,6 +446,10 @@ class Adapter:
         for k, v in adapter.calls_lib.items():
             self.calls_lib.setdefault(k, v)
 
+    def send(self, result: Result, **extra):
+        """执行适配器发送方法"""
+        return self.sends_lib[result.key](result.data, **extra)
+
     async def response(self, handle: BaseHandle, event: Event, extra: dict):
         """使用适配器响应任务
 
@@ -444,25 +460,14 @@ class Adapter:
         """
         if handle.properties:
             keys = list(handle.properties - event.properties.keys())
-            coros = [self.property(key, **extra) for key in keys]
+            coros = [self.properties_lib[key](**extra) for key in keys]
             event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
         if result := await handle.func(event):
             await self.send(result, **extra)
             return handle.block
 
-    def __str__(self) -> str:
-        lst = [f"<Adapter {self.name}>"]
-        for method_name in self.sends_lib.keys():
-            lst.append(f"\t<SendMethod {method_name}\n>")
-        for method_name in self.calls_lib.keys():
-            lst.append(f"\t<CallMethod {method_name}\n>")
-        for method_name in self.properties_lib.keys():
-            lst.append(f"\t<PropertyMethod {method_name}\n>")
-        lst.append("/>")
-        return "\n".join(lst)
 
-
-class CloversCore:
+class CloversCore(Info):
     """四叶草核心
 
     此处管理插件的加载和准备，是各种实现的基础
@@ -472,7 +477,19 @@ class CloversCore:
         plugins (list[Plugin]): 项目管理的插件列表
     """
 
-    name: str = "CloversObject"
+    def __init__(self):
+        self.name: str = "CloversObject"
+        """项目名"""
+        self._plugins: list[Plugin] = []
+        """插件优先级和插件列表"""
+        self._handles_queue: list[tuple[list[TempHandle], list[list[Handle]]]] = []
+        """已注册响应器队列"""
+        self._ready: bool = False
+        """插件是否就绪"""
+
+    @property
+    def info(self):
+        return {"name": self.name, "plugins": self._plugins}
 
     @property
     def plugins(self):
@@ -484,14 +501,6 @@ class CloversCore:
             raise RuntimeError("cannot set plugins after ready")
         self._plugins.clear()
         self._plugins.extend(plugins)
-
-    def __init__(self):
-        self._plugins: list[Plugin] = []
-        """插件优先级和插件列表"""
-        self._handles_queue: list[tuple[list[TempHandle], list[list[Handle]]]] = []
-        """已注册响应器队列"""
-        self._ready: bool = False
-        """插件是否就绪"""
 
     def load_plugin(self, name: str | Path, is_path=False):
         """加载 clovers 插件

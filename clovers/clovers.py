@@ -1,16 +1,16 @@
 import time
 import asyncio
 import abc
-from importlib import import_module
 from pathlib import Path
+from importlib import import_module
+from .utils import import_path
 from clovers.core import BaseHandle
 from .core import Event, Adapter, CloversCore
-from .utils import import_path
 from .typing import RunningTask
 from .logger import logger
 
 
-class Client(abc.ABC, CloversCore):
+class Client(CloversCore):
     """clovers 客户端基类
 
     Attributes:
@@ -70,7 +70,7 @@ class Client(abc.ABC, CloversCore):
         raise NotImplementedError
 
 
-class Leaf(abc.ABC, CloversCore):
+class Leaf(CloversCore):
     """clovers 响应处理器基类
     Attributes:
         adapter (Adapter): 对接响应的适配器
