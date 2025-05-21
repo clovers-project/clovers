@@ -1,6 +1,6 @@
+import abc
 import time
 import asyncio
-import abc
 from pathlib import Path
 from importlib import import_module
 from .utils import import_path
