@@ -33,7 +33,7 @@ class Client(abc.ABC, CloversCore):
         """
         if self.running:
             raise RuntimeError("Client is already running")
-        self.ready_for_plugins()
+        self.initialize_plugins()
         self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
         self.running = True
 

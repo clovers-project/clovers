@@ -540,7 +540,8 @@ class CloversCore:
 
         return True
 
-    def ready_for_plugins(self):
+    def initialize_plugins(self):
+        """初始化插件"""
         if self._ready:
             raise RuntimeError(f"{self.name} already ready")
         _temp_handles: dict[int, list[TempHandle]] = {}
