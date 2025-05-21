@@ -458,9 +458,8 @@ class Adapter(Info):
             event (Event): 触发响应的事件
             extra (dict): 适配器需要的额外参数
         """
-        if handle.properties:
-            keys = list(handle.properties - event.properties.keys())
-            coros = [self.properties_lib[key](**extra) for key in keys]
+        if handle.properties and (keys := list(handle.properties - event.properties.keys())):
+            coros = (self.properties_lib[key](**extra) for key in keys)
             event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
         if result := await handle.func(event):
             await self.send(result, **extra)
