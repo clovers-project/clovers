@@ -69,13 +69,14 @@ class Leaf(CloversCore):
         count = 0
         temp_event = None
         properties = {}
+        calls = self.adapter.calls_lib
         for temp_handles, handles_list in self._handles_queue:
             if temp_handles:
                 now = time.time()
                 alive_handles = [handle for handle in temp_handles if handle.expiration > now]
                 temp_handles.clear()
                 if alive_handles:
-                    temp_event = temp_event or Event(message, [], properties)
+                    temp_event = temp_event or Event(message, [], properties, calls, extra)
                     temp_handles.extend(alive_handles)
                     blocks = await asyncio.gather(*(self.adapter.response(handle, temp_event, extra) for handle in alive_handles))
                     blocks = [block for block in blocks if block is not None]
@@ -89,7 +90,7 @@ class Leaf(CloversCore):
             delay_fuse = False
             for handles in handles_list:
                 tasklist = (
-                    self.adapter.response(handle, Event(message, args, properties), extra)
+                    self.adapter.response(handle, Event(message, args, properties, calls, extra), extra)
                     for handle in handles
                     if (args := handle.match(message)) is not None
                 )

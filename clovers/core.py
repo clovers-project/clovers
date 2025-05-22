@@ -70,13 +70,12 @@ class Event(Info):
         extra (dict): 额外数据储存位置，仅在事件链内传递
     """
 
-    calls: MethodLib
-    extra: dict
-
-    def __init__(self, message: str, args: Sequence[str], properties: dict):
+    def __init__(self, message: str, args: Sequence[str], properties: dict, calls: MethodLib, extra: dict):
         self.message = message
         self.args = args
         self.properties = properties
+        self.calls = calls
+        self.extra = extra
 
     @property
     def info(self) -> dict:
