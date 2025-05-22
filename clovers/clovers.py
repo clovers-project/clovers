@@ -81,11 +81,11 @@ class Leaf(CloversCore):
                     blocks = await asyncio.gather(*(self.adapter.response(handle, temp_event, extra) for handle in alive_handles))
                     blocks = [block for block in blocks if block is not None]
                     if blocks:
-                        blc_p, blc_h = zip(*blocks)
+                        blk_p, blk_h = zip(*blocks)
                         count += len(blocks)
-                        if any(blc_p):
+                        if any(blk_p):
                             return count
-                        elif any(blc_h):
+                        elif any(blk_h):
                             continue
             delay_fuse = False
             for handles in handles_list:
