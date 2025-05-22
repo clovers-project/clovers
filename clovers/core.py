@@ -176,7 +176,6 @@ class TempHandle(BaseHandle):
 
     Attributes:
         timeout (float): 超时时间
-
         func (Handler): 处理器函数
         properties (set[str]): 声明属性
         block (tuple[bool, bool]): 是否阻止后续插件, 是否阻止后续任务
@@ -189,17 +188,11 @@ class TempHandle(BaseHandle):
         block: tuple[bool, bool],
         func: Callable[[Any, "TempHandle"], Coroutine],
         wrapper: Callable[[MiddleHandlerFunction], HandlerFunction],
+        state: Any | None = None,
     ):
         super().__init__(properties, block, wrapper(lambda e: func(e, self)))
+        self.state = state
         self.delay(timeout)
-
-    @property
-    def state(self) -> Any:
-        return self._state
-
-    @state.setter
-    def state(self, state: Any):
-        self._state = state
 
     @property
     def info(self):
@@ -363,6 +356,7 @@ class Plugin(Info):
             timeout (float | int): 临时指令的持续时间
             rule (Rule.Ruleable | Rule | None): 响应规则
             block (bool): 是否阻断后续响应器
+            state (Any | None): 传递给临时指令的额外参数
         """
 
         def decorator(func: Callable[..., Coroutine]):
@@ -372,6 +366,7 @@ class Plugin(Info):
                 (self.block, block),
                 func,
                 self.handle_warpper(rule),
+                state,
             )
             if state is not None:
                 handle.state = state
