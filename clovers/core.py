@@ -195,6 +195,14 @@ class TempHandle(BaseHandle):
         self.delay(timeout)
 
     @property
+    def state(self) -> Any:
+        return self._state
+
+    @state.setter
+    def state(self, state: Any):
+        self._state = state
+
+    @property
     def info(self):
         return {"expiration": self.expiration, "properties": self.properties, "block": self.block}
 
@@ -368,6 +376,8 @@ class Plugin(Info):
                 self.handle_warpper(rule),
                 state,
             )
+            if state is not None:
+                handle.state = state
             self.temp_handles.append(handle)
             return handle.func
 
