@@ -194,6 +194,14 @@ class TempHandle(BaseHandle):
         self.delay(timeout)
 
     @property
+    def state(self) -> Any:
+        return self._state
+
+    @state.setter
+    def state(self, state: Any):
+        self._state = state
+
+    @property
     def info(self):
         return {"expiration": self.expiration, "properties": self.properties, "block": self.block}
 
@@ -346,6 +354,7 @@ class Plugin(Info):
         timeout: float | int = 30.0,
         rule: Rule.Ruleable | Rule | None = None,
         block: bool = True,
+        state: Any | None = None,
     ):
         """创建插件临时响应器
 
@@ -364,6 +373,8 @@ class Plugin(Info):
                 func,
                 self.handle_warpper(rule),
             )
+            if state is not None:
+                handle.state = state
             self.temp_handles.append(handle)
             return handle.func
 
