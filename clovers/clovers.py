@@ -6,7 +6,6 @@ from importlib import import_module
 from .utils import import_path
 from clovers.core import BaseHandle
 from .core import Event, Adapter, CloversCore
-from .typing import RunningTask
 from .logger import logger
 
 
@@ -149,16 +148,11 @@ class Client(CloversCore):
     """clovers 客户端基类
 
     Attributes:
-        wait_for (list[RunningTask]): 运行中的任务列表
         running (bool): 客户端运行状态
     """
 
-    wait_for: list[RunningTask]
-    running: bool
-
     def __init__(self) -> None:
         super().__init__()
-        self.wait_for = []
         self.running = False
 
     async def startup(self):
@@ -169,7 +163,8 @@ class Client(CloversCore):
         if self.running:
             raise RuntimeError("Client is already running")
         self.initialize_plugins()
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
+        tasklist = (asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
+        await asyncio.gather(*tasklist)
         self.running = True
 
     async def shutdown(self):
@@ -179,9 +174,8 @@ class Client(CloversCore):
         """
         if not self.running:
             raise RuntimeError("Client is not running")
-        self.wait_for.extend(asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
-        await asyncio.gather(*self.wait_for)
-        self.wait_for.clear()
+        tasklist = (asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
+        await asyncio.gather(*tasklist)
         self.running = False
 
     async def __aenter__(self) -> None:
