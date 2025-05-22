@@ -188,19 +188,11 @@ class TempHandle(BaseHandle):
         block: tuple[bool, bool],
         func: Callable[[Any, "TempHandle"], Coroutine],
         wrapper: Callable[[MiddleHandlerFunction], HandlerFunction],
-        state: Any = None,
+        state: Any | None = None,
     ):
         super().__init__(properties, block, wrapper(lambda e: func(e, self)))
         self.state = state
         self.delay(timeout)
-
-    @property
-    def state(self) -> Any:
-        return self._state
-
-    @state.setter
-    def state(self, state: Any):
-        self._state = state
 
     @property
     def info(self):
