@@ -19,7 +19,7 @@ type EventHandler = Callable[[Event], Coroutine[None, Any, Result | None]]
 type RawEventHandler = Callable[[Any], Coroutine[None, Any, Any | None]]
 type RawTempEventHandler = Callable[[Any, TempHandle], Coroutine[None, Any, Any | None]]
 type EventBuilder = Callable[[Event], Any]
-type ResultBuilder = Callable[[Any], Result]
+type ResultBuilder = Callable[[Any], Result | None]
 
 
 @runtime_checkable
