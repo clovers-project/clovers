@@ -109,10 +109,6 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
             if isinstance(args_A[-1], EllipsisType):
                 return len(args_A) - 1 == len(args_B) and check_compatible(args_A[0], args_B[0])
             return False
-        elif origin_B is tuple:
-            if isinstance(args_B[-1], EllipsisType):
-                return len(args_B) == len(args_B) - 1 and check_compatible(args_A[0], args_B[0])
-            return False
         else:
             return len(args_A) == len(args_B) and all(check_compatible(*args) for args in zip(args_A, args_B))
     # 其他视为不兼容

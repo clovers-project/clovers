@@ -16,9 +16,9 @@ type AdapterMethodLib = dict[str, AdapterMethod]
 type Task = Callable[[], Coroutine[None, Any, Any]]
 type PluginCommand = str | Iterable[str] | re.Pattern[str] | None
 type EventHandler = Callable[[Event], Coroutine[None, Any, Result | None]]
-type RawEventHandler[PluginEvent: EventProtocol] = Callable[[PluginEvent], Coroutine[None, Any, Any | None]]
-type RawTempEventHandler[PluginEvent: EventProtocol] = Callable[[PluginEvent, TempHandle], Coroutine[None, Any, Any | None]]
-type EventBuilder[PluginEvent: EventProtocol] = Callable[[Event], PluginEvent]
+type RawEventHandler = Callable[[Any], Coroutine[None, Any, Any | None]]
+type RawTempEventHandler = Callable[[Any, TempHandle], Coroutine[None, Any, Any | None]]
+type EventBuilder = Callable[[Event], Any]
 type ResultBuilder = Callable[[Any], Result]
 
 
@@ -304,7 +304,7 @@ class Plugin(Info):
     class Rule:
         """响应器规则"""
 
-        type Checker[PluginEvent: EventProtocol] = Callable[[PluginEvent], bool]
+        type Checker = Callable[[Any], bool]
         type Ruleable = Checker | list[Checker]
 
         def __init__(self, rule: Ruleable):
