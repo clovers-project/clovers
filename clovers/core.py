@@ -29,15 +29,18 @@ class EventProtocol(Protocol):
 
     Attributes:
         message (str): 触发插件的消息原文
-        args (Sequence[str]): 命令参数
+        args (Sequence[str]): 指令参数
         properties (dict): 插件声明的属性
     Methods:
         call(key: str, *args): 执行适配器调用方法并获取返回值
     """
 
     message: str
+    """触发插件的消息原文"""
     args: Sequence[str]
+    """指令参数"""
     properties: dict
+    """插件声明的属性"""
 
     def call(self, key: str, *args): ...
 
@@ -90,7 +93,7 @@ class Event(Info):
 
     Attributes:
         message (str): 触发插件的消息原文
-        args (list[str]): 参数
+        args (list[str]): 指令参数
         properties (dict): 需要的额外属性，由插件声明
 
     Methods:
@@ -304,7 +307,7 @@ class Plugin(Info):
     class Rule:
         """响应器规则"""
 
-        type Checker = Callable[[Any], bool]
+        type Checker[PluginEvent] = Callable[[PluginEvent], bool]
         type Ruleable = Checker | list[Checker]
 
         def __init__(self, rule: Ruleable):
