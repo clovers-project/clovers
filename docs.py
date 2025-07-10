@@ -17,19 +17,19 @@ a = re.compile(r"<a id=.+></a>")
 
 
 new_line = []
-skip = False
+skip_check = False
 ignore = False
 current_level = 0
 next_level = 0
 for line in result.stdout.split("\n"):
     if line.startswith("```"):
-        skip = not skip
-    if not skip:
+        skip_check = not skip_check
+    if not skip_check:
         if line.startswith("# "):
             next_level = 1
             if line.startswith("# clovers.typing"):
                 ignore = True
-            elif line.startswith("# clovers."):
+            elif line.startswith("# clovers"):
                 line = f"# {line[10:]}"
                 ignore = False
             else:
