@@ -296,7 +296,7 @@ class Plugin(Info):
         """已注册的响应器"""
         self.protocol: dict[str, dict[str, Any] | None] = {"properties": None, "sends": None, "calls": None}
         """协议"""
-        self.require_plugins: list[str] = []
+        self.require_plugins: set[str] = set()
         """依赖的插件"""
 
     @property
@@ -321,7 +321,7 @@ class Plugin(Info):
         Args:
             plugin_name (str): 插件名称
         """
-        self.require_plugins.append(plugin_name)
+        self.require_plugins.add(plugin_name)
 
     def startup(self, func: Task):
         """注册一个启动任务"""
