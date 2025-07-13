@@ -1,6 +1,6 @@
-from types import UnionType, EllipsisType
+from types import UnionType
 from typing import get_origin, get_args, Union, Any, TypeVar, TypedDict
-from collections.abc import Callable, Generator, AsyncGenerator
+from collections.abc import Callable, Generator, AsyncGenerator, Iterable
 
 
 class CloversProtocol(TypedDict):
@@ -21,6 +21,9 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
         type_A (Any): A
         type_B (Any): B
         recursion (bool): 是否在递归内
+
+    Returns:
+        bool: A 是 B 的兼容类型
     """
 
     def _is_union(type: Any):
@@ -31,10 +34,8 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
             return issubclass(type_A, type_B)
         except TypeError:
             pass
-        origin_B = get_origin(type_B)
-        args_B = get_args(type_B)
-        if args_B:
-            return type_A is args_B[0] and _subclass(type_A, origin_B)
+        if args_B := get_args(type_B):
+            return type_A is args_B[0] and issubclass(type_A, Iterable) and _subclass(type_A, get_origin(type_B))
         else:
             return False
 
@@ -56,12 +57,16 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
 
     if type_B is type_A:
         return True
-    if isinstance(type_B, EllipsisType):
+    # if isinstance(type_B, EllipsisType):
+    if type_B is ...:
         return True
-    if isinstance(type_A, EllipsisType):
+    # if isinstance(type_A, EllipsisType):
+    if type_A is ...:
         return False
     if type_B is Any:
         return True
+    if type_A is Any:
+        return False
     if isinstance(type_B, TypeVar) and (type_B := type_B.__bound__) is None:
         return True
     if isinstance(type_A, TypeVar) and (type_A := type_A.__bound__) is None:
@@ -88,13 +93,15 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
         if origin_A is None:
             return check_compatible(type_A, type_B)
         # 同构造泛型类型
-        elif origin_A is Callable:
+        elif origin_A is Callable:  # 函数类型必须用 collections.abc.Callable 标注
             param_A, retuen_A = args_A
             param_B, return_B = args_B
             # 对函数类型的参数进行反向兼容检查
-            if isinstance(param_A, EllipsisType):
+            # if isinstance(param_A, EllipsisType):
+            if param_A is ...:
                 return check_compatible(retuen_A, return_B)
-            if isinstance(param_B, EllipsisType):
+            # if isinstance(param_B, EllipsisType):
+            if param_B is ...:
                 return False
             return all(_subclass(*args) for args in zip(param_B, param_A)) and check_compatible(retuen_A, return_B)
         # 对函数生成器只检查生成类型
@@ -106,7 +113,8 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
     # 同构造继承泛型
     if _subclass(origin_A, origin_B):
         if origin_A is tuple:
-            if isinstance(args_A[-1], EllipsisType):
+            # if isinstance(args_A[-1], EllipsisType):
+            if args_A[-1] is ...:
                 return len(args_A) - 1 == len(args_B) and check_compatible(args_A[0], args_B[0])
             return False
         else:

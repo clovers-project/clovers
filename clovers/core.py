@@ -4,7 +4,7 @@ import asyncio
 import re
 from pathlib import Path
 from importlib import import_module
-from .utils import import_path
+from .utils import import_name, list_modules
 from typing import cast, runtime_checkable, Any, Protocol, Literal
 from collections.abc import Callable, Coroutine, Iterable, Sequence
 from .protocol import check_compatible
@@ -20,6 +20,20 @@ type RawEventHandler = Callable[[Any], Coroutine[None, Any, Any | None]]
 type RawTempEventHandler = Callable[[Any, TempHandle], Coroutine[None, Any, Any | None]]
 type EventBuilder = Callable[[Event], Any]
 type ResultBuilder = Callable[[Any], Result | None]
+
+
+def kwfilter(func: AdapterMethod) -> AdapterMethod:
+    """方法参数过滤器"""
+
+    co_argcount = func.__code__.co_argcount
+    if co_argcount == 0:
+        return lambda *args, **kwargs: func()
+    kw = set(func.__code__.co_varnames[:co_argcount])
+
+    async def wrapper(*args, **kwargs):
+        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
+
+    return wrapper
 
 
 @runtime_checkable
@@ -43,20 +57,6 @@ class EventProtocol(Protocol):
     """插件声明的属性"""
 
     def call(self, key: str, *args): ...
-
-
-def kwfilter(func: AdapterMethod) -> AdapterMethod:
-    """方法参数过滤器"""
-
-    co_argcount = func.__code__.co_argcount
-    if co_argcount == 0:
-        return lambda *args, **kwargs: func()
-    kw = set(func.__code__.co_varnames[:co_argcount])
-
-    async def wrapper(*args, **kwargs):
-        return await func(*args, **{k: v for k, v in kwargs.items() if k in kw})
-
-    return wrapper
 
 
 class Info(abc.ABC):
@@ -97,7 +97,7 @@ class Event(Info):
         properties (dict): 需要的额外属性，由插件声明
 
     Methods:
-        call(key: str, *args): 执行适配器调用方法并获取返回值
+        call (key: str, *args): 执行适配器调用方法并获取返回值
     """
 
     def __init__(self, message: str, args: Sequence[str], properties: dict, calls_lib: AdapterMethodLib, extra: dict):
@@ -171,9 +171,23 @@ class Handle(BaseHandle):
         return {"command": self.command, "properties": self.properties, "priority": self.priority, "block": self.block}
 
     def match(self, message: str) -> Sequence[str] | None:
+        """匹配指令
+
+        Args:
+            message (str): 待匹配的消息
+
+        Returns:
+            Oprtional[Sequence[str]]: 如果匹配到则返回从 message 提取的参数，如果没有匹配则返回 None
+        """
         raise NotImplementedError
 
     def register(self, command: PluginCommand) -> Iterable[str] | re.Pattern | None:
+        """注册指令
+
+        Args:
+            command (PluginCommand): 命令
+        """
+
         if not command:
             self.command = ""
             self.match = self.match_none
@@ -282,15 +296,32 @@ class Plugin(Info):
         """已注册的响应器"""
         self.protocol: dict[str, dict[str, Any] | None] = {"properties": None, "sends": None, "calls": None}
         """协议"""
+        self.require_plugins: set[str] = set()
+        """依赖的插件"""
 
     @property
     def info(self):
         return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self.handles}
 
     def set_protocol(self, key: Literal["properties", "sends", "calls"], data: type):
+        """设置插件类型协议
+
+        Args:
+            key (Literal["properties", "sends", "calls"]): 协议位置
+            data (type): 协议类型，包含字段和声明的类型
+        """
+
         if key not in self.protocol:
             raise KeyError(f"{self.name} has no protocol key: {key}")
         self.protocol[key] = {k: v for k, v in data.__annotations__.items() if not k.startswith("_")}
+
+    def require(self, plugin_name: str):
+        """声明依赖的插件
+
+        Args:
+            plugin_name (str): 插件名称
+        """
+        self.require_plugins.add(plugin_name)
 
     def startup(self, func: Task):
         """注册一个启动任务"""
@@ -445,6 +476,13 @@ class Adapter(Info):
         }
 
     def set_protocol(self, key: Literal["properties", "sends", "calls"], data: type):
+        """设置适配器类型协议
+
+        Args:
+            key (Literal["properties", "sends", "calls"]): 协议位置
+            data (type): 协议类型，包含字段和声明的类型
+        """
+
         if key not in self.protocol:
             raise KeyError(f"{self.name} has no protocol key: {key}")
         self.protocol[key] = {k: v for k, v in data.__annotations__.items() if not k.startswith("_")}
@@ -605,23 +643,45 @@ class CloversCore(Info):
             name (str | Path): 插件的包名或路径
             is_path (bool, optional): 是否为路径
         """
-        if is_path or isinstance(name, Path):
-            import_name = import_path(name)
-        else:
-            import_name = name
-        logger.info(f"[loading plugin][{self.name}] {import_name} ...")
+        package = import_name(name, is_path)
         try:
-            plugin = getattr(import_module(import_name), "__plugin__", None)
+            plugin = getattr(import_module(package), "__plugin__", None)
             assert isinstance(plugin, Plugin)
         except Exception as e:
-            logger.exception(f"plugin {import_name} load failed", exc_info=e)
+            logger.exception(f'[{self.name}][loading plugin] "{package}" load failed', exc_info=e)
             return
-        key = plugin.name or import_name
-        if plugin in self.plugins:
-            logger.warning(f"plugin {key} already loaded")
+        key = plugin.name or package
+        if plugin in self._plugins:
             return
+        if plugin.require_plugins:
+            for require_plugin in plugin.require_plugins:
+                self.load_plugin(require_plugin)
+        logger.info(f'[{self.name}][loading plugin] "{package}" loaded')
         plugin.name = key
         self._plugins.append(plugin)
+
+    def load_plugins_from_list(self, plugin_list: list[str]):
+        """从包名列表加载插件
+
+        Args:
+            plugin_list (list[str]): 插件的包名列表
+        """
+        for plugin in plugin_list:
+            self.load_plugin(plugin)
+
+    def load_plugins_from_dirs(self, plugin_dirs: list[str]):
+        """从本地目录列表加载插件
+
+        Args:
+            plugin_dirs (list[str]): 插件的目录列表
+        """
+        for plugin_dir in plugin_dirs:
+            plugin_dir = Path(plugin_dir)
+            if not plugin_dir.exists():
+                plugin_dir.mkdir(parents=True, exist_ok=True)
+                continue
+            for plugin in list_modules(plugin_dir):
+                self.load_plugin(plugin)
 
     def handles_filter(self, handle: BaseHandle) -> bool:
         """任务过滤器
@@ -693,19 +753,38 @@ class Leaf(CloversCore):
             name (str | Path): 适配器的包名或路径
             is_path (bool, optional): 是否为路径
         """
-
-        if is_path or isinstance(name, Path):
-            import_name = import_path(name)
-        else:
-            import_name = name
-        logger.info(f"[loading adapter][{self.name}] {import_name} ...")
+        package = import_name(name, is_path)
         try:
-            adapter = getattr(import_module(import_name), "__adapter__", None)
+            adapter = getattr(import_module(package), "__adapter__", None)
             assert isinstance(adapter, Adapter)
         except Exception as e:
-            logger.exception(f"adapter {import_name} load failed", exc_info=e)
+            logger.exception(f'[{self.name}][loading adapter] "{package}" load failed', exc_info=e)
             return
+        logger.info(f'[{self.name}][loading adapter] "{package}" loaded')
         self.adapter.update(adapter)
+
+    def load_adapters_from_list(self, adapter_list: list[str]):
+        """从包名列表加载适配器
+
+        Args:
+            adapter_list (list[str]): 适配器的包名列表
+        """
+        for adapter in adapter_list:
+            self.load_adapter(adapter)
+
+    def load_adapters_from_dirs(self, adapter_dirs: list[str]):
+        """从本地目录列表加载适配器
+
+        Args:
+            adapter_dirs (list[str]): 适配器的目录列表
+        """
+        for adapter_dir in adapter_dirs:
+            adapter_dir = Path(adapter_dir)
+            if not adapter_dir.exists():
+                adapter_dir.mkdir(parents=True, exist_ok=True)
+                continue
+            for adapter in list_modules(adapter_dir):
+                self.load_adapter(adapter)
 
     def plugins_filter(self, plugin: Plugin) -> bool:
         plugin_protocol = plugin.protocol
@@ -797,7 +876,7 @@ class Leaf(CloversCore):
             **extra: 额外的参数
 
         Returns:
-            str | None: 消息
+            Optional[str]: 消息
         """
 
         raise NotImplementedError
