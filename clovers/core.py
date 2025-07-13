@@ -4,7 +4,7 @@ import asyncio
 import re
 from pathlib import Path
 from importlib import import_module
-from .utils import import_path
+from .utils import import_name, list_modules
 from typing import cast, runtime_checkable, Any, Protocol, Literal
 from collections.abc import Callable, Coroutine, Iterable, Sequence
 from .protocol import check_compatible
@@ -643,25 +643,43 @@ class CloversCore(Info):
             name (str | Path): 插件的包名或路径
             is_path (bool, optional): 是否为路径
         """
-        if is_path or isinstance(name, Path):
-            import_name = import_path(name)
-        else:
-            import_name = name.replace("-", "_")
+        package = import_name(name, is_path)
         try:
-            plugin = getattr(import_module(import_name), "__plugin__", None)
+            plugin = getattr(import_module(package), "__plugin__", None)
             assert isinstance(plugin, Plugin)
         except Exception as e:
-            logger.exception(f'[{self.name}][loading plugin] "{import_name}" load failed', exc_info=e)
+            logger.exception(f'[{self.name}][loading plugin] "{package}" load failed', exc_info=e)
             return
-        key = plugin.name or import_name
+        key = plugin.name or package
         if plugin in self._plugins:
             return
         if plugin.require_plugins:
             for require_plugin in plugin.require_plugins:
                 self.load_plugin(require_plugin)
-        logger.info(f'[{self.name}][loading plugin] "{import_name}" loaded')
+        logger.info(f'[{self.name}][loading plugin] "{package}" loaded')
         plugin.name = key
         self._plugins.append(plugin)
+
+    def load_plugins_from_list(self, plugin_list: list[str]):
+        """从包名列表加载插件
+
+        Args:
+            plugin_list (list[str]): 插件的包名列表
+        """
+        map(self.load_plugin, plugin_list)
+
+    def load_plugins_from_dirs(self, plugin_dirs: list[str]):
+        """从本地目录列表加载插件
+
+        Args:
+            plugin_dirs (list[str]): 插件的目录列表
+        """
+        for plugin_dir in plugin_dirs:
+            plugin_dir = Path(plugin_dir)
+            if not plugin_dir.exists():
+                plugin_dir.mkdir(parents=True, exist_ok=True)
+                continue
+            map(self.load_plugin, list_modules(plugin_dir))
 
     def handles_filter(self, handle: BaseHandle) -> bool:
         """任务过滤器
@@ -733,19 +751,36 @@ class Leaf(CloversCore):
             name (str | Path): 适配器的包名或路径
             is_path (bool, optional): 是否为路径
         """
-
-        if is_path or isinstance(name, Path):
-            import_name = import_path(name)
-        else:
-            import_name = name.replace("-", "_")
+        package = import_name(name, is_path)
         try:
-            adapter = getattr(import_module(import_name), "__adapter__", None)
+            adapter = getattr(import_module(package), "__adapter__", None)
             assert isinstance(adapter, Adapter)
         except Exception as e:
-            logger.exception(f'[{self.name}][loading adapter] "{import_name}" load failed', exc_info=e)
+            logger.exception(f'[{self.name}][loading adapter] "{package}" load failed', exc_info=e)
             return
-        logger.info(f'[{self.name}][loading adapter] "{import_name}" loaded')
+        logger.info(f'[{self.name}][loading adapter] "{package}" loaded')
         self.adapter.update(adapter)
+
+    def load_adapters_from_list(self, adapter_list: list[str]):
+        """从包名列表加载适配器
+
+        Args:
+            adapter_list (list[str]): 适配器的包名列表
+        """
+        map(self.load_adapter, adapter_list)
+
+    def load_adapters_from_dirs(self, adapter_dirs: list[str]):
+        """从本地目录列表加载适配器
+
+        Args:
+            adapter_dirs (list[str]): 适配器的目录列表
+        """
+        for adapter_dir in adapter_dirs:
+            adapter_dir = Path(adapter_dir)
+            if not adapter_dir.exists():
+                adapter_dir.mkdir(parents=True, exist_ok=True)
+                continue
+            map(self.load_adapter, list_modules(adapter_dir))
 
     def plugins_filter(self, plugin: Plugin) -> bool:
         plugin_protocol = plugin.protocol
