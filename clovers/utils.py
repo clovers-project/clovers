@@ -11,7 +11,7 @@ def import_path(path: str | Path):
         str: 模块导入名
     """
     path = Path(path) if isinstance(path, str) else path
-    return ".".join(path.resolve().relative_to(Path()).parts)
+    return ".".join(path.resolve().relative_to(Path().resolve()).parts)
 
 
 def import_name(name: str | Path, is_path):
@@ -41,7 +41,7 @@ def list_modules(path: str | Path) -> list[str]:
         list[str]: 模块名列表
     """
     path = Path(path) if isinstance(path, str) else path
-    namespace = ".".join(path.resolve().relative_to(Path()).parts)
+    namespace = ".".join(path.resolve().relative_to(Path().resolve()).parts)
     namelist = []
     for x in path.iterdir():
         name = x.stem if x.is_file() and x.name.endswith(".py") else x.name

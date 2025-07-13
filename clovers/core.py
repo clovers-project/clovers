@@ -666,7 +666,8 @@ class CloversCore(Info):
         Args:
             plugin_list (list[str]): 插件的包名列表
         """
-        map(self.load_plugin, plugin_list)
+        for plugin in plugin_list:
+            self.load_plugin(plugin)
 
     def load_plugins_from_dirs(self, plugin_dirs: list[str]):
         """从本地目录列表加载插件
@@ -679,7 +680,8 @@ class CloversCore(Info):
             if not plugin_dir.exists():
                 plugin_dir.mkdir(parents=True, exist_ok=True)
                 continue
-            map(self.load_plugin, list_modules(plugin_dir))
+            for plugin in list_modules(plugin_dir):
+                self.load_plugin(plugin)
 
     def handles_filter(self, handle: BaseHandle) -> bool:
         """任务过滤器
@@ -767,7 +769,8 @@ class Leaf(CloversCore):
         Args:
             adapter_list (list[str]): 适配器的包名列表
         """
-        map(self.load_adapter, adapter_list)
+        for adapter in adapter_list:
+            self.load_adapter(adapter)
 
     def load_adapters_from_dirs(self, adapter_dirs: list[str]):
         """从本地目录列表加载适配器
@@ -780,7 +783,8 @@ class Leaf(CloversCore):
             if not adapter_dir.exists():
                 adapter_dir.mkdir(parents=True, exist_ok=True)
                 continue
-            map(self.load_adapter, list_modules(adapter_dir))
+            for adapter in list_modules(adapter_dir):
+                self.load_adapter(adapter)
 
     def plugins_filter(self, plugin: Plugin) -> bool:
         plugin_protocol = plugin.protocol
