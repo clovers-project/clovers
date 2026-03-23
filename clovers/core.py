@@ -113,6 +113,8 @@ class Event(Info):
 
     def call(self, key: str, *args):
         """执行适配器调用方法，只接受位置参数"""
+        if not key in self._calls_lib:
+            return None
         return self._calls_lib[key](*args, **self._extra)
 
     def __getattr__(self, name: str):
