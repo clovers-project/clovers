@@ -389,7 +389,7 @@ class Plugin(Info):
         properties: Iterable[str] = [],
         rule: Rule.Ruleable | Rule | None = None,
         priority: int = 0,
-        block: bool = True,
+        block: bool | tuple[bool, bool] = True,
     ):
         """注册插件指令响应器
 
@@ -398,7 +398,7 @@ class Plugin(Info):
             properties (Iterable[str]): 声明需要额外参数
             rule (Rule.Ruleable | Rule | None): 响应规则
             priority (int): 优先级
-            block (bool): 是否阻断后续响应器
+            block (bool | tuple[bool, bool]): 是否阻断后续响应器
         """
 
         def decorator(func: RawEventHandler):
@@ -406,7 +406,7 @@ class Plugin(Info):
                 command,
                 properties,
                 priority,
-                (self.block, block),
+                (self.block, block) if isinstance(block, bool) else block,
                 self.handle_wrapper(rule)(func),
             )
             self.handles.add(handle)
@@ -419,7 +419,7 @@ class Plugin(Info):
         properties: Iterable[str] = [],
         timeout: float | int = 30.0,
         rule: Rule.Ruleable | Rule | None = None,
-        block: bool = True,
+        block: bool | tuple[bool, bool] = True,
         state: Any | None = None,
     ):
         """创建插件临时响应器
@@ -428,7 +428,7 @@ class Plugin(Info):
             properties (Iterable[str]): 声明需要额外参数
             timeout (float | int): 临时指令的持续时间
             rule (Rule.Ruleable | Rule | None): 响应规则
-            block (bool): 是否阻断后续响应器
+            block (bool | tuple[bool, bool]): 是否阻断后续响应器
             state (Any | None): 传递给临时指令的额外参数
         """
 
@@ -436,7 +436,7 @@ class Plugin(Info):
             handle = TempHandle(
                 timeout,
                 properties,
-                (self.block, block),
+                (self.block, block) if isinstance(block, bool) else block,
                 func,
                 self.handle_wrapper(rule),
                 state,
