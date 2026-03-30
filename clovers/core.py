@@ -1,23 +1,24 @@
-import abc
 import time
 import asyncio
 import re
 from pathlib import Path
 from importlib import import_module
 from .utils import import_name, list_modules
-from typing import cast, runtime_checkable, Any, Protocol, Literal
-from collections.abc import Callable, Coroutine, Iterable, Sequence
 from .protocol import check_compatible
 from .logger import logger
+from abc import ABC, abstractmethod
+from typing import cast, Any, Protocol, Literal
+from collections.abc import Callable, Coroutine, Iterable, Sequence
 
 
-type AdapterMethod = Callable[..., Coroutine[None, Any, Any]]
+type Coro[T] = Coroutine[Any, Any, T]
+type AdapterMethod = Callable[..., Coro[None]]
 type AdapterMethodLib = dict[str, AdapterMethod]
-type Task = Callable[[], Coroutine[None, Any, Any]]
+type Task = Callable[[], Coro[None]] | Callable[[], None]
 type PluginCommand = str | Iterable[str] | re.Pattern[str] | None
-type EventHandler = Callable[[Event], Coroutine[None, Any, Result | None]]
-type RawEventHandler = Callable[[Any], Coroutine[None, Any, Any | None]]
-type RawTempEventHandler = Callable[[Any, TempHandle], Coroutine[None, Any, Any | None]]
+type EventHandler = Callable[[Event], Coro[Result | None]]
+type RawEventHandler = Callable[[Any], Coro[Any | None]]
+type RawTempEventHandler = Callable[[Any, TempHandle], Coro[Any | None]]
 type EventBuilder = Callable[[Event], Any]
 type ResultBuilder = Callable[[Any], Result | None]
 
@@ -36,7 +37,6 @@ def kwfilter(func: AdapterMethod) -> AdapterMethod:
     return wrapper
 
 
-@runtime_checkable
 class EventProtocol(Protocol):
     """事件协议
     经过 EventBuilder 处理构建的返回值需要满足 EventProtocol 协议
@@ -59,10 +59,10 @@ class EventProtocol(Protocol):
     def call(self, key: str, *args): ...
 
 
-class Info(abc.ABC):
+class Info(ABC):
 
     @property
-    @abc.abstractmethod
+    @abstractmethod
     def info(self) -> dict[str, Any]:
         """信息"""
         raise NotImplementedError
@@ -868,7 +868,7 @@ class Leaf(CloversCore):
                 break
         return count
 
-    @abc.abstractmethod
+    @abstractmethod
     def extract_message(self, **extra) -> str | None:
         """提取消息
 
@@ -920,7 +920,7 @@ class Client(CloversCore):
         if self.running:
             raise RuntimeError("Client is already running")
         self.initialize_plugins()
-        tasklist = (asyncio.create_task(task()) for plugin in self.plugins for task in plugin.startup_tasklist)
+        tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.startup_tasklist if (coro := task()))
         await asyncio.gather(*tasklist)
         self.running = True
 
@@ -931,7 +931,7 @@ class Client(CloversCore):
         """
         if not self.running:
             raise RuntimeError("Client is not running")
-        tasklist = (asyncio.create_task(task()) for plugin in self.plugins for task in plugin.shutdown_tasklist)
+        tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.shutdown_tasklist if (coro := task()))
         await asyncio.gather(*tasklist)
         self.running = False
 
