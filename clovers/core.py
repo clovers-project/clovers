@@ -12,7 +12,7 @@ from collections.abc import Callable, Coroutine, Iterable, Sequence
 
 
 type Coro[T] = Coroutine[Any, Any, T]
-type AdapterMethod = Callable[..., Coro[None]]
+type AdapterMethod = Callable[..., Coro]
 type AdapterMethodLib = dict[str, AdapterMethod]
 type Task = Callable[[], Coro[None]] | Callable[[], None]
 type PluginCommand = str | Iterable[str] | re.Pattern[str] | None
@@ -56,7 +56,7 @@ class EventProtocol(Protocol):
     properties: dict
     """插件声明的属性"""
 
-    def call(self, key: str, *args): ...
+    def call(self, key: str, *args) -> Coro | None: ...
 
 
 class Info(ABC):
@@ -554,7 +554,7 @@ class Adapter(Info):
             else:
                 self_fields.update(adapter_fields)
 
-    def remix(self, adapter: "Adapter"):
+    def mixin(self, adapter: "Adapter"):
         """混合其他兼容方法"""
         for k, v in adapter.properties_lib.items():
             self.properties_lib.setdefault(k, v)
