@@ -58,7 +58,7 @@ class Adapter(AdapterCore):
         def decorator(func: AdapterMethod):
             if method_name in self.calls_lib:
                 logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
-                return
+                return func
             if annot := func.__annotations__.get("return"):
                 self.__protocol["call"][method_name] = annot
             self.calls_lib[method_name] = kwfilter(func)
@@ -72,7 +72,7 @@ class Adapter(AdapterCore):
         def decorator(func: AdapterMethod):
             if method_name in self.sends_lib:
                 logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
-                return
+                return func
             name = func.__code__.co_varnames[0]
             if annot := func.__annotations__.get(name):
                 self.__protocol["send"][method_name] = annot
@@ -87,7 +87,7 @@ class Adapter(AdapterCore):
         def decorator(func: AdapterMethod):
             if method_name in self.calls_lib:
                 logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
-                return
+                return func
             co_posonlyargcount = func.__code__.co_posonlyargcount
             if co_posonlyargcount == 0:
                 return self.property_method(method_name)(func)
