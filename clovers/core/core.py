@@ -180,7 +180,7 @@ class Leaf(CloversCore):
             logger.exception(f'[{self.name}][loading adapter] "{package}" load failed', exc_info=e)
             return
         logger.info(f'[{self.name}][loading adapter] "{package}" loaded')
-        self.adapter.update(adapter)
+        self.adapter.mixin(adapter)
 
     def load_adapters_from_list(self, adapter_list: list[str]):
         """从包名列表加载适配器

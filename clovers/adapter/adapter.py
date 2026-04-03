@@ -5,9 +5,6 @@ from ..logger import logger
 from ..base import Coro, AdapterCore, AdapterMethod, AdapterMethodLib, BaseHandle, Event
 
 
-class MethodRegError(Exception): ...
-
-
 class Adapter(AdapterCore):
     """响应器类
 
@@ -60,7 +57,8 @@ class Adapter(AdapterCore):
 
         def decorator(func: AdapterMethod):
             if method_name in self.calls_lib:
-                raise MethodRegError(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+                logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+                return
             if annot := func.__annotations__.get("return"):
                 self.__protocol["call"][method_name] = annot
             self.calls_lib[method_name] = kwfilter(func)
@@ -73,7 +71,8 @@ class Adapter(AdapterCore):
 
         def decorator(func: AdapterMethod):
             if method_name in self.sends_lib:
-                raise MethodRegError(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+                logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+                return
             name = func.__code__.co_varnames[0]
             if annot := func.__annotations__.get(name):
                 self.__protocol["send"][method_name] = annot
@@ -87,7 +86,8 @@ class Adapter(AdapterCore):
 
         def decorator(func: AdapterMethod):
             if method_name in self.calls_lib:
-                raise MethodRegError(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+                logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+                return
             co_posonlyargcount = func.__code__.co_posonlyargcount
             if co_posonlyargcount == 0:
                 return self.property_method(method_name)(func)
@@ -106,15 +106,9 @@ class Adapter(AdapterCore):
     def mixin(self, adapter: AdapterCore):
         """混合其他兼容方法"""
         for k, func in adapter.sends_lib.items():
-            try:
-                self.send_method(k)(func)
-            except MethodRegError as e:
-                logger.warning(e)
+            self.send_method(k)(func)
         for k, func in adapter.calls_lib.items():
-            try:
-                self.call_method(k)(func)
-            except MethodRegError as e:
-                logger.warning(e)
+            self.call_method(k)(func)
 
     async def response(self, handle: BaseHandle, event: Event, extra: dict):
         """使用适配器响应任务

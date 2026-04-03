@@ -2,7 +2,7 @@ import time
 import re
 from typing import Any
 from collections.abc import Callable, Iterable, Sequence
-from .base import Coro, Task, Info, Event, EventType, Result, EventHandler, BaseHandle
+from .base import Coro, Task, Info, Event, Result, EventHandler, BaseHandle
 
 type Matchable = str | Iterable[str] | re.Pattern[str] | None
 type RawEventHandler = Callable[[Any], Coro[Any | None]]
