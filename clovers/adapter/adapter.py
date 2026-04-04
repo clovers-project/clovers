@@ -10,10 +10,8 @@ class Adapter(AdapterCore):
 
     Attributes:
         name (str, optional): 响应器名称. Defaults to "".
-        properties_lib (AdapterMethodLib): 获取参数方法库
         sends_lib (AdapterMethodLib): 发送消息方法库
         calls_lib (AdapterMethodLib): 调用方法库
-        protocol (CloversProtocol): 同名类型协议
     """
 
     def __init__(self, name: str = "") -> None:
@@ -28,7 +26,6 @@ class Adapter(AdapterCore):
             "name": self.name,
             "sends_lib": list(self.sends_lib.keys()),
             "calls_lib": list(self.calls_lib.keys()),
-            "properties_lib": list(self.calls_lib.keys()),
         }
 
     def check_protocol(self, protocol: type | None):

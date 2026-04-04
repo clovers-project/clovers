@@ -17,10 +17,10 @@ class Handle(BaseHandle):
 
     Attributes:
         command (Matchable): 触发命令
-        priority (int): 任务优先级
-        func (EventHandler): 处理器函数
         properties (set[str]): 声明属性
+        priority (int): 任务优先级
         block (tuple[bool, bool]): 是否阻止后续插件, 是否阻止后续任务
+        func (EventHandler): 处理器函数
     """
 
     def __init__(
