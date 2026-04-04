@@ -195,14 +195,16 @@ class AdapterCore(Adapter):
             return func
         co_posonlyargcount = func.__code__.co_posonlyargcount
         if co_posonlyargcount == 0:
-            return self.property_method(method_name)(func)
-        names = func.__code__.co_varnames[:co_posonlyargcount]
-        fields = func.__annotations__
-        if all(name in fields for name in names) and "return" in fields:
-            if is_coro(func):
-                self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
-            else:
-                self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], fields["return"]]
+            if annot := func.__annotations__.get("return"):
+                self.__protocol["call"][method_name] = annot
+        else:
+            names = func.__code__.co_varnames[:co_posonlyargcount]
+            fields = func.__annotations__
+            if all(name in fields for name in names) and "return" in fields:
+                if is_coro(func):
+                    self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
+                else:
+                    self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], fields["return"]]
         self.calls_lib[method_name] = func
         return func
 
