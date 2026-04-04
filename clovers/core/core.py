@@ -154,8 +154,8 @@ class AdapterCore(Adapter):
         calls_lib (AdapterMethodLib): 调用方法库
     """
 
-    def __init__(self, name: str = "") -> None:
-        self.name: str = name
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
         self.sends_lib: AdapterMethodLib = {}
         self.calls_lib: AdapterMethodLib = {}
         self.__protocol = {"send": {}, "call": {}}
