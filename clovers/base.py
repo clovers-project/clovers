@@ -50,6 +50,8 @@ class Adapter(Info):
 
     def __init__(self, name: str = "") -> None:
         self.name: str = name
+        self.sends_lib = {}
+        self.calls_lib = {}
 
     @property
     def info(self):

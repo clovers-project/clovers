@@ -156,8 +156,6 @@ class AdapterCore(Adapter):
 
     def __init__(self, name: str) -> None:
         super().__init__(name)
-        self.sends_lib: AdapterMethodLib = {}
-        self.calls_lib: AdapterMethodLib = {}
         self.__protocol = {"send": {}, "call": {}}
 
     def check_protocol(self, protocol: type | None):
