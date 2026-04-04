@@ -51,6 +51,14 @@ class Adapter(Info):
     def __init__(self, name: str = "") -> None:
         self.name: str = name
 
+    @property
+    def info(self):
+        return {
+            "name": self.name,
+            "sends_lib": list(self.sends_lib.keys()),
+            "calls_lib": list(self.calls_lib.keys()),
+        }
+
     def call_decorator(self, method_name: str, func: AdapterMethod):
         self.calls_lib[method_name] = kwfilter(func)
         return func

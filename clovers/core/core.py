@@ -160,14 +160,6 @@ class AdapterCore(Adapter):
         self.calls_lib: AdapterMethodLib = {}
         self.__protocol = {"send": {}, "call": {}}
 
-    @property
-    def info(self):
-        return {
-            "name": self.name,
-            "sends_lib": list(self.sends_lib.keys()),
-            "calls_lib": list(self.calls_lib.keys()),
-        }
-
     def check_protocol(self, protocol: type | None):
         """检查适配器类型协议
 
