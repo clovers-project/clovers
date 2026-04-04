@@ -1,13 +1,13 @@
-from abc import abstractmethod
-from collections.abc import Iterable
 import time
 import asyncio
+from abc import abstractmethod
+from collections.abc import Iterable, Callable
 from pathlib import Path
 from importlib import import_module
 from .utils import import_name, list_modules
-from ..base import Info, Event, BaseHandle
+from .protocol import protocol_format, check_compatible, is_coro
+from ..base import Coro, Info, Adapter, AdapterMethod, AdapterMethodLib, BaseHandle, Event
 from ..plugin import Handle, TempHandle, Plugin
-from ..adapter import Adapter
 from ..logger import logger
 
 
@@ -145,6 +145,93 @@ class CloversCore(Info):
         self._ready = True
 
 
+class AdapterCore(Adapter):
+    """适配器核心类
+
+    Attributes:
+        name (str, optional): 响应器名称. Defaults to "".
+        sends_lib (AdapterMethodLib): 发送消息方法库
+        calls_lib (AdapterMethodLib): 调用方法库
+    """
+
+    def __init__(self, name: str = "") -> None:
+        self.name: str = name
+        self.sends_lib: AdapterMethodLib = {}
+        self.calls_lib: AdapterMethodLib = {}
+        self.__protocol = {"send": {}, "call": {}}
+
+    @property
+    def info(self):
+        return {
+            "name": self.name,
+            "sends_lib": list(self.sends_lib.keys()),
+            "calls_lib": list(self.calls_lib.keys()),
+        }
+
+    def check_protocol(self, protocol: type | None):
+        """检查适配器类型协议
+
+        Args:
+            data (type): 事件协议类型，包含字段和声明的类型
+        """
+        if protocol is None:
+            return True
+        check_protocol = protocol_format(protocol)
+        for k in ["send", "call"]:
+            if (self_fields := self.__protocol[k]) is None or (check_fields := check_protocol[k]) is None:
+                continue
+            keys = check_fields.keys() & self_fields.keys()
+            for key in keys:
+                if not check_compatible(self_fields[key], check_fields[key]):
+                    logger.warning(
+                        f"Adapter({self.name}) {k}[{key}] provides type '{self_fields[key]}', but protocol require '{check_fields[key]}'."
+                    )
+                    return False
+        return True
+
+    def send_decorator(self, method_name: str, func: AdapterMethod):
+        if method_name in self.sends_lib:
+            logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+            return func
+        name = func.__code__.co_varnames[0]
+        if annot := func.__annotations__.get(name):
+            self.__protocol["send"][method_name] = annot
+        self.sends_lib[method_name] = func
+        return func
+
+    def call_decorator(self, method_name: str, func: AdapterMethod):
+        if method_name in self.calls_lib:
+            logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
+            return func
+        co_posonlyargcount = func.__code__.co_posonlyargcount
+        if co_posonlyargcount == 0:
+            return self.property_method(method_name)(func)
+        names = func.__code__.co_varnames[:co_posonlyargcount]
+        fields = func.__annotations__
+        if all(name in fields for name in names) and "return" in fields:
+            if is_coro(func):
+                self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
+            else:
+                self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], fields["return"]]
+        self.calls_lib[method_name] = func
+        return func
+
+    async def response(self, handle: BaseHandle, event: Event, extra: dict):
+        """使用适配器响应任务
+
+        Args:
+            handle (BaseHandle): 触发的插件任务
+            event (Event): 触发响应的事件
+            extra (dict): 适配器需要的额外参数
+        """
+        if handle.properties and (keys := handle.properties - event.properties.keys()):
+            coros = (self.calls_lib[key](**extra) for key in keys)
+            event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
+        if result := await handle.func(event):
+            await self.sends_lib[result.key](result.data, **extra)
+            return handle.block
+
+
 class Leaf(CloversCore):
     """clovers 响应处理器基类
 
@@ -152,12 +239,12 @@ class Leaf(CloversCore):
         adapter (Adapter): 对接响应的适配器
     """
 
-    adapter: Adapter
+    adapter: AdapterCore
 
     def __init__(self, name: str) -> None:
         super().__init__()
         self.name = name
-        self.adapter = Adapter(name)
+        self.adapter = AdapterCore(name)
 
     @property
     def info(self):

@@ -1,22 +1,7 @@
 from types import UnionType
 from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType, Optional
 from collections.abc import Callable, Generator, AsyncGenerator
-from ..base import Coro, AdapterMethod
-
-
-def kwfilter(func: AdapterMethod) -> AdapterMethod:
-    """方法参数过滤器"""
-    if func.__code__.co_flags & 0x0C:
-        return func
-    co_argcount = func.__code__.co_argcount
-    if co_argcount == 0:
-        return lambda *args, **kwargs: func()
-    kw = set(func.__code__.co_varnames[:co_argcount])
-
-    def wrapper(*args, **kwargs):
-        return func(*args, **{k: v for k, v in kwargs.items() if k in kw})
-
-    return wrapper
+from ..base import Coro
 
 
 def _is_union(type: Any):

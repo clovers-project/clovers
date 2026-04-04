@@ -124,7 +124,7 @@ class TempHandle(BaseHandle):
         self.expiration = timeout + time.time()
 
 
-class Plugin(Info):
+class Plugin[EventType](Info):
     """插件类
 
     Attributes:
@@ -190,10 +190,10 @@ class Plugin(Info):
 
         return func
 
-    class Rule:
+    class Rule[T]:
         """响应器规则"""
 
-        type Checker[PluginEvent] = Callable[[PluginEvent], bool]
+        type Checker = Callable[[T], bool]
         type Ruleable = Checker | list[Checker]
 
         def __init__(self, rule: Ruleable):
@@ -240,7 +240,7 @@ class Plugin(Info):
         self,
         command: Matchable,
         properties: Iterable[str] = [],
-        rule: Rule.Ruleable | Rule | None = None,
+        rule: Rule[EventType].Ruleable | Rule[EventType] | None = None,
         priority: int = 0,
         block: bool | tuple[bool, bool] = True,
     ):
@@ -271,7 +271,7 @@ class Plugin(Info):
         self,
         properties: Iterable[str] = [],
         timeout: float | int = 30.0,
-        rule: Rule.Ruleable | Rule | None = None,
+        rule: Rule[EventType].Ruleable | Rule[EventType] | None = None,
         block: bool | tuple[bool, bool] = True,
         state: Any | None = None,
     ):

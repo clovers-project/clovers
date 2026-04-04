@@ -10,6 +10,21 @@ type Task = Callable[[], Coro[None]] | Callable[[], None]
 type EventHandler = Callable[[Event], Coro[Result | None]]
 
 
+def kwfilter(func: AdapterMethod) -> AdapterMethod:
+    """方法参数过滤器"""
+    if func.__code__.co_flags & 0x0C:
+        return func
+    co_argcount = func.__code__.co_argcount
+    if co_argcount == 0:
+        return lambda *args, **kwargs: func()
+    kw = set(func.__code__.co_varnames[:co_argcount])
+
+    def wrapper(*args, **kwargs):
+        return func(*args, **{k: v for k, v in kwargs.items() if k in kw})
+
+    return wrapper
+
+
 class Info(ABC):
 
     @property
@@ -22,8 +37,8 @@ class Info(ABC):
         return repr({self.__class__.__name__: self.info})
 
 
-class AdapterCore(Info):
-    """适配器核心类
+class Adapter(Info):
+    """适配器类
 
     Attributes:
         sends_lib (AdapterMethodLib): 发送方法
@@ -32,6 +47,33 @@ class AdapterCore(Info):
 
     sends_lib: AdapterMethodLib[None]
     calls_lib: AdapterMethodLib[Any]
+
+    def call_decorator(self, method_name: str, func: AdapterMethod):
+        self.calls_lib[method_name] = kwfilter(func)
+        return func
+
+    def send_decorator(self, method_name: str, func: AdapterMethod):
+        self.sends_lib[method_name] = kwfilter(func)
+        return func
+
+    def property_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
+        """添加一个获取参数方法"""
+        return lambda func: self.call_decorator(method_name, func)
+
+    def send_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
+        """添加一个发送消息方法"""
+        return lambda func: self.send_decorator(method_name, func)
+
+    def call_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
+        """添加一个调用方法"""
+        return lambda func: self.call_decorator(method_name, func)
+
+    def mixin(self, adapter: "Adapter"):
+        """混合其他兼容方法"""
+        for k, func in adapter.sends_lib.items():
+            self.send_decorator(k, func)
+        for k, func in adapter.calls_lib.items():
+            self.call_decorator(k, func)
 
 
 class Result[K: str, T](Info):
@@ -72,9 +114,6 @@ class EventType(Protocol):
     properties: dict
     ...
 
-    @property
-    def info(self) -> dict[str, Any]: ...
-
     def send(self, key: str, message: Any) -> Coro[None] | None: ...
 
     def call(self, key: str, *args) -> Coro[Any] | None: ...
@@ -97,7 +136,7 @@ class Event(Info):
     args: Sequence[str]
     properties: dict
 
-    def __init__(self, message: str, args: Sequence[str], properties: dict[str, Any], adapter: AdapterCore, extra: dict):
+    def __init__(self, message: str, args: Sequence[str], properties: dict[str, Any], adapter: Adapter, extra: dict):
         self.message = message
         self.args = args
         self.properties = properties
