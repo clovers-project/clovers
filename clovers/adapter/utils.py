@@ -1,5 +1,5 @@
 from types import UnionType
-from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType
+from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType, Optional
 from collections.abc import Callable, Generator, AsyncGenerator, Iterable
 from ..base import Coro, AdapterMethod
 
@@ -23,24 +23,29 @@ def _is_union(type: Any):
     return type in (Union, UnionType)
 
 
-def _subclass(type_A: Any, type_B: Any) -> bool:
-    try:
-        return issubclass(type_A, type_B)
-    except TypeError:
-        pass
-    if args_B := get_args(type_B):
-        return type_A is args_B[0] and issubclass(type_A, Iterable) and _subclass(type_A, get_origin(type_B))
-    else:
-        return False
+def _is_subclass(type_A: Any, type_B: Any, origin_B: Any) -> bool:
+    if _is_union(origin_B):
+        return any(_is_subclass(type_A, arg_B, get_origin(arg_B)) for arg_B in get_args(type_B))
+    return issubclass(type_A, type_B)
+    # try:
+    #     return issubclass(type_A, type_B)
+    # except TypeError:
+    #     pass
+    # if args_B := get_args(type_B):
+    #     return type_A is args_B[0] and issubclass(type_A, Iterable) and _subclass(type_A, get_origin(type_B))
+    # else:
+    #     return False
 
 
-def _structural_subtype(type_A: Any, type_B: Any) -> bool:
+def _structural_subtype(type_A: Any, type_B: Any, origin_B: Any) -> bool:
     """判断 A 是否在结构上被 B 兼容
 
     判断逻辑:
 
         B 拥有 A 的 全部属性，而且 B 的同名属性能被 A 赋值
     """
+    if _is_union(origin_B):
+        return any(_structural_subtype(type_A, arg_B, get_origin(arg_B)) for arg_B in get_args(type_B))
     if (fields_A := getattr(type_A, "__annotations__", None)) is None:
         return False
     if (fields_B := getattr(type_B, "__annotations__", None)) is None:
@@ -49,6 +54,107 @@ def _structural_subtype(type_A: Any, type_B: Any) -> bool:
     if keys.difference(fields_B.keys()):
         return False
     return all(check_compatible(fields_A[key], fields_B[key]) for key in keys)
+
+
+def _flatten_type(T: Any) -> Any:
+    if isinstance(T, TypeAliasType):
+        T = T.__value__
+    origin = get_origin(T)
+    if isinstance(origin, TypeAliasType):
+        T = origin.__value__[get_args(T)]
+        origin = get_origin(T)
+    if origin is Optional:
+        T = Union[get_args(T)]  # get_args(Optional[T]) == (T, type(None))
+        origin = Union
+    return T, origin
+
+
+def _literal_check(literal_args: tuple, check_T: Any, check_origin: Any) -> bool:
+    if literal_args is ...:
+        return False
+    if check_origin is Literal:
+        check_args = get_args(check_T)
+        return all(any((literal == check_arg) for check_arg in check_args) for literal in literal_args)
+    if _is_union(check_origin):
+        check_args = get_args(check_T)
+        return any(_literal_check(literal_args, check_arg, get_origin(check_arg)) for check_arg in check_args)
+    return all(isinstance(check_arg, check_T) for check_arg in literal_args)
+
+
+def _union_check_all(union_args: Any, check_T: Any, check_origin: Any) -> bool:
+    if _is_union(check_origin):
+        check_args = get_args(check_T)
+        return all(any(check_compatible(union_arg, check_arg) for check_arg in check_args) for union_arg in union_args)
+    else:
+        return all(check_compatible(union_arg, check_T) for union_arg in union_args)
+
+
+def _function_check(func_A: Callable, func_B: Callable) -> bool:
+    args_A = get_args(func_A)
+    if len(args_A) != 2:
+        return True
+    args_B = get_args(func_B)
+    if len(args_B) != 2:
+        return False
+    param_A, retuen_A = args_A
+    param_B, return_B = args_B
+    if param_A is ...:
+        return check_compatible(retuen_A, return_B)
+    if param_B is ...:
+        return False
+    if len(param_A) != len(param_B):
+        return False
+    if not check_compatible(retuen_A, return_B):
+        return False
+    return all(check_compatible(*args) for args in zip(param_B, param_A))
+
+
+def _generator_check(generator_A: Generator, generator_B: Generator) -> bool:
+    args_A = get_args(generator_A)
+    if not args_A:
+        return True
+    args_B = get_args(generator_B)
+    if not args_B:
+        return False
+    return check_compatible(args_A[0], args_B[0])
+
+
+def _same_check[T: Any](type_A: T, type_B: T) -> bool:
+    args_A = get_args(type_A)
+    if not args_A:
+        return True
+    args_B = get_args(type_B)
+    if not args_B:
+        return False
+    if len(args_A) != len(args_B):
+        return False
+    return all(check_compatible(*args) for args in zip(args_A, args_B))
+
+
+def _subclass_check(type_A: Any, origin_A: Any, type_B: Any) -> bool:
+    args_A = get_args(type_A)
+    args_B = get_args(type_B)
+    if not args_A:
+        if origin_A is str:
+            return len(args_B) > 0 and (args_B[0] is str)
+        elif origin_A in (bytes, bytearray, memoryview):
+            return len(args_B) > 0 and (args_B[0] is bytes)
+        else:
+            return len(args_B) == 0
+    if not args_B:
+        return False
+    if len(args_B) != 1:
+        return False
+    item_A = args_A[0]
+    item_B = args_B[0]
+    if origin_A is tuple:
+        l_args_A = len(args_A)
+        if (l_args_A == 1) or ((l_args_A == 2) and (args_A[1] is ...)):
+            return check_compatible(item_A, item_B)
+        return False
+    if len(args_A) != 1:
+        return False
+    return check_compatible(item_A, item_B)
 
 
 def check_compatible(type_A: Any, type_B: Any) -> bool:
@@ -62,12 +168,10 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
     Args:
         type_A (Any): A
         type_B (Any): B
-        recursion (bool): 是否在递归内
 
     Returns:
         bool: A 是 B 的兼容类型
     """
-
     if type_B is type_A:
         return True
     # if isinstance(type_B, EllipsisType):
@@ -84,29 +188,20 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
         return True
     if isinstance(type_A, TypeVar) and (type_A := type_A.__bound__) is None:
         return False
+    type_A, origin_A = _flatten_type(type_A)
+    type_B, origin_B = _flatten_type(type_B)
     if isinstance(type_A, type):
-        return _subclass(type_A, type_B) or _structural_subtype(type_A, type_B)
-    origin_A = get_origin(type_A)
-    if isinstance(origin_A, TypeAliasType):
-        type_A = origin_A.__value__[get_args(type_A)]
-        origin_A = get_origin(type_A)
-    origin_B = get_origin(type_B)
-    if isinstance(origin_B, TypeAliasType):
-        type_B = origin_B.__value__[get_args(type_B)]
-        origin_B = get_origin(type_B)
-    args_A = get_args(type_A)
-    args_B = get_args(type_B)
+        return _is_subclass(type_A, type_B, origin_B) or _structural_subtype(type_A, type_B, origin_B)
     # print(type_A, type(type_A), origin_A, args_A)
     # print(type_B, type(type_B), origin_B, args_B)
     # print(f"{type_A = }\n{origin_A = }\n{type_B = }\n{origin_B = }")
+    if origin_A is Literal:
+        return _literal_check(get_args(type_A), type_B, origin_B)
     # 联合类型
-    if _is_union(origin_A):
-        if _is_union(origin_B):
-            return all(any(check_compatible(arg_A, arg_B) for arg_B in args_B) for arg_A in args_A)
-        else:
-            return all(check_compatible(arg_A, type_B) for arg_A in args_A)
+    elif _is_union(origin_A):
+        return _union_check_all(get_args(type_A), type_B, origin_B)
     elif _is_union(origin_B):
-        return any(check_compatible(type_A, arg_B) for arg_B in args_B)
+        return any(check_compatible(type_A, arg_B) for arg_B in get_args(type_B))
     # 普通类型
     elif origin_A is origin_B:
         # 基本类型
@@ -114,33 +209,16 @@ def check_compatible(type_A: Any, type_B: Any) -> bool:
             return check_compatible(type_A, type_B)
         # 同构造泛型类型
         elif origin_A is Callable:  # 函数类型必须用 collections.abc.Callable 标注
-            param_A, retuen_A = args_A
-            param_B, return_B = args_B
-            # 对函数类型的参数进行反向兼容检查
-            # if isinstance(param_A, EllipsisType):
-            if param_A is ...:
-                return check_compatible(retuen_A, return_B)
-            # if isinstance(param_B, EllipsisType):
-            if param_B is ...:
-                return False
-            if len(param_A) != len(param_B):
-                return False
-            return all(check_compatible(*args) for args in zip(param_B, param_A)) and check_compatible(retuen_A, return_B)
+            return _function_check(type_A, type_B)
         # 对函数生成器只检查生成类型
         elif origin_A in (Generator, AsyncGenerator):
-            return check_compatible(args_A[0], args_B[0])
+            return _generator_check(type_A, type_B)
         # 构造函数的参数兼容
         else:
-            return len(args_A) == len(args_B) and all(check_compatible(*args) for args in zip(args_A, args_B))
+            return _same_check(type_A, type_B)
     # 同构造继承泛型
-    elif _subclass(origin_A, origin_B):
-        if origin_A is tuple:
-            # if isinstance(args_A[-1], EllipsisType):
-            if args_A[-1] is ...:
-                return len(args_A) - 1 == len(args_B) and check_compatible(args_A[0], args_B[0])
-            return False
-        else:
-            return len(args_A) == len(args_B) and all(check_compatible(*args) for args in zip(args_A, args_B))
+    elif _is_subclass(origin_A, origin_B, get_origin(origin_B)):
+        return _subclass_check(type_A, origin_A, type_B)
     # 其他视为不兼容
     return False
 
