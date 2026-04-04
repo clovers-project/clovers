@@ -1,6 +1,6 @@
 from types import UnionType
 from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType, Optional
-from collections.abc import Callable, Generator, AsyncGenerator, Iterable
+from collections.abc import Callable, Generator, AsyncGenerator
 from ..base import Coro, AdapterMethod
 
 

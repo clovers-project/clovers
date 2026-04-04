@@ -104,11 +104,10 @@ class TempHandle(BaseHandle):
         timeout: float,
         properties: Iterable[str],
         block: tuple[bool, bool],
-        func: RawTempEventHandler,
-        wrapper: Callable[[RawEventHandler], EventHandler],
+        func: EventHandler,
         state: Any | None = None,
     ):
-        super().__init__(properties, block, wrapper(lambda e: func(e, self)))
+        super().__init__(properties, block, func)
         self.state = state
         self.delay(timeout)
 
@@ -170,18 +169,6 @@ class Plugin(Info):
     @property
     def info(self):
         return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self.handles}
-
-    # def set_protocol(self, key: Literal["properties", "sends", "calls"], data: type):
-    #     """设置插件类型协议
-
-    #     Args:
-    #         key (Literal["properties", "sends", "calls"]): 协议位置
-    #         data (type): 协议类型，包含字段和声明的类型
-    #     """
-
-    #     if key not in self.protocol:
-    #         raise KeyError(f"{self.name} has no protocol key: {key}")
-    #     self.protocol[key] = {k: v for k, v in data.__annotations__.items() if not k.startswith("_")}
 
     def require(self, plugin_name: str):
         """声明依赖的插件
@@ -303,8 +290,7 @@ class Plugin(Info):
                 timeout,
                 properties,
                 (self.block, block) if isinstance(block, bool) else block,
-                func,
-                self.handle_wrapper(rule),
+                self.handle_wrapper(rule)(lambda e: func(e, handle)),
                 state,
             )
             self.temp_handles.append(handle)
