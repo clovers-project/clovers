@@ -1,6 +1,6 @@
 import time
 import asyncio
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Callable
 from pathlib import Path
 from importlib import import_module
@@ -165,9 +165,7 @@ class PluginCore(Info, ImportCore[Plugin]):
         self._layers_queue: list[PluginCore.HandleLayer] = []
         """已注册响应器队列"""
         self._ready: bool = False
-        """插件是否就绪"""
-        self.running = False
-        """运行状态"""
+        """插件初始化标志"""
 
     @property
     def info(self):
@@ -228,20 +226,18 @@ class PluginCore(Info, ImportCore[Plugin]):
 
     async def startup(self):
         """启动插件核心"""
-        if self.running:
+        if self._ready:
             raise RuntimeError("Client is already running")
         self.initialize_plugins()
         tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.startup_tasklist if (coro := task()))
         await asyncio.gather(*tasklist)
-        self.running = True
 
     async def shutdown(self):
         """关闭插件核心"""
-        if not self.running:
+        if not self._ready:
             raise RuntimeError("Client is not running")
         tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.shutdown_tasklist if (coro := task()))
         await asyncio.gather(*tasklist)
-        self.running = False
 
     def load_plugin(self, plugin_list: list[str], plugin_dirs: list[str]):
         """加载 clovers 插件
@@ -264,7 +260,7 @@ class PluginCore(Info, ImportCore[Plugin]):
         logger.info(f'[{self.name}][loading plugin] "{plugin.name}" loaded')
 
 
-class CloversCore:
+class CloversCore(ABC):
     """clovers 响应处理器基类"""
 
     adapter: AdapterCore
@@ -274,6 +270,7 @@ class CloversCore:
 
         self.adapter = AdapterCore(name)
         self.plugins = PluginCore(name)
+        self._tasks: set[asyncio.Task] = set()
 
     @property
     def info(self):
