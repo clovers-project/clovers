@@ -70,19 +70,41 @@ class Adapter(Info):
         return func
 
     def property_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
-        """添加一个获取参数方法"""
+        """添加一个获取参数方法
+
+        Args:
+            method_name (str): 方法名
+        Returns:
+            (AdapterMethod) -> AdapterMethod: 属性方法装饰器
+        """
         return lambda func: self.call_decorator(method_name, func)
 
     def send_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
-        """添加一个发送消息方法"""
+        """添加一个发送消息方法
+
+        Args:
+            method_name (str): 方法名
+        Returns:
+            (AdapterMethod) -> AdapterMethod: 发送方法装饰器
+        """
         return lambda func: self.send_decorator(method_name, func)
 
     def call_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
-        """添加一个调用方法"""
+        """添加一个调用方法
+
+        Args:
+            method_name (str): 方法名
+        Returns:
+            (AdapterMethod) -> AdapterMethod: 调用方法装饰器
+        """
         return lambda func: self.call_decorator(method_name, func)
 
     def mixin(self, adapter: "Adapter"):
-        """混合其他兼容方法"""
+        """混合其他兼容方法
+
+        Args:
+            adapter (Adapter): 其他适配器实例
+        """
         for k, func in adapter.sends_lib.items():
             self.send_decorator(k, func)
         for k, func in adapter.calls_lib.items():
@@ -116,10 +138,6 @@ class EventType(Protocol):
         message (str): 触发消息
         args (Sequence[str]): 指令参数
         properties (dict[str, Any]): 需要的额外属性，由插件声明
-
-    Methods:
-        send (key: str, message: Any): 执行适配器发送方法
-        call (key: str, *args): 执行适配器调用方法并获取返回值
     """
 
     message: str
@@ -139,10 +157,6 @@ class Event(Info):
         message (str): 触发插件的消息原文
         args (Sequence[str]): 指令参数
         properties (dict[str, Any]): 需要的额外属性，由插件声明
-
-    Methods:
-        send (key: str, message: Any): 执行适配器发送方法
-        call (key: str, *args): 执行适配器调用方法并获取返回值
     """
 
     message: str
@@ -161,13 +175,29 @@ class Event(Info):
         return {"message": self.message, "args": self.args, "properties": self.properties}
 
     def send(self, key: str, message: Any):
-        """执行适配器发送方法"""
+        """执行适配器发送方法
+
+        Args:
+            key (str): 适配器方法名
+            message (Any): 适配器方法参数
+
+        Returns:
+            Coro[None] | None: 适配器发送方法的 Coro，如 key 不存在则返回 None
+        """
         if key not in self.__adapter.sends_lib:
             return
         return self.__adapter.sends_lib[key](message, **self.__extra)
 
     def call(self, key: str, *args):
-        """执行适配器调用方法，只接受位置参数"""
+        """执行适配器调用方法，只接受位置参数
+
+        Args:
+            key (str): 适配器方法名
+            *args: 适配器方法参数
+
+        Returns:
+            Coro[Any] | None: 适配器调用方法的 Coro，如 key 不存在则返回 None
+        """
         if key not in self.__adapter.calls_lib:
             return
         return self.__adapter.calls_lib[key](key, *args, **self.__extra)
