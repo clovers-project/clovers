@@ -6,156 +6,52 @@ from pathlib import Path
 from importlib import import_module
 from .utils import import_name, list_modules
 from .protocol import protocol_format, check_compatible, is_coro
-from ..base import Coro, Info, Adapter, AdapterMethod, AdapterMethodLib, BaseHandle, Event
+from ..base import Coro, Info, Adapter, AdapterMethod, BaseHandle, Event
 from ..plugin import Handle, TempHandle, Plugin
 from ..logger import logger
 
 
-class CloversCore(Info):
-    """四叶草核心
+class ImportCore[T]:
+    def __init__(self, __attr: str, __type: type[T], log_header: str = ""):
+        self.log_header = log_header if log_header else "[ImportCore]"
+        self.__attr = __attr
+        self.__type = __type
 
-    此处管理插件的加载和准备，是各种实现的基础
-
-    Attributes:
-        name (str): 项目名
-        plugins (list[Plugin]): 项目管理的插件列表
-    """
-
-    type HandleBatch = list[Handle]
-    """同优先级的响应器组"""
-    type TempHandleBatch = list[TempHandle]
-    """同优先级的临时响应器组"""
-    type HandleBatchQueue = list[HandleBatch]
-    """按响应优先级排序的响应器组队列"""
-    type HandleLayer = tuple[TempHandleBatch, HandleBatchQueue]
-    """插件同一优先级下的响应器层"""
-
-    def __init__(self):
-        self.name: str = "CloversObject"
-        """项目名"""
-        self._plugins: list[Plugin] = []
-        """插件优先级和插件列表"""
-        self._layers_queue: list[CloversCore.HandleLayer] = []
-        """已注册响应器队列"""
-        self._ready: bool = False
-        """插件是否就绪"""
-
-    @property
-    def info(self):
-        return {"name": self.name, "plugins": self._plugins}
-
-    @property
-    def plugins(self):
-        return (plugin for plugin in self._plugins)
-
-    @plugins.setter
-    def plugins(self, plugins: Iterable[Plugin]):
-        if self._ready:
-            raise RuntimeError("cannot set plugins after ready")
-        self._plugins.clear()
-        self._plugins.extend(plugins)
-
-    def load_plugin(self, name: str | Path, is_path=False):
-        """加载 clovers 插件
-
-        Args:
-            name (str | Path): 插件的包名或路径
-            is_path (bool, optional): 是否为路径
-        """
+    def load(self, name: str | Path, is_path=False):
         package = import_name(name, is_path)
         try:
-            plugin = getattr(import_module(package), "__plugin__", None)
-            assert isinstance(plugin, Plugin)
-        except Exception as e:
-            logger.exception(f'[{self.name}][loading plugin] "{package}" load failed', exc_info=e)
+            module = import_module(package)
+        except ImportError:
+            logger.exception(f'{self.log_header} "{package}" load failed')
             return
-        key = plugin.name or package
-        if plugin in self._plugins:
+        if not hasattr(module, self.__attr):
+            logger.error(f'{self.log_header} Module "{package}" missing attribute "{self.__attr}"')
             return
-        if plugin.require_plugins:
-            for require_plugin in plugin.require_plugins:
-                self.load_plugin(require_plugin)
-        logger.info(f'[{self.name}][loading plugin] "{package}" loaded')
-        plugin.name = key
-        self._plugins.append(plugin)
+        attr = getattr(module, self.__attr)
+        if not isinstance(attr, self.__type):
+            logger.error(f'{self.log_header} "{package}.{self.__attr}" is type {type(attr)}, expected {self.__attr}')
+            return
+        return attr
 
-    def load_plugins_from_list(self, plugin_list: list[str]):
-        """从包名列表加载插件
+    def load_from_list(self, import_list: Iterable[str]):
+        """从包名列表加载"""
+        for name in import_list:
+            self.load(name)
 
-        Args:
-            plugin_list (list[str]): 插件的包名列表
-        """
-        for plugin in plugin_list:
-            self.load_plugin(plugin)
-
-    def load_plugins_from_dirs(self, plugin_dirs: list[str]):
-        """从本地目录列表加载插件
-
-        Args:
-            plugin_dirs (list[str]): 插件的目录列表
-        """
-        for plugin_dir in plugin_dirs:
-            plugin_dir = Path(plugin_dir)
-            if not plugin_dir.exists():
-                plugin_dir.mkdir(parents=True, exist_ok=True)
+    def load_from_dirs(self, import_dirs: Iterable[str]):
+        """从本地目录列表加载"""
+        for import_dir in import_dirs:
+            dir = Path(import_dir)
+            if not dir.exists():
                 continue
-            for plugin in list_modules(plugin_dir):
-                self.load_plugin(plugin)
-
-    def handles_filter(self, handle: BaseHandle) -> bool:
-        """任务过滤器
-
-        Args:
-            handle (Handle): 响应任务
-
-        Returns:
-            bool: 是否通过过滤
-        """
-        return True
-
-    def plugin_check(self, plugin: Plugin) -> bool:
-        """插件过滤器
-
-        Args:
-            plugin (Plugin): 插件
-
-        Returns:
-            bool: 是否通过过滤
-        """
-
-        return True
-
-    def initialize_plugins(self):
-        """初始化插件"""
-        if self._ready:
-            raise RuntimeError(f"{self.name} already ready")
-        _temp_handles: dict[int, list[TempHandle]] = {}
-        _handles: dict[int, list[Handle]] = {}
-        self._plugins = [plugin for plugin in self._plugins if self.plugin_check(plugin)]
-        for plugin in self._plugins:
-            plugin.set_temp_handles(_temp_handles.setdefault(plugin.priority, []))
-            _handles.setdefault(plugin.priority, []).extend(plugin.handles)
-        for key in sorted(_handles.keys()):
-            _sub_handles: dict[int, list[Handle]] = {}
-            for handle in _handles[key]:
-                if self.handles_filter(handle):
-                    _sub_handles.setdefault(handle.priority, []).append(handle)
-            sub_keys = sorted(_sub_handles.keys())
-            self._layers_queue.append((_temp_handles[key], [_sub_handles[k] for k in sub_keys]))
-        self._ready = True
+            for name in list_modules(dir):
+                self.load(name)
 
 
-class AdapterCore(Adapter):
-    """适配器核心类
-
-    Attributes:
-        name (str, optional): 响应器名称. Defaults to "".
-        sends_lib (AdapterMethodLib): 发送消息方法库
-        calls_lib (AdapterMethodLib): 调用方法库
-    """
-
+class AdapterCore(Adapter, ImportCore[Adapter]):
     def __init__(self, name: str) -> None:
-        super().__init__(name)
+        Adapter.__init__(self, name)
+        ImportCore.__init__(self, "__adapter__", Adapter, f"[{self.name}][loading adapter]")
         self.__protocol = {"send": {}, "call": {}}
 
     def check_protocol(self, protocol: type | None):
@@ -208,7 +104,7 @@ class AdapterCore(Adapter):
         self.calls_lib[method_name] = func
         return func
 
-    async def response(self, handle: BaseHandle, event: Event, extra: dict):
+    async def invoke_handler(self, handle: BaseHandle, event: Event, extra: dict):
         """使用适配器响应任务
 
         Args:
@@ -223,66 +119,168 @@ class AdapterCore(Adapter):
             await self.sends_lib[result.key](result.data, **extra)
             return handle.block
 
-
-class Leaf(CloversCore):
-    """clovers 响应处理器基类
-
-    Attributes:
-        adapter (Adapter): 对接响应的适配器
-    """
-
-    adapter: AdapterCore
-
-    def __init__(self, name: str) -> None:
-        super().__init__()
-        self.name = name
-        self.adapter = AdapterCore(name)
-
-    @property
-    def info(self):
-        return {"name": self.name, "adapter": self.adapter, "plugins": self._plugins}
-
-    def load_adapter(self, name: str | Path, is_path=False):
+    def load_adapter(self, adapter_list: list[str], adapter_dirs: list[str]):
         """加载 clovers 适配器
 
         会把目标适配器的方法注册到 self.adapter 中，如有适配器中已有同名方法则忽略
 
         Args:
-            name (str | Path): 适配器的包名或路径
-            is_path (bool, optional): 是否为路径
-        """
-        package = import_name(name, is_path)
-        try:
-            adapter = getattr(import_module(package), "__adapter__", None)
-            assert isinstance(adapter, Adapter)
-        except Exception as e:
-            logger.exception(f'[{self.name}][loading adapter] "{package}" load failed', exc_info=e)
-            return
-        logger.info(f'[{self.name}][loading adapter] "{package}" loaded')
-        self.adapter.mixin(adapter)
-
-    def load_adapters_from_list(self, adapter_list: list[str]):
-        """从包名列表加载适配器
-
-        Args:
             adapter_list (list[str]): 适配器的包名列表
-        """
-        for adapter in adapter_list:
-            self.load_adapter(adapter)
-
-    def load_adapters_from_dirs(self, adapter_dirs: list[str]):
-        """从本地目录列表加载适配器
-
-        Args:
             adapter_dirs (list[str]): 适配器的目录列表
         """
-        for adapter_dir in adapter_dirs:
-            adapter_dir = Path(adapter_dir)
-            if not adapter_dir.exists():
-                adapter_dir.mkdir(parents=True, exist_ok=True)
-                continue
-            for adapter in list_modules(adapter_dir):
-                self.load_adapter(adapter)
+        self.load_from_list(adapter_list)
+        self.load_from_dirs(adapter_dirs)
+
+    def load(self, *args, **kwargs):
+        adapter = super().load(*args, **kwargs)
+        if adapter:
+            self.mixin(adapter)
+            logger.info(f'[{self.name}][loading plugin] "{adapter.name}" loaded')
+
+
+class PluginCore(Info, ImportCore[Plugin]):
+    """插件核心
+
+    此处管理插件的加载和准备，是各种实现的基础
+
+    Attributes:
+        name (str): 项目名
+        plugins (list[Plugin]): 项目管理的插件列表
+    """
+
+    type HandleBatch = list[Handle]
+    """同优先级的响应器组"""
+    type TempHandleBatch = list[TempHandle]
+    """同优先级的临时响应器组"""
+    type HandleBatchQueue = list[HandleBatch]
+    """按响应优先级排序的响应器组队列"""
+    type HandleLayer = tuple[TempHandleBatch, HandleBatchQueue]
+    """插件同一优先级下的响应器层"""
+
+    def __init__(self, name: str = ""):
+        self.name = name
+        ImportCore.__init__(self, "__plugin__", Plugin, f"[{self.name}][loading plugin]")
+        self._plugins: list[Plugin] = []
+        """插件优先级和插件列表"""
+        self._layers_queue: list[PluginCore.HandleLayer] = []
+        """已注册响应器队列"""
+        self._ready: bool = False
+        """插件是否就绪"""
+        self.running = False
+        """运行状态"""
+
+    @property
+    def info(self):
+        return {"name": self.name, "plugins": self._plugins}
+
+    @property
+    def plugins(self):
+        return (plugin for plugin in self._plugins)
+
+    @plugins.setter
+    def plugins(self, plugins: Iterable[Plugin]):
+        if self._ready:
+            raise RuntimeError("cannot set plugins after ready")
+        self._plugins.clear()
+        self._plugins.extend(plugins)
+
+    def handles_filter(self, handle: BaseHandle) -> bool:
+        """任务过滤器
+
+        Args:
+            handle (Handle): 响应任务
+
+        Returns:
+            bool: 是否通过过滤
+        """
+        return True
+
+    def plugin_check(self, plugin: Plugin) -> bool:
+        """插件过滤器
+
+        Args:
+            plugin (Plugin): 插件
+
+        Returns:
+            bool: 是否通过过滤
+        """
+
+        return True
+
+    def initialize_plugins(self):
+        """初始化插件"""
+        if self._ready:
+            raise RuntimeError(f"{self.name} already ready")
+        _temp_handles: dict[int, list[TempHandle]] = {}
+        _handles: dict[int, list[Handle]] = {}
+        self._plugins = [plugin for plugin in self._plugins if self.plugin_check(plugin)]
+        for plugin in self._plugins:
+            plugin.set_temp_handles(_temp_handles.setdefault(plugin.priority, []))
+            _handles.setdefault(plugin.priority, []).extend(plugin.handles)
+        for key in sorted(_handles.keys()):
+            _sub_handles: dict[int, list[Handle]] = {}
+            for handle in _handles[key]:
+                if self.handles_filter(handle):
+                    _sub_handles.setdefault(handle.priority, []).append(handle)
+            sub_keys = sorted(_sub_handles.keys())
+            self._layers_queue.append((_temp_handles[key], [_sub_handles[k] for k in sub_keys]))
+        self._ready = True
+
+    async def startup(self):
+        """启动插件核心"""
+        if self.running:
+            raise RuntimeError("Client is already running")
+        self.initialize_plugins()
+        tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.startup_tasklist if (coro := task()))
+        await asyncio.gather(*tasklist)
+        self.running = True
+
+    async def shutdown(self):
+        """关闭插件核心"""
+        if not self.running:
+            raise RuntimeError("Client is not running")
+        tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.shutdown_tasklist if (coro := task()))
+        await asyncio.gather(*tasklist)
+        self.running = False
+
+    def load_plugin(self, plugin_list: list[str], plugin_dirs: list[str]):
+        """加载 clovers 插件
+
+        Args:
+            plugin_list (list[str]): 插件的包名列表
+            plugin_dirs (list[str]): 插件的目录列表
+        """
+        self.load_from_list(plugin_list)
+        self.load_from_dirs(plugin_dirs)
+
+    def load(self, *args, **kwargs):
+        plugin = super().load(*args, **kwargs)
+        if (plugin is None) or (plugin in self._plugins):
+            return
+        if plugin.require_plugins:
+            self.load_from_list(plugin.require_plugins)
+        plugin.name = plugin.name or plugin.__module__
+        self._plugins.append(plugin)
+        logger.info(f'[{self.name}][loading plugin] "{plugin.name}" loaded')
+
+
+class CloversCore:
+    """clovers 响应处理器基类"""
+
+    adapter: AdapterCore
+    plugins: PluginCore
+
+    def __init__(self, name: str) -> None:
+
+        self.adapter = AdapterCore(name)
+        self.plugins = PluginCore(name)
+
+    @property
+    def info(self):
+        return {
+            "adapter": self.adapter.info,
+            "plugins": self.plugins.info,
+        }
 
     def plugin_check(self, plugin: Plugin) -> bool:
         check = self.adapter.check_protocol(plugin.protocol)
@@ -314,7 +312,7 @@ class Leaf(CloversCore):
         count = 0
         temp_event = None
         properties = {}
-        for temp_handles, batch_list in self._layers_queue:
+        for temp_handles, batch_list in self.plugins._layers_queue:
             if temp_handles:
                 now = time.time()
                 alive_handles = [handle for handle in temp_handles if handle.expiration > now]
@@ -322,7 +320,7 @@ class Leaf(CloversCore):
                 if alive_handles:
                     temp_event = temp_event or Event(message, [], properties, self.adapter, extra)
                     temp_handles.extend(alive_handles)
-                    blocks = await asyncio.gather(*(self.adapter.response(handle, temp_event, extra) for handle in alive_handles))
+                    blocks = await asyncio.gather(*(self.adapter.invoke_handler(handle, temp_event, extra) for handle in alive_handles))
                     blocks = [block for block in blocks if block is not None]
                     if blocks:
                         blk_p, blk_h = zip(*blocks)
@@ -334,7 +332,7 @@ class Leaf(CloversCore):
             delay_fuse = False
             for handles in batch_list:
                 tasklist = (
-                    self.adapter.response(handle, Event(message, args, properties, self.adapter, extra), extra)
+                    self.adapter.invoke_handler(handle, Event(message, args, properties, self.adapter, extra), extra)
                     for handle in handles
                     if (args := handle.match(message)) is not None
                 )
@@ -351,21 +349,6 @@ class Leaf(CloversCore):
             if delay_fuse:
                 break
         return count
-
-    @abstractmethod
-    def extract_message(self, **extra) -> str | None:
-        """提取消息
-
-        根据传入的事件参数提取消息
-
-        Args:
-            **extra: 额外的参数
-
-        Returns:
-            Optional[str]: 消息
-        """
-
-        raise NotImplementedError
 
     async def response(self, **extra) -> int:
         """响应事件
@@ -384,56 +367,17 @@ class Leaf(CloversCore):
         else:
             return 0
 
+    @abstractmethod
+    def extract_message(self, **extra) -> str | None:
+        """提取消息
 
-class Client(CloversCore):
-    """clovers 客户端基类
+        根据传入的事件参数提取消息
 
-    Attributes:
-        running (bool): 客户端运行状态
-    """
+        Args:
+            **extra: 额外的参数
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.running = False
-
-    async def startup(self):
-        """启动客户端
-
-        如不在 async with 上下文中则要手动调用 startup() 方法，
+        Returns:
+            Optional[str]: 消息
         """
-        if self.running:
-            raise RuntimeError("Client is already running")
-        self.initialize_plugins()
-        tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.startup_tasklist if (coro := task()))
-        await asyncio.gather(*tasklist)
-        self.running = True
 
-    async def shutdown(self):
-        """关闭客户端
-
-        如不在 async with 上下文中则要手动调用 shutdown() 方法，
-        """
-        if not self.running:
-            raise RuntimeError("Client is not running")
-        tasklist = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.shutdown_tasklist if (coro := task()))
-        await asyncio.gather(*tasklist)
-        self.running = False
-
-    async def __aenter__(self) -> None:
-        await self.startup()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        await self.shutdown()
-
-    async def run(self) -> None:
-        """
-        运行 Clovers Client ，需要在子类中实现。
-
-        .. code-block:: python3
-            '''
-            async with self:
-                while self.running:
-                    pass
-            '''
-        """
         raise NotImplementedError
