@@ -2,11 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Protocol
 from collections.abc import Callable, Coroutine, Iterable, Sequence
 
-
 type Coro[T] = Coroutine[Any, Any, T]
 type AdapterMethod[T] = Callable[..., Coro[T]]
 type AdapterMethodLib[T] = dict[str, AdapterMethod[T]]
-type Task = Callable[[], Coro[None]] | Callable[[], None]
+type Task = Callable[[], Coro[None] | None]
 type EventHandler = Callable[[Event], Coro[Result | None]]
 
 
@@ -50,8 +49,11 @@ class Adapter(Info):
 
     def __init__(self, name: str = "") -> None:
         self.name: str = name
+        """初始化方式"""
         self.sends_lib = {}
+        """发送方法库"""
         self.calls_lib = {}
+        """调用方法库"""
 
     @property
     def info(self):
@@ -69,7 +71,7 @@ class Adapter(Info):
         self.sends_lib[method_name] = kwfilter(func)
         return func
 
-    def property_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
+    def property_method[T: AdapterMethod](self, method_name: str) -> Callable[[T], T]:
         """添加一个获取参数方法
 
         Args:
@@ -79,7 +81,7 @@ class Adapter(Info):
         """
         return lambda func: self.call_decorator(method_name, func)
 
-    def send_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
+    def send_method[T: AdapterMethod[None]](self, method_name: str) -> Callable[[T], T]:
         """添加一个发送消息方法
 
         Args:
@@ -89,7 +91,7 @@ class Adapter(Info):
         """
         return lambda func: self.send_decorator(method_name, func)
 
-    def call_method(self, method_name: str) -> Callable[[AdapterMethod], AdapterMethod]:
+    def call_method[T: AdapterMethod](self, method_name: str) -> Callable[[T], T]:
         """添加一个调用方法
 
         Args:
