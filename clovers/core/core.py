@@ -11,9 +11,9 @@ from ..logger import logger
 
 
 class ImportCore[T]:
-    def __init__(self, __attr: str, __type: type[T], log_header: str = ""):
+    def __init__(self, __attrs: list[str], __type: type[T], log_header: str = ""):
         self.log_header = log_header if log_header else "[ImportCore]"
-        self.__attr = __attr
+        self.__attrs = __attrs
         self.__type = __type
 
     def load(self, package: str):
@@ -25,12 +25,13 @@ class ImportCore[T]:
         except Exception as e:
             logger.exception(f'{self.log_header} "{package}" load failed', exc_info=e)
             return
-        if not hasattr(module, self.__attr):
-            logger.error(f'{self.log_header} Module "{package}" missing attribute "{self.__attr}"')
+        attr_name = next((x for x in self.__attrs if hasattr(module, x)), None)
+        if attr_name is None:
+            logger.error(f'{self.log_header} Module "{package}" missing attribute "{self.__attrs}"')
             return
-        attr = getattr(module, self.__attr)
+        attr = getattr(module, attr_name)
         if not isinstance(attr, self.__type):
-            logger.error(f'{self.log_header} "{package}.{self.__attr}" is type {type(attr)}, expected {self.__attr}')
+            logger.error(f'{self.log_header} "{package}.{attr_name}" is type {type(attr)}, expected {self.__type}')
             return
         return attr
 
@@ -51,7 +52,7 @@ class ImportCore[T]:
 class AdapterCore(Adapter, ImportCore[Adapter]):
     def __init__(self, name: str) -> None:
         Adapter.__init__(self, name)
-        ImportCore.__init__(self, "ADAPTER", Adapter, f"[{self.name}][loading adapter]")
+        ImportCore.__init__(self, ["ADAPTER", "adapter", "__adapter__"], Adapter, f"[{self.name}][loading adapter]")
         self.__protocol = {"send": {}, "call": {}}
 
     def check_protocol(self, protocol: type | None):
@@ -152,7 +153,7 @@ class PluginCore(Info, ImportCore[Plugin]):
 
     def __init__(self, name: str = ""):
         self.name = name
-        ImportCore.__init__(self, "PLUGIN", Plugin, f"[{self.name}][loading plugin]")
+        ImportCore.__init__(self, ["PLUGIN", "plugin", "__plugin__"], Plugin, f"[{self.name}][loading plugin]")
         self._plugins: list[Plugin] = []
 
     @property
