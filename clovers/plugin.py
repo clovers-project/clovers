@@ -124,7 +124,7 @@ class TempHandle(BaseHandle):
         if self.__timeout > 0.1:
             self.__running_task = asyncio.create_task(asyncio.sleep(self.__timeout))
             self.__running_task.add_done_callback(self.__done_callback)
-            self.__timeout = -1
+            self.__timeout = -1.0
         else:
             self.__temp_handles.discard(self)
 
@@ -137,7 +137,7 @@ class TempHandle(BaseHandle):
 
     def finish(self):
         """结束任务"""
-        self.__timeout = -1
+        self.__timeout = -1.0
         self.__temp_handles.discard(self)
         if self.__running_task:
             self.__running_task.cancel()
