@@ -120,7 +120,6 @@ class TempHandle(BaseHandle):
         return {"properties": self.properties, "block": self.block}
 
     def __done_callback(self, *args):
-        """任务完成"""
         self.__running_task = None
         if self.__timeout > 0.1:
             self.__running_task = asyncio.create_task(asyncio.sleep(self.__timeout))
