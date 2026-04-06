@@ -182,7 +182,7 @@ class Plugin[EventType](Info):
         """关闭任务列表"""
         self.__handles: set[Handle] = set()
         """已注册的响应器"""
-        self.temp_handles: set[TempHandle]
+        self.temp_handles: set[TempHandle] = set()
         """临时任务储存位置"""
         self.require_plugins: set[str] = set()
         """依赖的插件"""
