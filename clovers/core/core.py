@@ -362,8 +362,9 @@ class CloversCore(CloversCoreInterface):
     def create_task(self, coro: Coro):
         self._tasks.add(task := asyncio.create_task(coro))
         task.add_done_callback(self._tasks.discard)
+        return task
 
-    def dispatch(self, **extra) -> None:
+    def dispatch(self, **extra) -> asyncio.Task[int] | None:
         """响应事件
 
         根据传入的事件参数响应事件。
@@ -378,8 +379,7 @@ class CloversCore(CloversCoreInterface):
     def _dispatch_active(self, **extra):
 
         if (message := self.extract_message(**extra)) is not None:
-            self.create_task(self.response_message(message, **extra))
-            return
+            return self.create_task(self.response_message(message, **extra))
 
 
 class CloversMultCore(CloversCoreInterface):
