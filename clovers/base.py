@@ -63,15 +63,15 @@ class Adapter(Info):
             "calls_lib": list(self.calls_lib.keys()),
         }
 
-    def call_decorator(self, method_name: str, func: AdapterMethod):
+    def call_decorator[T: AdapterMethod](self, method_name: str, func: T) -> T:
         self.calls_lib[method_name] = kwfilter(func)
         return func
 
-    def send_decorator(self, method_name: str, func: AdapterMethod):
+    def send_decorator[T: AdapterMethod[None]](self, method_name: str, func: T) -> T:
         self.sends_lib[method_name] = kwfilter(func)
         return func
 
-    def property_method[T: AdapterMethod](self, method_name: str) -> Callable[[T], T]:
+    def property_method(self, method_name: str):
         """添加一个获取参数方法
 
         Args:
@@ -81,7 +81,7 @@ class Adapter(Info):
         """
         return lambda func: self.call_decorator(method_name, func)
 
-    def send_method[T: AdapterMethod[None]](self, method_name: str) -> Callable[[T], T]:
+    def send_method(self, method_name: str):
         """添加一个发送消息方法
 
         Args:
@@ -91,7 +91,7 @@ class Adapter(Info):
         """
         return lambda func: self.send_decorator(method_name, func)
 
-    def call_method[T: AdapterMethod](self, method_name: str) -> Callable[[T], T]:
+    def call_method(self, method_name: str):
         """添加一个调用方法
 
         Args:
