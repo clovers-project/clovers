@@ -137,8 +137,8 @@ class AdapterCore(Adapter, ImportCore[Adapter]):
         adapter = super().load(package)
         if adapter:
             self.mixin(adapter)
-            adapter.name = adapter.name or package
             logger.info(f'{self.log_header} "{adapter.name}" loaded')
+        return adapter
 
 
 class PluginCore(Info, ImportCore[Plugin]):
