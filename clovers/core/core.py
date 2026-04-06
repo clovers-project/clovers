@@ -138,7 +138,7 @@ class AdapterCore(Adapter, ImportCore[Adapter]):
         if adapter:
             self.mixin(adapter)
             adapter.name = adapter.name or package
-            logger.info(f'[{self.name}][loading plugin] "{adapter.name}" loaded')
+            logger.info(f'{self.log_header} "{adapter.name}" loaded')
 
 
 class PluginCore(Info, ImportCore[Plugin]):
@@ -183,7 +183,7 @@ class PluginCore(Info, ImportCore[Plugin]):
             self.load_from_list(plugin.require_plugins)
         plugin.name = plugin.name or package
         self._plugins.append(plugin)
-        logger.info(f'[{self.name}][loading plugin] "{plugin.name}" loaded')
+        logger.info(f'{self.log_header} "{plugin.name}" loaded')
 
 
 class CloversCoreInterface(Info):
