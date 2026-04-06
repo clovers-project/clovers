@@ -14,12 +14,12 @@ def import_path(path: str | Path):
     return ".".join(path.resolve().relative_to(Path().resolve()).parts)
 
 
-def import_name(name: str | Path, is_path):
+def import_name(name: str | Path, is_path: bool):
     """获取模块导入名
 
     Args:
         name (str | Path): 模块名或模块路径
-        is_path (bool): 是否为模块路径.
+        is_path (bool): 是否为模块路径
 
     Returns:
         str: 模块导入名

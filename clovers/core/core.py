@@ -17,8 +17,7 @@ class ImportCore[T]:
         self.__attr = __attr
         self.__type = __type
 
-    def load(self, name: str | Path, is_path=False):
-        package = import_name(name, is_path)
+    def load(self, package: str):
         try:
             module = import_module(package)
         except ImportError:
@@ -39,7 +38,7 @@ class ImportCore[T]:
     def load_from_list(self, import_list: Iterable[str]):
         """从包名列表加载"""
         for name in import_list:
-            self.load(name)
+            self.load(name.replace("-", "_"))
 
     def load_from_dirs(self, import_dirs: Iterable[str]):
         """从本地目录列表加载"""
@@ -47,8 +46,7 @@ class ImportCore[T]:
             dir = Path(import_dir)
             if not dir.exists():
                 continue
-            for name in list_modules(dir):
-                self.load(name)
+            self.load_from_list(list_modules(dir))
 
 
 class AdapterCore(Adapter, ImportCore[Adapter]):
@@ -121,7 +119,7 @@ class AdapterCore(Adapter, ImportCore[Adapter]):
             await self.sends_lib[result.key](result.data, **extra)
             return handle.block
 
-    def load_adapter(self, adapter_list: list[str], adapter_dirs: list[str]):
+    def load_adapter(self, adapter_list: list[str] | None = None, adapter_dirs: list[str] | None = None):
         """加载 clovers 适配器
 
         会把目标适配器的方法注册到 self 中，如已有同名方法则忽略
@@ -130,13 +128,16 @@ class AdapterCore(Adapter, ImportCore[Adapter]):
             adapter_list (list[str]): 适配器的包名列表
             adapter_dirs (list[str]): 适配器的目录列表
         """
-        self.load_from_list(adapter_list)
-        self.load_from_dirs(adapter_dirs)
+        if adapter_list:
+            self.load_from_list(adapter_list)
+        if adapter_dirs:
+            self.load_from_dirs(adapter_dirs)
 
-    def load(self, *args, **kwargs):
-        adapter = super().load(*args, **kwargs)
+    def load(self, package: str):
+        adapter = super().load(package)
         if adapter:
             self.mixin(adapter)
+            adapter.name = adapter.name or package
             logger.info(f'[{self.name}][loading plugin] "{adapter.name}" loaded')
 
 
@@ -160,60 +161,86 @@ class PluginCore(Info, ImportCore[Plugin]):
         return {"name": self.name, "plugins": self._plugins}
 
     def __iter__(self):
-        return (plugin for plugin in self._plugins)
+        yield from self._plugins
 
-    def load_plugin(self, plugin_list: list[str], plugin_dirs: list[str]):
+    def load_plugin(self, plugin_list: list[str] | None = None, plugin_dirs: list[str] | None = None):
         """加载 clovers 插件
 
         Args:
             plugin_list (list[str]): 插件的包名列表
             plugin_dirs (list[str]): 插件的目录列表
         """
-        self.load_from_list(plugin_list)
-        self.load_from_dirs(plugin_dirs)
+        if plugin_list:
+            self.load_from_list(plugin_list)
+        if plugin_dirs:
+            self.load_from_dirs(plugin_dirs)
 
-    def load(self, *args, **kwargs):
-        plugin = super().load(*args, **kwargs)
+    def load(self, package: str):
+        plugin = super().load(package)
         if (plugin is None) or (plugin in self._plugins):
             return
         if plugin.require_plugins:
             self.load_from_list(plugin.require_plugins)
-        plugin.name = plugin.name or plugin.__module__
+        plugin.name = plugin.name or package
         self._plugins.append(plugin)
         logger.info(f'[{self.name}][loading plugin] "{plugin.name}" loaded')
 
 
-class CloversCore(ABC):
-    """clovers 响应处理器基类"""
+class CloversCoreInterface(Info):
+    """clovers 适配器基类"""
+
+    @abstractmethod
+    async def startup(self): ...
+    @abstractmethod
+    async def shutdown(self): ...
+
+    @abstractmethod
+    def dispatch(self, **extra) -> None: ...
+
+    async def __aenter__(self):
+        await self.startup()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.shutdown()
+
+
+class CloversCore(CloversCoreInterface):
+    """clovers 响应处理器基类
+
+    Args:
+        name (str): 项目名
+        temp_handles (dict[int, list[TempHandle]], optional): 临时响应器存储位置. Defaults to {}.
+    """
 
     adapter: AdapterCore
     plugins: PluginCore
 
     type HandleBatch = list[Handle]
     """同优先级的响应器组"""
-    type TempHandleBatch = list[TempHandle]
+    type TempHandleBatchs = list[set[TempHandle]]
     """同优先级的临时响应器组"""
     type HandleBatchQueue = list[HandleBatch]
     """按响应优先级排序的响应器组队列"""
-    type HandleLayer = tuple[TempHandleBatch, HandleBatchQueue]
+    type HandleLayer = tuple[TempHandleBatchs, HandleBatchQueue]
     """插件同一优先级下的响应器层"""
 
     def __init__(self, name: str) -> None:
 
         self.adapter = AdapterCore(name)
         self.plugins = PluginCore(name)
-        self._layers_queue: list[CloversCore.HandleLayer] = []
-        """已注册响应器队列"""
-        self._ready: bool = False
-        """插件初始化标志"""
-        self._tasks: set[asyncio.Task] = set()
+        self.__layers_queue: list[CloversCore.HandleLayer] = []
+        self.__ready: bool = False
+        self.__tasks: set[asyncio.Task] = set()
+        self.__temp_handles: dict[int, CloversCore.TempHandleBatchs] = {}
+
+    @property
+    def is_ready(self) -> bool:
+        return self.__ready
 
     @property
     def info(self):
-        return {
-            "adapter": self.adapter.info,
-            "plugins": self.plugins.info,
-        }
+        return {"adapter": self.adapter.info, "plugins": self.plugins.info}
 
     def plugin_check(self, plugin: Plugin) -> bool:
         check = self.adapter.check_protocol(plugin.protocol)
@@ -230,46 +257,43 @@ class CloversCore(ABC):
         else:
             return True
 
-    def initialize_plugins(self):
-        """初始化插件"""
-        _temp_handles: dict[int, list[TempHandle]] = {}
+    async def startup(self):
+        """启动 clovers 核心"""
+        if self.__ready:
+            raise RuntimeError("Client is already running")
+        self.__ready = True
         _handles: dict[int, list[Handle]] = {}
         _plugins = [plugin for plugin in self.plugins if self.plugin_check(plugin)]
         for plugin in _plugins:
-            plugin.set_temp_handles(_temp_handles.setdefault(plugin.priority, []))
-            _handles.setdefault(plugin.priority, []).extend(plugin.handles)
+            self.__temp_handles.setdefault(plugin.priority, []).append(plugin.temp_handles)
+            _handles.setdefault(plugin.priority, []).extend(plugin)
         for key in sorted(_handles.keys()):
             _sub_handles: dict[int, list[Handle]] = {}
             for handle in _handles[key]:
                 if self.handles_filter(handle):
                     _sub_handles.setdefault(handle.priority, []).append(handle)
             sub_keys = sorted(_sub_handles.keys())
-            self._layers_queue.append((_temp_handles[key], [_sub_handles[k] for k in sub_keys]))
-
-    async def startup(self):
-        """启动插件核心"""
-        if self._ready:
-            raise RuntimeError("Client is already running")
-        self.initialize_plugins()
-        tasks = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.startup_tasklist if (coro := task()))
-        await asyncio.gather(*tasks)
+            self.__layers_queue.append((self.__temp_handles[key], [_sub_handles[k] for k in sub_keys]))
+        tasks = [task for plugin in self.plugins for task in plugin.run_startup()]
+        if tasks:
+            await asyncio.gather(*tasks)
         self.dispatch = self._dispatch_active
-        self._ready = True
 
     async def shutdown(self):
-        """关闭插件核心"""
-        if not self._ready:
+        """关闭 clovers 核心"""
+        if not self.__ready:
             raise RuntimeError("Client is not running")
         self.dispatch = self._dispatch_inactive
-        if self._tasks:
-            for task in self._tasks:
+        if self.__tasks:
+            for task in self.__tasks:
                 if not task.done():
                     task.cancel()
-            await asyncio.gather(*self._tasks, return_exceptions=True)
-        self._layers_queue.clear()
-        tasks = (asyncio.create_task(coro) for plugin in self.plugins for task in plugin.shutdown_tasklist if (coro := task()))
-        await asyncio.gather(*tasks)
-        self._ready = False
+            await asyncio.gather(*self.__tasks, return_exceptions=True)
+        self.__layers_queue.clear()
+        tasks = [task for plugin in self.plugins for task in plugin.run_shutdown()]
+        if tasks:
+            await asyncio.gather(*tasks)
+        self.__ready = False
 
     @abstractmethod
     def extract_message(self, **extra) -> str | None:
@@ -301,10 +325,8 @@ class CloversCore(ABC):
         count = 0
         temp_event = None
         properties = {}
-        for temp_handles, batch_list in self._layers_queue:
-            if temp_handles:
-                now = time.time()
-                temp_handles[:] = [handle for handle in temp_handles if handle.expiration > now]
+        for temp_batchs, batch_list in self.__layers_queue:
+            temp_handles = [handle for batch in temp_batchs for handle in batch]
             if temp_handles:
                 temp_event = temp_event or Event(message, [], properties, self.adapter, extra)
                 blocks = await asyncio.gather(*(self.adapter.invoke_handler(handle, temp_event, extra) for handle in temp_handles))
@@ -352,6 +374,33 @@ class CloversCore(ABC):
     def _dispatch_active(self, **extra):
 
         if (message := self.extract_message(**extra)) is not None:
-            self._tasks.add(task := asyncio.create_task(self.response_message(message, **extra)))
-            task.add_done_callback(self._tasks.discard)
+            self.__tasks.add(task := asyncio.create_task(self.response_message(message, **extra)))
+            task.add_done_callback(self.__tasks.discard)
             return
+
+
+class CloversMultCore(CloversCoreInterface):
+    """多核 clovers 框架"""
+
+    def __init__(self, *cores: CloversCore):
+        if any(core.is_ready for core in cores):
+            raise RuntimeError("Cannot combine ready cores")
+        self.cores = cores
+
+    @property
+    def info(self):
+        return {i: core.info for i, core in enumerate(self.cores)}
+
+    async def startup(self):
+        await asyncio.gather(*(core.startup() for core in self.cores))
+
+    async def shutdown(self):
+        await asyncio.gather(*(core.shutdown() for core in self.cores))
+
+    @abstractmethod
+    def locate_core(self, **extra) -> CloversCore | None: ...
+
+    def dispatch(self, **extra) -> None:
+        core = self.locate_core(**extra)
+        if core is not None:
+            core.dispatch(**extra)

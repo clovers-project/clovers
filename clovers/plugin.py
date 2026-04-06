@@ -1,7 +1,9 @@
 import time
 import re
+import asyncio
 from typing import Any
 from collections.abc import Callable, Iterable, Sequence
+from .logger import logger
 from .base import Coro, Task, Info, Event, Result, EventHandler, BaseHandle
 
 type Matchable = str | Iterable[str] | re.Pattern[str] | None
@@ -101,7 +103,8 @@ class TempHandle(BaseHandle):
 
     def __init__(
         self,
-        timeout: float,
+        timeout: float | int,
+        temp_handles: set["TempHandle"],
         properties: Iterable[str],
         block: tuple[bool, bool],
         func: EventHandler,
@@ -109,19 +112,36 @@ class TempHandle(BaseHandle):
     ):
         super().__init__(properties, block, func)
         self.state = state
+        self.__temp_handles = temp_handles
         self.delay(timeout)
 
     @property
     def info(self):
-        return {"expiration": self.expiration, "properties": self.properties, "block": self.block}
+        return {"properties": self.properties, "block": self.block}
 
-    def finish(self):
-        """结束任务"""
-        self.expiration = 0
+    def __done_callback(self, *args):
+        """任务完成"""
+        self.__running_task = None
+        if self.__timeout > 0.1:
+            self.__running_task = asyncio.create_task(asyncio.sleep(self.__timeout))
+            self.__running_task.add_done_callback(self.__done_callback)
+            self.__timeout = -1
+        else:
+            self.__temp_handles.discard(self)
 
     def delay(self, timeout: float | int = 30.0):
         """延长任务"""
-        self.expiration = timeout + time.time()
+        self.__timeout = timeout
+        if self not in self.__temp_handles:
+            self.__temp_handles.add(self)
+            self.__done_callback()
+
+    def finish(self):
+        """结束任务"""
+        self.__timeout = -1
+        self.__temp_handles.discard(self)
+        if self.__running_task:
+            self.__running_task.cancel()
 
 
 class Plugin[EventType](Info):
@@ -156,19 +176,26 @@ class Plugin[EventType](Info):
         """构建event"""
         self.build_result = build_result
         """构建result"""
-        self.startup_tasklist: list[Task] = []
+        self.__startup_tasklist: list[Task] = []
         """启动任务列表"""
-        self.shutdown_tasklist: list[Task] = []
+        self.__shutdown_tasklist: list[Task] = []
         """关闭任务列表"""
-        self.handles: set[Handle] = set()
+        self.__handles: set[Handle] = set()
         """已注册的响应器"""
+        self.temp_handles: set[TempHandle]
+        """临时任务储存位置"""
         self.require_plugins: set[str] = set()
         """依赖的插件"""
         self.protocol: type | None = None
+        """类型协议"""
+        self.is_started: bool = False
 
     @property
     def info(self):
-        return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self.handles}
+        return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self.__handles}
+
+    def __iter__(self):
+        yield from self.__handles
 
     def require(self, plugin_name: str):
         """声明依赖的插件
@@ -180,15 +207,29 @@ class Plugin[EventType](Info):
 
     def startup(self, func: Task):
         """注册一个启动任务"""
-        self.startup_tasklist.append(func)
+        self.__startup_tasklist.append(func)
 
         return func
 
     def shutdown(self, func: Task):
         """注册一个结束任务"""
-        self.shutdown_tasklist.append(func)
+        self.__shutdown_tasklist.append(func)
 
         return func
+
+    def run_startup(self):
+        """运行启动任务"""
+        if self.is_started:
+            return []
+        self.is_started = True
+        return [asyncio.create_task(coro) for task in self.__startup_tasklist if (coro := task())]
+
+    def run_shutdown(self):
+        """运行结束任务"""
+        if not self.is_started:
+            return []
+        self.is_started = False
+        return [asyncio.create_task(coro) for task in self.__shutdown_tasklist if (coro := task())]
 
     class Rule[T]:
         """响应器规则"""
@@ -262,7 +303,7 @@ class Plugin[EventType](Info):
                 (self.block, block) if isinstance(block, bool) else block,
                 self.handle_wrapper(rule)(func),
             )
-            self.handles.add(handle)
+            self.__handles.add(handle)
             return handle.func
 
         return decorator
@@ -288,15 +329,12 @@ class Plugin[EventType](Info):
         def decorator(func: RawTempEventHandler):
             handle = TempHandle(
                 timeout,
+                self.temp_handles,
                 properties,
                 (self.block, block) if isinstance(block, bool) else block,
                 self.handle_wrapper(rule)(lambda e: func(e, handle)),
                 state,
             )
-            self.temp_handles.append(handle)
             return handle.func
 
         return decorator
-
-    def set_temp_handles(self, temp_handles: list[TempHandle]):
-        self.temp_handles = temp_handles
