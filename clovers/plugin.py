@@ -112,7 +112,7 @@ class TempHandle(BaseHandle):
     ):
         super().__init__(properties, block, func)
         self.state = state
-        self.__temp_handles = temp_handles
+        self._handles = temp_handles
         self.delay(timeout)
 
     @property
@@ -126,19 +126,19 @@ class TempHandle(BaseHandle):
             self.__running_task.add_done_callback(self.__done_callback)
             self.__timeout = -1.0
         else:
-            self.__temp_handles.discard(self)
+            self._handles.discard(self)
 
     def delay(self, timeout: float | int = 30.0):
         """延长任务"""
         self.__timeout = timeout
-        if self not in self.__temp_handles:
-            self.__temp_handles.add(self)
+        if self not in self._handles:
+            self._handles.add(self)
             self.__done_callback()
 
     def finish(self):
         """结束任务"""
         self.__timeout = -1.0
-        self.__temp_handles.discard(self)
+        self._handles.discard(self)
         if self.__running_task:
             self.__running_task.cancel()
 
@@ -175,11 +175,11 @@ class Plugin[EventType](Info):
         """构建event"""
         self.build_result = build_result
         """构建result"""
-        self.__startup_tasklist: list[Task] = []
+        self._startup_tasklist: list[Task] = []
         """启动任务列表"""
-        self.__shutdown_tasklist: list[Task] = []
+        self._shutdown_tasklist: list[Task] = []
         """关闭任务列表"""
-        self.__handles: set[Handle] = set()
+        self._handles: set[Handle] = set()
         """已注册的响应器"""
         self.temp_handles: set[TempHandle] = set()
         """临时任务储存位置"""
@@ -191,10 +191,10 @@ class Plugin[EventType](Info):
 
     @property
     def info(self):
-        return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self.__handles}
+        return {"name": self.name, "priority": self.priority, "block": self.block, "handles": self._handles}
 
     def __iter__(self):
-        yield from self.__handles
+        yield from self._handles
 
     def require(self, plugin_name: str):
         """声明依赖的插件
@@ -206,13 +206,13 @@ class Plugin[EventType](Info):
 
     def startup(self, func: Task):
         """注册一个启动任务"""
-        self.__startup_tasklist.append(func)
+        self._startup_tasklist.append(func)
 
         return func
 
     def shutdown(self, func: Task):
         """注册一个结束任务"""
-        self.__shutdown_tasklist.append(func)
+        self._shutdown_tasklist.append(func)
 
         return func
 
@@ -221,14 +221,14 @@ class Plugin[EventType](Info):
         if self.is_started:
             return []
         self.is_started = True
-        return [asyncio.create_task(coro) for task in self.__startup_tasklist if (coro := task())]
+        return [asyncio.create_task(coro) for task in self._startup_tasklist if (coro := task())]
 
     def run_shutdown(self):
         """运行结束任务"""
         if not self.is_started:
             return []
         self.is_started = False
-        return [asyncio.create_task(coro) for task in self.__shutdown_tasklist if (coro := task())]
+        return [asyncio.create_task(coro) for task in self._shutdown_tasklist if (coro := task())]
 
     class Rule[T]:
         """响应器规则"""
@@ -302,7 +302,7 @@ class Plugin[EventType](Info):
                 (self.block, block) if isinstance(block, bool) else block,
                 self.handle_wrapper(rule)(func),
             )
-            self.__handles.add(handle)
+            self._handles.add(handle)
             return handle.func
 
         return decorator

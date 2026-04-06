@@ -229,14 +229,14 @@ class CloversCore(CloversCoreInterface):
 
         self.adapter = AdapterCore(name)
         self.plugins = PluginCore(name)
-        self.__layers_queue: list[CloversCore.HandleLayer] = []
-        self.__ready: bool = False
-        self.__tasks: set[asyncio.Task] = set()
-        self.__temp_handles: dict[int, CloversCore.TempHandleBatchs] = {}
+        self._layers_queue: list[CloversCore.HandleLayer] = []
+        self._ready: bool = False
+        self._tasks: set[asyncio.Task] = set()
+        self._temp_handles: dict[int, CloversCore.TempHandleBatchs] = {}
 
     @property
     def is_ready(self) -> bool:
-        return self.__ready
+        return self._ready
 
     @property
     def info(self):
@@ -259,13 +259,13 @@ class CloversCore(CloversCoreInterface):
 
     async def startup(self):
         """启动 clovers 核心"""
-        if self.__ready:
+        if self._ready:
             raise RuntimeError("Client is already running")
-        self.__ready = True
+        self._ready = True
         _handles: dict[int, list[Handle]] = {}
         _plugins = [plugin for plugin in self.plugins if self.plugin_check(plugin)]
         for plugin in _plugins:
-            self.__temp_handles.setdefault(plugin.priority, []).append(plugin.temp_handles)
+            self._temp_handles.setdefault(plugin.priority, []).append(plugin.temp_handles)
             _handles.setdefault(plugin.priority, []).extend(plugin)
         for key in sorted(_handles.keys()):
             _sub_handles: dict[int, list[Handle]] = {}
@@ -273,7 +273,7 @@ class CloversCore(CloversCoreInterface):
                 if self.handles_filter(handle):
                     _sub_handles.setdefault(handle.priority, []).append(handle)
             sub_keys = sorted(_sub_handles.keys())
-            self.__layers_queue.append((self.__temp_handles[key], [_sub_handles[k] for k in sub_keys]))
+            self._layers_queue.append((self._temp_handles[key], [_sub_handles[k] for k in sub_keys]))
         tasks = [task for plugin in self.plugins for task in plugin.run_startup()]
         if tasks:
             await asyncio.gather(*tasks)
@@ -281,19 +281,19 @@ class CloversCore(CloversCoreInterface):
 
     async def shutdown(self):
         """关闭 clovers 核心"""
-        if not self.__ready:
+        if not self._ready:
             raise RuntimeError("Client is not running")
         self.dispatch = self._dispatch_inactive
-        if self.__tasks:
-            for task in self.__tasks:
+        if self._tasks:
+            for task in self._tasks:
                 if not task.done():
                     task.cancel()
-            await asyncio.gather(*self.__tasks, return_exceptions=True)
-        self.__layers_queue.clear()
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._layers_queue.clear()
         tasks = [task for plugin in self.plugins for task in plugin.run_shutdown()]
         if tasks:
             await asyncio.gather(*tasks)
-        self.__ready = False
+        self._ready = False
 
     @abstractmethod
     def extract_message(self, **extra) -> str | None:
@@ -325,7 +325,7 @@ class CloversCore(CloversCoreInterface):
         count = 0
         temp_event = None
         properties = {}
-        for temp_batchs, batch_list in self.__layers_queue:
+        for temp_batchs, batch_list in self._layers_queue:
             temp_handles = [handle for batch in temp_batchs for handle in batch]
             if temp_handles:
                 temp_event = temp_event or Event(message, [], properties, self.adapter, extra)
@@ -374,8 +374,8 @@ class CloversCore(CloversCoreInterface):
     def _dispatch_active(self, **extra):
 
         if (message := self.extract_message(**extra)) is not None:
-            self.__tasks.add(task := asyncio.create_task(self.response_message(message, **extra)))
-            task.add_done_callback(self.__tasks.discard)
+            self._tasks.add(task := asyncio.create_task(self.response_message(message, **extra)))
+            task.add_done_callback(self._tasks.discard)
             return
 
 

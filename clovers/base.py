@@ -167,8 +167,8 @@ class Event(Info):
         self.message = message
         self.args = args
         self.properties = properties
-        self.__adapter = adapter
-        self.__extra = extra
+        self._adapter = adapter
+        self._extra = extra
 
     @property
     def info(self) -> dict:
@@ -184,9 +184,9 @@ class Event(Info):
         Returns:
             Coro[None] | None: 适配器发送方法的 Coro，如 key 不存在则返回 None
         """
-        if key not in self.__adapter.sends_lib:
+        if key not in self._adapter.sends_lib:
             return
-        return self.__adapter.sends_lib[key](message, **self.__extra)
+        return self._adapter.sends_lib[key](message, **self._extra)
 
     def call(self, key: str, *args):
         """执行适配器调用方法，只接受位置参数
@@ -198,9 +198,9 @@ class Event(Info):
         Returns:
             Coro[Any] | None: 适配器调用方法的 Coro，如 key 不存在则返回 None
         """
-        if key not in self.__adapter.calls_lib:
+        if key not in self._adapter.calls_lib:
             return
-        return self.__adapter.calls_lib[key](key, *args, **self.__extra)
+        return self._adapter.calls_lib[key](key, *args, **self._extra)
 
     def __getattr__(self, name: str):
         try:
