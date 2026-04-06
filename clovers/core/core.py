@@ -1,10 +1,9 @@
-import time
 import asyncio
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable, Callable
 from pathlib import Path
 from importlib import import_module
-from .utils import import_name, list_modules
+from .utils import list_modules
 from .protocol import protocol_format, check_compatible, is_coro
 from ..base import Coro, Info, Adapter, AdapterMethod, BaseHandle, Event
 from ..plugin import Handle, TempHandle, Plugin
@@ -52,7 +51,7 @@ class ImportCore[T]:
 class AdapterCore(Adapter, ImportCore[Adapter]):
     def __init__(self, name: str) -> None:
         Adapter.__init__(self, name)
-        ImportCore.__init__(self, "__adapter__", Adapter, f"[{self.name}][loading adapter]")
+        ImportCore.__init__(self, "ADAPTER", Adapter, f"[{self.name}][loading adapter]")
         self.__protocol = {"send": {}, "call": {}}
 
     def check_protocol(self, protocol: type | None):
@@ -153,7 +152,7 @@ class PluginCore(Info, ImportCore[Plugin]):
 
     def __init__(self, name: str = ""):
         self.name = name
-        ImportCore.__init__(self, "__plugin__", Plugin, f"[{self.name}][loading plugin]")
+        ImportCore.__init__(self, "PLUGIN", Plugin, f"[{self.name}][loading plugin]")
         self._plugins: list[Plugin] = []
 
     @property
@@ -359,6 +358,10 @@ class CloversCore(CloversCoreInterface):
                 break
         return count
 
+    def create_task(self, coro: Coro):
+        self._tasks.add(task := asyncio.create_task(coro))
+        task.add_done_callback(self._tasks.discard)
+
     def dispatch(self, **extra) -> None:
         """响应事件
 
@@ -374,8 +377,7 @@ class CloversCore(CloversCoreInterface):
     def _dispatch_active(self, **extra):
 
         if (message := self.extract_message(**extra)) is not None:
-            self._tasks.add(task := asyncio.create_task(self.response_message(message, **extra)))
-            task.add_done_callback(self._tasks.discard)
+            self.create_task(self.response_message(message, **extra))
             return
 
 

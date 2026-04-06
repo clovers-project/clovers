@@ -1,9 +1,7 @@
-import time
 import re
 import asyncio
 from typing import Any
 from collections.abc import Callable, Iterable, Sequence
-from .logger import logger
 from .base import Coro, Task, Info, Event, Result, EventHandler, BaseHandle
 
 type Matchable = str | Iterable[str] | re.Pattern[str] | None
