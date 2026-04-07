@@ -63,11 +63,11 @@ class Adapter(Info):
             "calls_lib": list(self.calls_lib.keys()),
         }
 
-    def call_decorator[T: AdapterMethod](self, method_name: str, func: T) -> T:
+    def register_call[T: AdapterMethod](self, method_name: str, func: T) -> T:
         self.calls_lib[method_name] = kwfilter(func)
         return func
 
-    def send_decorator[T: AdapterMethod[None]](self, method_name: str, func: T) -> T:
+    def register_send[T: AdapterMethod[None]](self, method_name: str, func: T) -> T:
         self.sends_lib[method_name] = kwfilter(func)
         return func
 
@@ -79,7 +79,7 @@ class Adapter(Info):
         Returns:
             (AdapterMethod) -> AdapterMethod: 属性方法装饰器
         """
-        return lambda func: self.call_decorator(method_name, func)
+        return lambda func: self.register_call(method_name, func)
 
     def send_method(self, method_name: str):
         """添加一个发送消息方法
@@ -89,7 +89,7 @@ class Adapter(Info):
         Returns:
             (AdapterMethod) -> AdapterMethod: 发送方法装饰器
         """
-        return lambda func: self.send_decorator(method_name, func)
+        return lambda func: self.register_send(method_name, func)
 
     def call_method(self, method_name: str):
         """添加一个调用方法
@@ -99,7 +99,7 @@ class Adapter(Info):
         Returns:
             (AdapterMethod) -> AdapterMethod: 调用方法装饰器
         """
-        return lambda func: self.call_decorator(method_name, func)
+        return lambda func: self.register_call(method_name, func)
 
     def mixin(self, adapter: "Adapter"):
         """混合其他兼容方法
@@ -108,9 +108,9 @@ class Adapter(Info):
             adapter (Adapter): 其他适配器实例
         """
         for k, func in adapter.sends_lib.items():
-            self.send_decorator(k, func)
+            self.register_send(k, func)
         for k, func in adapter.calls_lib.items():
-            self.call_decorator(k, func)
+            self.register_call(k, func)
 
 
 class Result[K: str, T](Info):

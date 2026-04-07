@@ -1,7 +1,9 @@
+from functools import lru_cache
 from types import UnionType
-from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType, Optional
+from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType, Optional, TypedDict
 from collections.abc import Callable, Generator, AsyncGenerator
 from ..base import Coro
+from ..logger import logger
 
 
 def _is_union(type: Any):
@@ -142,6 +144,7 @@ def _subclass_check(type_A: Any, origin_A: Any, type_B: Any) -> bool:
     return check_compatible(item_A, item_B)
 
 
+@lru_cache(maxsize=128)
 def check_compatible(type_A: Any, type_B: Any) -> bool:
     """检查 A 是否是 B 的兼容类型
 
@@ -221,42 +224,106 @@ def is_coro(func: Callable):
     return func.__code__.co_flags & 0x0080
 
 
-def protocol_format(protocol: type) -> dict:
-    calls = {k: v for k, v in protocol.__annotations__.items() if not k.startswith("_")}
-    sends = {}
-    attr = getattr(protocol, "call", None)
-    if attr is not None:
-        for func in get_overloads(attr):
-            varnames = func.__code__.co_varnames
-            fields = func.__annotations__
-            if "return" not in fields:
-                continue
-            len_varnames = len(varnames)
-            if len_varnames < 2:
-                continue
-            elif len_varnames == 2:
-                if (literal_args := literal_arg(fields[varnames[1]])) is None:
+class TypeProtocol:
+    """类型协议
+
+    Attributes:
+        send (dict[str, type]]): 发送参数类型协议
+        call (dict[str, type]]): 调用额外参数与返回值类型协议
+    """
+
+    class __Protocol(TypedDict):
+        call: dict[str, Any]
+        send: dict[str, Any]
+
+    def __init__(self) -> None:
+        self.__protocol: TypeProtocol.__Protocol = {"send": {}, "call": {}}
+
+    @property
+    def send(self):
+        return self.__protocol["send"]
+
+    @property
+    def call(self):
+        return self.__protocol["call"]
+
+    def __bool__(self):
+        return bool(self.__protocol["send"]) or bool(self.__protocol["call"])
+
+    @staticmethod
+    def protocol_format(protocol: type) -> __Protocol:
+        calls = {k: v for k, v in protocol.__annotations__.items() if not k.startswith("_")}
+        sends = {}
+        attr = getattr(protocol, "call", None)
+        if attr is not None:
+            for func in get_overloads(attr):
+                varnames = func.__code__.co_varnames
+                fields = func.__annotations__
+                if "return" not in fields:
                     continue
-                calls[literal_args[0]] = fields["return"]
-                continue
-            _, key_name, *names = varnames
-            if (literal_args := literal_arg(fields[key_name])) is None:
-                continue
-            if not all(name in fields for name in names):
-                continue
-            if is_coro(func):
-                calls[literal_args[0]] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
-            else:
-                calls[literal_args[0]] = Callable[[fields[name] for name in names], fields["return"]]
-    attr = getattr(protocol, "send", None)
-    if attr is not None:
-        for func in get_overloads(attr):
-            varnames = func.__code__.co_varnames
-            fields = func.__annotations__
-            if not len(varnames) == 3:
-                continue
-            _, key_name, message_name = varnames
-            if (literal_args := literal_arg(fields[key_name])) is None:
-                continue
-            sends[literal_args[0]] = fields[message_name]
-    return {"call": calls, "send": sends}
+                len_varnames = len(varnames)
+                if len_varnames < 2:
+                    continue
+                elif len_varnames == 2:
+                    if (literal_args := literal_arg(fields[varnames[1]])) is None:
+                        continue
+                    calls[literal_args[0]] = fields["return"]
+                    continue
+                _, key_name, *names = varnames
+                if (literal_args := literal_arg(fields[key_name])) is None:
+                    continue
+                if not all(name in fields for name in names):
+                    continue
+                if is_coro(func):
+                    calls[literal_args[0]] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
+                else:
+                    calls[literal_args[0]] = Callable[[fields[name] for name in names], fields["return"]]
+        attr = getattr(protocol, "send", None)
+        if attr is not None:
+            for func in get_overloads(attr):
+                varnames = func.__code__.co_varnames
+                fields = func.__annotations__
+                if not len(varnames) == 3:
+                    continue
+                _, key_name, message_name = varnames
+                if (literal_args := literal_arg(fields[key_name])) is None:
+                    continue
+                sends[literal_args[0]] = fields[message_name]
+        return {"call": calls, "send": sends}
+
+    def check(self, protocol: type | None):
+        """检查适配器类型协议
+
+        Args:
+            data (type): 事件协议类型，包含字段和声明的类型
+        """
+        if protocol is None:
+            return True
+        check_protocol = self.protocol_format(protocol)
+        for k in ["send", "call"]:
+            if (self_fields := self.__protocol[k]) and (check_fields := check_protocol[k]):
+                keys = check_fields.keys() & self_fields.keys()
+                for key in keys:
+                    if not check_compatible(self_fields[key], check_fields[key]):
+                        logger.warning(f'{k}[{key}] provides type "{self_fields[key]}", but protocol require "{check_fields[key]}".')
+                        return False
+        return True
+
+    def register_send(self, key: str, send: Callable):
+        name = send.__code__.co_varnames[0]
+        if annot := send.__annotations__.get(name):
+            self.__protocol["send"][key] = annot
+
+    def register_call(self, key: str, call: Callable):
+        co_posonlyargcount = call.__code__.co_posonlyargcount
+        if co_posonlyargcount == 0:
+            if annot := call.__annotations__.get("return"):
+                self.__protocol["call"][key] = annot
+        else:
+            names = call.__code__.co_varnames[:co_posonlyargcount]
+            fields = call.__annotations__
+            if all(name in fields for name in names) and "return" in fields:
+                if is_coro(call):
+                    self.__protocol["call"][key] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
+                else:
+                    self.__protocol["call"][key] = Callable[[fields[name] for name in names], fields["return"]]

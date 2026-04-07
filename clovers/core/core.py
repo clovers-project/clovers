@@ -1,189 +1,82 @@
 import asyncio
 from abc import abstractmethod
-from collections.abc import Iterable, Callable
-from pathlib import Path
-from importlib import import_module
-from .utils import list_modules
-from .protocol import protocol_format, check_compatible, is_coro
+from .loader import ModuleLoader
+from .protocol import TypeProtocol
 from ..base import Coro, Info, Adapter, AdapterMethod, BaseHandle, Event
 from ..plugin import Handle, TempHandle, Plugin
 from ..logger import logger
 
 
-class ImportCore[T]:
-    def __init__(self, __attrs: list[str], __type: type[T], log_header: str = ""):
-        self.log_header = log_header if log_header else "[ImportCore]"
-        self.__attrs = __attrs
-        self.__type = __type
+class AdapterCore(Adapter, ModuleLoader[Adapter]):
+    """适配器核心
 
-    def load(self, package: str):
-        try:
-            module = import_module(package)
-        except ImportError:
-            logger.exception(f'{self.log_header} Module "{package}" not found')
-            return
-        except Exception as e:
-            logger.exception(f'{self.log_header} "{package}" load failed', exc_info=e)
-            return
-        attr_name = next((x for x in self.__attrs if hasattr(module, x)), None)
-        if attr_name is None:
-            logger.error(f'{self.log_header} Module "{package}" missing attribute "{self.__attrs}"')
-            return
-        attr = getattr(module, attr_name)
-        if not isinstance(attr, self.__type):
-            logger.error(f'{self.log_header} "{package}.{attr_name}" is type {type(attr)}, expected {self.__type}')
-            return
-        return attr
+    Attributes:
+        name (str): 项目名
+        adapters (list[Adapter]): 项目管理的适配器列表
+    """
 
-    def load_from_list(self, import_list: Iterable[str]):
-        """从包名列表加载"""
-        for name in import_list:
-            self.load(name.replace("-", "_"))
-
-    def load_from_dirs(self, import_dirs: Iterable[str]):
-        """从本地目录列表加载"""
-        for import_dir in import_dirs:
-            dir = Path(import_dir)
-            if not dir.exists():
-                continue
-            self.load_from_list(list_modules(dir))
-
-
-class AdapterCore(Adapter, ImportCore[Adapter]):
     def __init__(self, name: str) -> None:
         Adapter.__init__(self, name)
-        ImportCore.__init__(self, ["ADAPTER", "adapter", "__adapter__"], Adapter, f"[{self.name}][loading adapter]")
-        self.__protocol = {"send": {}, "call": {}}
+        ModuleLoader.__init__(self, ["ADAPTER", "adapter", "__adapter__"], Adapter)
+        self.protocol = TypeProtocol()
 
-    def check_protocol(self, protocol: type | None):
-        """检查适配器类型协议
-
-        Args:
-            data (type): 事件协议类型，包含字段和声明的类型
-        """
-        if protocol is None:
-            return True
-        check_protocol = protocol_format(protocol)
-        for k in ["send", "call"]:
-            if (self_fields := self.__protocol[k]) and (check_fields := check_protocol[k]):
-                keys = check_fields.keys() & self_fields.keys()
-                for key in keys:
-                    if not check_compatible(self_fields[key], check_fields[key]):
-                        logger.warning(
-                            f"Adapter({self.name}) {k}[{key}] provides type '{self_fields[key]}', but protocol require '{check_fields[key]}'."
-                        )
-                        return False
-        return True
-
-    def send_decorator(self, method_name: str, func: AdapterMethod):
+    def register_send(self, method_name: str, func: AdapterMethod):
         if method_name in self.sends_lib:
             logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
             return func
-        name = func.__code__.co_varnames[0]
-        if annot := func.__annotations__.get(name):
-            self.__protocol["send"][method_name] = annot
+        self.protocol.register_send(method_name, func)
         self.sends_lib[method_name] = func
         return func
 
-    def call_decorator(self, method_name: str, func: AdapterMethod):
+    def register_call(self, method_name: str, func: AdapterMethod):
         if method_name in self.calls_lib:
             logger.warning(f"Method '{method_name}' already exists (from: {func.__module__}.{func.__qualname__})")
             return func
-        co_posonlyargcount = func.__code__.co_posonlyargcount
-        if co_posonlyargcount == 0:
-            if annot := func.__annotations__.get("return"):
-                self.__protocol["call"][method_name] = annot
-        else:
-            names = func.__code__.co_varnames[:co_posonlyargcount]
-            fields = func.__annotations__
-            if all(name in fields for name in names) and "return" in fields:
-                if is_coro(func):
-                    self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
-                else:
-                    self.__protocol["call"][method_name] = Callable[[fields[name] for name in names], fields["return"]]
+        self.protocol.register_call(method_name, func)
         self.calls_lib[method_name] = func
         return func
 
-    async def invoke_handler(self, handle: BaseHandle, event: Event, extra: dict):
-        """使用适配器响应任务
-
-        Args:
-            handle (BaseHandle): 触发的插件任务
-            event (Event): 触发响应的事件
-            extra (dict): 适配器需要的额外参数
-        """
-        if handle.properties and (keys := handle.properties - event.properties.keys()):
-            coros = (self.calls_lib[key](**extra) for key in keys)
-            event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
-        if result := await handle.func(event):
-            await self.sends_lib[result.key](result.data, **extra)
-            return handle.block
-
-    def load_adapter(self, adapter_list: list[str] | None = None, adapter_dirs: list[str] | None = None):
-        """加载 clovers 适配器
-
-        会把目标适配器的方法注册到 self 中，如已有同名方法则忽略
-
-        Args:
-            adapter_list (list[str]): 适配器的包名列表
-            adapter_dirs (list[str]): 适配器的目录列表
-        """
-        if adapter_list:
-            self.load_from_list(adapter_list)
-        if adapter_dirs:
-            self.load_from_dirs(adapter_dirs)
-
-    def load(self, package: str):
-        adapter = super().load(package)
+    def _load(self, package: str):
+        adapter = super()._load(package)
         if adapter:
             self.mixin(adapter)
-            logger.info(f'{self.log_header} "{adapter.name}" loaded')
-        return adapter
+            logger.info(f'[Clovers][AdapterCore] "{adapter.name}" loaded')
 
 
-class PluginCore(Info, ImportCore[Plugin]):
-    """插件核心
-
-    此处管理插件的加载和准备
+class PluginLoader(Info, ModuleLoader[Plugin]):
+    """插件加载器
 
     Attributes:
         name (str): 项目名
         plugins (list[Plugin]): 项目管理的插件列表
     """
 
-    def __init__(self, name: str = ""):
-        self.name = name
-        ImportCore.__init__(self, ["PLUGIN", "plugin", "__plugin__"], Plugin, f"[{self.name}][loading plugin]")
+    def __init__(self, protocol: TypeProtocol):
+        self.protocol = protocol
+        ModuleLoader.__init__(self, ["PLUGIN", "plugin", "__plugin__"], Plugin)
         self._plugins: list[Plugin] = []
 
     @property
     def info(self):
-        return {"name": self.name, "plugins": self._plugins}
+        return {"plugins": self._plugins}
 
     def __iter__(self):
         yield from self._plugins
 
-    def load_plugin(self, plugin_list: list[str] | None = None, plugin_dirs: list[str] | None = None):
-        """加载 clovers 插件
-
-        Args:
-            plugin_list (list[str]): 插件的包名列表
-            plugin_dirs (list[str]): 插件的目录列表
-        """
-        if plugin_list:
-            self.load_from_list(plugin_list)
-        if plugin_dirs:
-            self.load_from_dirs(plugin_dirs)
-
-    def load(self, package: str):
-        plugin = super().load(package)
+    def _load(self, package: str):
+        plugin = super()._load(package)
         if (plugin is None) or (plugin in self._plugins):
+            return
+        if not self.protocol:
+            logger.warning("[Clovers][PluginLoader] Protocol missing. Ensure adapters are loaded before plugin initialization.")
+        if not self.protocol.check(plugin.protocol):
+            logger.warning(f"[Clovers][PluginLoader] {plugin.name} ignored")
             return
         if plugin.require_plugins:
             self.load_from_list(plugin.require_plugins)
         plugin.name = plugin.name or package
         self._plugins.append(plugin)
-        logger.info(f'{self.log_header} "{plugin.name}" loaded')
+        logger.info(f'[Clovers][PluginLoader] "{plugin.name}" loaded')
 
 
 class CloversCoreInterface(Info):
@@ -214,7 +107,7 @@ class CloversCore(CloversCoreInterface):
     """
 
     adapter: AdapterCore
-    plugins: PluginCore
+    plugins: PluginLoader
 
     type HandleBatch = list[Handle]
     """同优先级的响应器组"""
@@ -228,25 +121,41 @@ class CloversCore(CloversCoreInterface):
     def __init__(self, name: str) -> None:
 
         self.adapter = AdapterCore(name)
-        self.plugins = PluginCore(name)
+        self.plugins = PluginLoader(self.adapter.protocol)
         self._layers_queue: list[CloversCore.HandleLayer] = []
         self._ready: bool = False
         self._tasks: set[asyncio.Task] = set()
         self._temp_handles: dict[int, CloversCore.TempHandleBatchs] = {}
 
     @property
-    def is_ready(self) -> bool:
-        return self._ready
-
-    @property
     def info(self):
         return {"adapter": self.adapter.info, "plugins": self.plugins.info}
 
-    def plugin_check(self, plugin: Plugin) -> bool:
-        check = self.adapter.check_protocol(plugin.protocol)
-        if not check:
-            logger.warning(f"Plugin({plugin.name}) ignored")
-        return check
+    def load_adapter(self, adapter_list: list[str] | None = None, adapter_dirs: list[str] | None = None):
+        """加载 clovers 适配器
+
+        会把目标适配器的方法注册到 self 中，如已有同名方法则忽略
+
+        Args:
+            adapter_list (list[str]): 适配器的包名列表
+            adapter_dirs (list[str]): 适配器的目录列表
+        """
+        if adapter_list:
+            self.adapter.load_from_list(adapter_list)
+        if adapter_dirs:
+            self.adapter.load_from_dirs(adapter_dirs)
+
+    def load_plugin(self, plugin_list: list[str] | None = None, plugin_dirs: list[str] | None = None):
+        """加载 clovers 插件, 注意适配器须在加载插件前优先加载，否则插件不会经适配器的协议检查
+
+        Args:
+            plugin_list (list[str]): 插件的包名列表
+            plugin_dirs (list[str]): 插件的目录列表
+        """
+        if plugin_list:
+            self.plugins.load_from_list(plugin_list)
+        if plugin_dirs:
+            self.plugins.load_from_dirs(plugin_dirs)
 
     def handles_filter(self, handle: BaseHandle) -> bool:
         if method_miss := handle.properties - self.adapter.calls_lib.keys():
@@ -257,14 +166,17 @@ class CloversCore(CloversCoreInterface):
         else:
             return True
 
+    @property
+    def is_ready(self) -> bool:
+        return self._ready
+
     async def startup(self):
         """启动 clovers 核心"""
         if self._ready:
             raise RuntimeError("Client is already running")
         self._ready = True
         _handles: dict[int, list[Handle]] = {}
-        _plugins = [plugin for plugin in self.plugins if self.plugin_check(plugin)]
-        for plugin in _plugins:
+        for plugin in self.plugins:
             self._temp_handles.setdefault(plugin.priority, []).append(plugin.temp_handles)
             _handles.setdefault(plugin.priority, []).extend(plugin)
         for key in sorted(_handles.keys()):
@@ -310,6 +222,21 @@ class CloversCore(CloversCoreInterface):
 
         raise NotImplementedError
 
+    async def invoke_handler(self, handle: BaseHandle, event: Event, extra: dict):
+        """使用适配器响应任务
+
+        Args:
+            handle (BaseHandle): 触发的插件任务
+            event (Event): 触发响应的事件
+            extra (dict): 适配器需要的额外参数
+        """
+        if handle.properties and (keys := handle.properties - event.properties.keys()):
+            coros = (self.adapter.calls_lib[key](**extra) for key in keys)
+            event.properties.update({k: v for k, v in zip(keys, await asyncio.gather(*coros))})
+        if result := await handle.func(event):
+            await self.adapter.sends_lib[result.key](result.data, **extra)
+            return handle.block
+
     async def response_message(self, message: str, /, **extra):
         """响应消息
 
@@ -329,7 +256,7 @@ class CloversCore(CloversCoreInterface):
             temp_handles = [handle for batch in temp_batchs for handle in batch]
             if temp_handles:
                 temp_event = temp_event or Event(message, [], properties, self.adapter, extra)
-                blocks = await asyncio.gather(*(self.adapter.invoke_handler(handle, temp_event, extra) for handle in temp_handles))
+                blocks = await asyncio.gather(*(self.invoke_handler(handle, temp_event, extra) for handle in temp_handles))
                 blocks = [block for block in blocks if block is not None]
                 if blocks:
                     blk_p, blk_h = zip(*blocks)
@@ -341,7 +268,7 @@ class CloversCore(CloversCoreInterface):
             delay_fuse = False
             for handles in batch_list:
                 tasklist = (
-                    self.adapter.invoke_handler(handle, Event(message, args, properties, self.adapter, extra), extra)
+                    self.invoke_handler(handle, Event(message, args, properties, self.adapter, extra), extra)
                     for handle in handles
                     if (args := handle.match(message)) is not None
                 )

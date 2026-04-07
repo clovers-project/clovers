@@ -1,3 +1,3 @@
-from .core import ImportCore, AdapterCore, PluginCore, CloversCore, CloversMultCore
+from .core import ImportCore, AdapterCore, PluginLoader, CloversCore, CloversMultCore
 
-__all__ = ["ImportCore", "AdapterCore", "PluginCore", "CloversCore", "CloversMultCore"]
+__all__ = ["ImportCore", "AdapterCore", "PluginLoader", "CloversCore", "CloversMultCore"]
