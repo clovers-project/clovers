@@ -1,3 +1,4 @@
+from functools import wraps
 from abc import ABC, abstractmethod
 from typing import Any, Protocol
 from collections.abc import Callable, Coroutine, Iterable, Sequence
@@ -15,9 +16,10 @@ def kwfilter(func: AdapterMethod) -> AdapterMethod:
         return func
     co_argcount = func.__code__.co_argcount
     if co_argcount == 0:
-        return lambda *args, **kwargs: func()
+        return wraps(func)(lambda *args, **kwargs: func())
     kw = set(func.__code__.co_varnames[:co_argcount])
 
+    @wraps(func)
     def wrapper(*args, **kwargs):
         return func(*args, **{k: v for k, v in kwargs.items() if k in kw})
 
