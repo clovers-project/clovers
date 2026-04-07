@@ -13,7 +13,10 @@ def _is_union(type: Any):
 def _is_subclass(type_A: Any, type_B: Any, origin_B: Any) -> bool:
     if _is_union(origin_B):
         return any(_is_subclass(type_A, arg_B, get_origin(arg_B)) for arg_B in get_args(type_B))
-    return issubclass(type_A, type_B)
+    try:
+        return issubclass(type_A, type_B)
+    except TypeError:
+        return False
     # try:
     #     return issubclass(type_A, type_B)
     # except TypeError:
