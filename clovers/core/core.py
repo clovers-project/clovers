@@ -67,6 +67,7 @@ class PluginLoader(Info, ModuleLoader[Plugin]):
         plugin = super()._load(package)
         if (plugin is None) or (plugin in self._plugins):
             return
+        plugin.name = plugin.name or package
         if not self.protocol:
             logger.warning("[Clovers][PluginLoader] Protocol missing. Ensure adapters are loaded before plugin initialization.")
         if not self.protocol.check(plugin.protocol):
@@ -74,7 +75,6 @@ class PluginLoader(Info, ModuleLoader[Plugin]):
             return
         if plugin.require_plugins:
             self.load_from_list(plugin.require_plugins)
-        plugin.name = plugin.name or package
         self._plugins.append(plugin)
         logger.info(f'[Clovers][PluginLoader] "{plugin.name}" loaded')
 

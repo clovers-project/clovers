@@ -147,7 +147,6 @@ def _subclass_check(type_A: Any, origin_A: Any, type_B: Any) -> bool:
     return check_compatible(item_A, item_B)
 
 
-@lru_cache(maxsize=128)
 def check_compatible(type_A: Any, type_B: Any) -> bool:
     """检查 A 是否是 B 的兼容类型
 
