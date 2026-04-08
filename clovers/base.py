@@ -115,26 +115,6 @@ class Adapter(Info):
             self.register_call(k, func)
 
 
-class Result[K: str, T](Info):
-    """插件响应结果
-
-    Attributes:
-        key (str): 响应方法
-        data (Any): 响应数据
-    """
-
-    key: K
-    data: T
-
-    def __init__(self, key: K, data: T) -> None:
-        self.key = key
-        self.data = data
-
-    @property
-    def info(self):
-        return {"key": self.key, "data": self.data}
-
-
 class EventType(Protocol):
     """基础事件协议类型，本类型仅用作描述 Event
 
@@ -211,6 +191,31 @@ class Event(Info):
             return self.properties[name]
         except KeyError:
             raise AttributeError(f"Event object has no attribute '{name}'")
+
+
+class Result[K: str, T](Info):
+    """插件响应结果
+
+    Attributes:
+        key (str): 响应方法
+        data (Any): 响应数据
+    """
+
+    key: K
+    data: T
+
+    def __init__(self, key: K, data: T) -> None:
+        self.key = key
+        self.data = data
+
+    @property
+    def info(self):
+        return {"key": self.key, "data": self.data}
+
+    async def send(self, event: EventType):
+        if (coro := event.send(self.key, self.data)) is None:
+            return
+        await coro
 
 
 class BaseHandle(Info):
