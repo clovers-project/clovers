@@ -291,6 +291,8 @@ class Plugin[EventType](Info):
             priority (int): 优先级
             block (bool | tuple[bool, bool]): 是否阻断后续响应器
         """
+        if self.is_started:
+            raise RuntimeError("Cannot register handle after plugin started")
 
         def decorator(func: RawEventHandler):
             handle = Handle(
