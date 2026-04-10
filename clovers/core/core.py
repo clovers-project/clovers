@@ -65,18 +65,23 @@ class PluginLoader(Info, ModuleLoader[Plugin]):
 
     def _load(self, package: str):
         plugin = super()._load(package)
-        if (plugin is None) or (plugin in self._plugins):
+        if plugin is None:
             return
         plugin.name = plugin.name or package
-        if not self.protocol:
-            logger.warning("[Clovers][PluginLoader] Protocol missing. Ensure adapters are loaded before plugin initialization.")
+        self.append(plugin)
+
+    def append(self, plugin: Plugin) -> None:
+        if plugin in self._plugins:
+            return
+        # if not self.protocol:
+        #     logger.warning("[Clovers][PluginLoader] Protocol missing. Ensure adapters are loaded before plugin initialization.")
         if not self.protocol.check(plugin.protocol):
             logger.warning(f"[Clovers][PluginLoader] {plugin.name} ignored")
             return
         if plugin.require_plugins:
             self.load_from_list(plugin.require_plugins)
-        self._plugins.append(plugin)
         logger.info(f'[Clovers][PluginLoader] "{plugin.name}" loaded')
+        self._plugins.append(plugin)
 
 
 class CloversCoreInterface(Info):
