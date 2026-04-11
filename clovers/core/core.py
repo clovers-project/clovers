@@ -314,7 +314,7 @@ class CloversCore(CloversCoreInterface):
             return self.create_task(self.response_message(message, **extra))
 
 
-class CloversMultCore(CloversCoreInterface):
+class CloversMultiCore(CloversCoreInterface):
     """多核 clovers 框架"""
 
     def __init__(self, *cores: CloversCore):

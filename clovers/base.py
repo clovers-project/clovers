@@ -12,6 +12,7 @@ type EventHandler = Callable[[Event], Coro[Result | None]]
 
 def kwfilter(func: AdapterMethod) -> AdapterMethod:
     """方法参数过滤器"""
+
     if func.__code__.co_flags & 0x0C:
         return func
     co_argcount = func.__code__.co_argcount
@@ -184,7 +185,7 @@ class Event(Info):
         """
         if key not in self._adapter.calls_lib:
             return
-        return self._adapter.calls_lib[key](key, *args, **self._extra)
+        return self._adapter.calls_lib[key](*args, **self._extra)
 
     def __getattr__(self, name: str):
         try:

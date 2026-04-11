@@ -1,4 +1,4 @@
-from functools import lru_cache
+import inspect
 from types import UnionType
 from typing import get_origin, get_args, get_overloads, Union, Any, TypeVar, Literal, TypeAliasType, Optional, TypedDict
 from collections.abc import Callable, Generator, AsyncGenerator
@@ -258,7 +258,7 @@ class TypeProtocol:
         sends = {}
         attr = getattr(protocol, "call", None)
         if attr is not None:
-            for func in get_overloads(attr):
+            for func in (attr, *get_overloads(attr)):
                 varnames = func.__code__.co_varnames
                 fields = func.__annotations__
                 if "return" not in fields:
@@ -282,7 +282,7 @@ class TypeProtocol:
                     calls[literal_args[0]] = Callable[[fields[name] for name in names], fields["return"]]
         attr = getattr(protocol, "send", None)
         if attr is not None:
-            for func in get_overloads(attr):
+            for func in (attr, *get_overloads(attr)):
                 varnames = func.__code__.co_varnames
                 fields = func.__annotations__
                 if not len(varnames) == 3:
@@ -302,30 +302,36 @@ class TypeProtocol:
         if protocol is None:
             return True
         check_protocol = self.protocol_format(protocol)
-        for k in ["send", "call"]:
-            if (self_fields := self.__protocol[k]) and (check_fields := check_protocol[k]):
-                keys = check_fields.keys() & self_fields.keys()
-                for key in keys:
-                    if not check_compatible(self_fields[key], check_fields[key]):
-                        logger.warning(f'{k}[{key}] provides type "{self_fields[key]}", but protocol require "{check_fields[key]}".')
-                        return False
+        if (self_fields := self.__protocol["call"]) and (check_fields := check_protocol["call"]):
+            keys = check_fields.keys() & self_fields.keys()
+            for key in keys:
+                if not check_compatible(self_fields[key], check_fields[key]):
+                    logger.warning(f'call[{key}] provides type "{self_fields[key]}", but protocol require "{check_fields[key]}".')
+                    return False
+        if (self_fields := self.__protocol["send"]) and (check_fields := check_protocol["send"]):
+            keys = check_fields.keys() & self_fields.keys()
+            for key in keys:
+                if not check_compatible(check_fields[key], self_fields[key]):
+                    logger.warning(f'send[{key}] provides type "{self_fields[key]}", but protocol require "{check_fields[key]}".')
+                    return False
         return True
 
     def register_send(self, key: str, send: Callable):
-        name = send.__code__.co_varnames[0]
-        if annot := send.__annotations__.get(name):
-            self.__protocol["send"][key] = annot
+        first_param = next(iter(inspect.signature(send).parameters.values()), None)
+        if first_param and first_param.annotation is not inspect.Parameter.empty:
+            self.__protocol["send"][key] = first_param.annotation
 
     def register_call(self, key: str, call: Callable):
-        co_posonlyargcount = call.__code__.co_posonlyargcount
-        if co_posonlyargcount == 0:
-            if annot := call.__annotations__.get("return"):
-                self.__protocol["call"][key] = annot
-        else:
-            names = call.__code__.co_varnames[:co_posonlyargcount]
-            fields = call.__annotations__
-            if all(name in fields for name in names) and "return" in fields:
-                if is_coro(call):
-                    self.__protocol["call"][key] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
-                else:
-                    self.__protocol["call"][key] = Callable[[fields[name] for name in names], fields["return"]]
+        sig = inspect.signature(call)
+        return_annot = sig.return_annotation
+        if return_annot is inspect.Signature.empty:
+            return
+        params = [p for p in sig.parameters.values() if p.kind == inspect.Parameter.POSITIONAL_ONLY]
+        if not params:
+            self.__protocol["call"][key] = return_annot
+            return
+        arg_types = [p.annotation for p in params]
+        if any(annot is inspect.Parameter.empty for annot in arg_types):
+            return
+        if return_annot is not inspect.Signature.empty:
+            self.__protocol["call"][key] = Callable[arg_types, Coro[return_annot]]
