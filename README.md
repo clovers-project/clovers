@@ -30,3 +30,11 @@ _✨ 高度自定义的聊天平台 Python 异步机器人指令-响应插件框
 # 鸣谢
 
 - [nonebot2](https://github.com/nonebot/nonebot2) 跨平台 Python 异步聊天机器人框架 ~~需求都是基于这个写的~~
+- [go-cqhttp](https://github.com/Mrs4s/go-cqhttp) 基于 Mirai 以及 MiraiGo 的 OneBot Golang 原生实现
+- [unidbg-fetch-qsign](https://github.com/fuqiuluo/unidbg-fetch-qsign) unidbg 模拟实现 QQ 签名计算
+- [LiteLoaderQQNT](https://liteloaderqqnt.github.io/) LiteLoaderQQNT QQNT 插件加载器
+- [Chronocat](https://github.com/chrononeko/chronocat) 模块化的 Satori 框架
+- [OpenShamrock](https://github.com/whitechi73/OpenShamrock) 基于 Lsposed 的 OneBot11 协议的 Bot 框架
+- [Lagrange.Core](https://github.com/LagrangeDev/Lagrange.Core) 基于 Konata 的 NTQQ 协议的纯 C#实现
+- [luckylillia](https://github.com/LLOneBot/LuckyLilliaBot) 实现 OneBot v11，Satori，Milky 协议，用于 QQ 机器人开发
+- [NapCatQQ](https://github.com/NapNeko/NapCatQQ) NapCatQQ 是现代化的基于 NTQQ 的 Bot 协议端实现

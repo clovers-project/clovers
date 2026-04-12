@@ -19,6 +19,8 @@ class Config(dict):
 
         Args:
             path (str | Path, optional): 配置文件路径. Defaults to CONFIG_FILE.
+        Returns:
+            config (Config): 配置对象
         """
 
         logger.debug(f"loading config from {path}")
