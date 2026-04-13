@@ -1,6 +1,6 @@
 [project]
 name = "clovers"
-version = "0.5.0"
+version = "0.5.1"
 description = ""
 authors = [{ name = "KarisAya", email = "karisaya@foxmail.com" }]
 readme = "README.md"
@@ -9,3 +9,6 @@ dependencies = ["toml (>=0.10.2,<0.11.0)"]
 
 [dependency-groups]
 dev = ["pydoc-markdown>=4.8.2"]
+
+[tool.setuptools.packages.find]
+include = ["clovers"]

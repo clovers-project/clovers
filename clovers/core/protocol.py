@@ -267,19 +267,19 @@ class TypeProtocol:
                 if len_varnames < 2:
                     continue
                 elif len_varnames == 2:
-                    if (literal_args := literal_arg(fields[varnames[1]])) is None:
+                    if (literal_args := literal_arg(fields[varnames[1]])) is None or ((key := literal_args[0]) in calls):
                         continue
-                    calls[literal_args[0]] = fields["return"]
+                    calls[key] = fields["return"]
                     continue
                 _, key_name, *names = varnames
-                if (literal_args := literal_arg(fields[key_name])) is None:
+                if (literal_args := literal_arg(fields[key_name])) is None or ((key := literal_args[0]) in calls):
                     continue
                 if not all(name in fields for name in names):
                     continue
                 if is_coro(func):
-                    calls[literal_args[0]] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
+                    calls[key] = Callable[[fields[name] for name in names], Coro[fields["return"]]]
                 else:
-                    calls[literal_args[0]] = Callable[[fields[name] for name in names], fields["return"]]
+                    calls[key] = Callable[[fields[name] for name in names], fields["return"]]
         attr = getattr(protocol, "send", None)
         if attr is not None:
             for func in (attr, *get_overloads(attr)):
